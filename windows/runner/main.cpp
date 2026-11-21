@@ -1,5 +1,6 @@
 #include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
+#include <propkey.h>
 #include <shobjidl.h>
 #include <windows.h>
 
@@ -181,6 +182,32 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       instance, MAKEINTRESOURCE(IDI_GAIA_ICON), IMAGE_ICON,
                       ::GetSystemMetrics(SM_CXSMICON),
                       ::GetSystemMetrics(SM_CYSMICON), 0)));
+    // The taskbar's group icon for Voyager.Gaia: without these it can fall
+    // back to the exe's first icon, Voyager's. The relaunch command and name
+    // must be set too for the icon to count.
+    std::wstring exe(32768, L'\0');
+    exe.resize(::GetModuleFileNameW(nullptr, exe.data(),
+                                    static_cast<DWORD>(exe.size())));
+    const std::wstring icon = exe + L",-" + std::to_wstring(IDI_GAIA_ICON);
+    const std::wstring relaunch = L"\"" + exe + L"\" --companion";
+    IPropertyStore* store = nullptr;
+    if (SUCCEEDED(::SHGetPropertyStoreForWindow(window.GetHandle(),
+                                                IID_PPV_ARGS(&store)))) {
+      const std::pair<const PROPERTYKEY*, const wchar_t*> values[] = {
+          {&PKEY_AppUserModel_ID, L"Voyager.Gaia"},
+          {&PKEY_AppUserModel_RelaunchCommand, relaunch.c_str()},
+          {&PKEY_AppUserModel_RelaunchDisplayNameResource, L"Gaia"},
+          {&PKEY_AppUserModel_RelaunchIconResource, icon.c_str()},
+      };
+      for (const auto& [key, text] : values) {
+        PROPVARIANT value{};
+        value.vt = VT_LPWSTR;
+        value.pwszVal = const_cast<wchar_t*>(text);
+        store->SetValue(*key, value);
+      }
+      store->Commit();
+      store->Release();
+    }
   }
   HWND view =
       ::FindWindowExW(window.GetHandle(), nullptr, L"FLUTTERVIEW", nullptr);

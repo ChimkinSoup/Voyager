@@ -205,6 +205,11 @@ const _repeat = 90.0;
 /// Seconds a star's sparkle lasts.
 const _sparkleLife = 1.6;
 
+/// The square logical pixels of sky in view that sparkle at the set rate:
+/// a full 1440 by 900 window's, beside a 200-wide sidebar. A smaller sky
+/// sparkles less often.
+const _sparkleArea = 1199.0 * 807;
+
 /// A satellite train's points behind the first, and their spacing.
 const _trainCars = 7;
 const _trainGap = 14.0;
@@ -1515,18 +1520,22 @@ class _Sky extends ChangeNotifier {
     }
     sparkles.removeWhere((s) => s.age >= _sparkleLife);
     if (exiting != null || !shown || sparkleRate <= 0) return;
-    _nextSparkle -= dt;
-    if (_nextSparkle > 0) return;
-    // Spaced at random, so they don't come in step.
-    _nextSparkle = -log(1 - _random.nextDouble()) / sparkleRate;
-    // The brightest of a few in view: a faint star's glint would be lost.
-    final count = starCount;
     final view = Rect.fromLTRB(
       from + 20,
       20,
       size.width - 20,
       size.height - 20,
     );
+    // As many to the area as in a large window, so a small one isn't
+    // crowded with them.
+    final rate = sparkleRate * view.width * view.height / _sparkleArea;
+    if (rate <= 0) return;
+    _nextSparkle -= dt;
+    if (_nextSparkle > 0) return;
+    // Spaced at random, so they don't come in step.
+    _nextSparkle = -log(1 - _random.nextDouble()) / rate;
+    // The brightest of a few in view: a faint star's glint would be lost.
+    final count = starCount;
     int? best;
     for (var tries = 0; tries < 8 && count > 0; tries++) {
       final i = _random.nextInt(count);

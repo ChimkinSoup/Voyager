@@ -276,6 +276,10 @@ class _Gathering extends ChangeNotifier {
   double _speed = 0;
   int _steps = 0;
 
+  /// One in how many inked pixels is a particle: past [_maxParticles], the
+  /// rest only fade in with the picture ahead of the sweep.
+  int _stride = 1;
+
   bool get inked => _count > 0;
 
   /// Reads the [visible] part of the picture back as pixels and lines them
@@ -307,7 +311,7 @@ class _Gathering extends ChangeNotifier {
     // Every [stride]th inked pixel only: each particle costs every frame, and
     // a long prompt filling the window has over a hundred thousand of them.
     // The rest still show, in the picture behind the sweep.
-    final stride = math.max(1, (inked / _maxParticles).ceil());
+    final stride = _stride = math.max(1, (inked / _maxParticles).ceil());
     final count = (inked + stride - 1) ~/ stride;
     var seen = 0;
     _sourceX = Float32List(count);
@@ -401,7 +405,10 @@ class _Gathering extends ChangeNotifier {
         final bits = _random.nextInt(9);
         dx += (-dx / (remaining + 1)).round() + bits % 3 - 1;
         dy += (-dy / (remaining + 1)).round() + bits ~/ 3 - 1;
-        final radius = 1 - remaining / (life + 1);
+        // Cubed, so they stay faint far ahead and brighten as the sweep
+        // nears: a solid image doesn't read as there already, its wander
+        // being too small to hide it.
+        final radius = math.pow(1 - remaining / (life + 1), 3).toDouble();
         color =
             (_sourceAlpha[source] * radius * 255).round() << 24 |
             _sourceRgb[source];
@@ -429,18 +436,50 @@ class _Gathering extends ChangeNotifier {
       2;
 
   void paint(Canvas canvas) {
+    final sweep = (_start + _steps * _speed).floorToDouble().clamp(
+      0.0,
+      size.width,
+    );
     canvas
       ..save()
-      ..clipRect(
-        Rect.fromLTRB(
-          0,
-          0,
-          (_start + _steps * _speed).floorToDouble().clamp(0.0, size.width),
-          size.height,
-        ),
-      )
+      ..clipRect(Rect.fromLTRB(0, 0, sweep, size.height))
       ..drawPicture(picture)
       ..restore();
+    if (_stride > 1) {
+      // The pixels without a particle fade in just ahead of the sweep,
+      // instead of showing all at once as it passes: over half the shortest
+      // lifetime's sweep, cubed as the particles are, so the particles still
+      // lead. Short of full, as the particles are the rest.
+      final fade = _minLife / 2 * _speed;
+      final ahead = Rect.fromLTRB(sweep, 0, size.width, size.height);
+      final shown = ((1 - 1 / _stride) * 255).round();
+      canvas
+        ..save()
+        ..clipRect(ahead)
+        ..saveLayer(ahead, Paint())
+        ..drawPicture(picture)
+        ..drawRect(
+          ahead,
+          Paint()
+            ..blendMode = BlendMode.dstIn
+            ..shader = ui.Gradient.linear(
+              Offset(sweep, 0),
+              Offset(sweep + fade, 0),
+              [
+                for (var k = 0; k <= 8; k++)
+                  Color.fromARGB(
+                    (shown * math.pow(1 - k / 8, 3)).round(),
+                    0,
+                    0,
+                    0,
+                  ),
+              ],
+              [for (var k = 0; k <= 8; k++) k / 8],
+            ),
+        )
+        ..restore()
+        ..restore();
+    }
     if (_live > 0) {
       canvas.drawRawAtlas(
         _dot,

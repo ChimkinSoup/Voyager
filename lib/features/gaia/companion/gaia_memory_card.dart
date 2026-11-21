@@ -181,6 +181,10 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
         if (widget.topicChoices != null)
           Listener(
             onPointerDown: (_) => _wasOpen = _menu?.isShown ?? false,
+            // After the tap, if there is one: a press dragged off leaves
+            // none to clear it, and Enter later would be swallowed.
+            onPointerUp: (_) => Future.microtask(() => _wasOpen = false),
+            onPointerCancel: (_) => _wasOpen = false,
             child: _TopicChip(
               key: _addKey,
               label: '+ Topic',

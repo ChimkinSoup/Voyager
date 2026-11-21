@@ -408,10 +408,18 @@ class _GaiaPaletteState extends State<GaiaPalette>
 /// behind. It comes in once, when first built; it takes the full width it's
 /// given.
 class GaiaGrowIn extends StatefulWidget {
-  const GaiaGrowIn({super.key, required this.decoration, required this.child});
+  const GaiaGrowIn({
+    super.key,
+    required this.decoration,
+    required this.child,
+    this.above,
+  });
 
   final BoxDecoration decoration;
   final Widget child;
+
+  /// Painted on its top edge, outside it, as wide as it is as it grows.
+  final Widget? above;
 
   @override
   State<GaiaGrowIn> createState() => _GaiaGrowInState();
@@ -447,16 +455,31 @@ class _GaiaGrowInState extends State<GaiaGrowIn>
       heightFactor: 1,
       child: AnimatedBuilder(
         animation: _grown,
-        builder: (context, contents) => Container(
-          decoration: widget.decoration,
-          child: ClipRect(
-            child: Align(
-              alignment: Alignment.bottomLeft,
-              widthFactor: lerpDouble(0.5, 1, _grown.value),
-              heightFactor: lerpDouble(0.15, 1, _grown.value),
-              child: contents,
+        builder: (context, contents) => Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              decoration: widget.decoration,
+              child: ClipRect(
+                child: Align(
+                  alignment: Alignment.bottomLeft,
+                  widthFactor: lerpDouble(0.5, 1, _grown.value),
+                  heightFactor: lerpDouble(0.15, 1, _grown.value),
+                  child: contents,
+                ),
+              ),
             ),
-          ),
+            if (widget.above case final above?)
+              Positioned(
+                left: 0,
+                right: 0,
+                top: 0,
+                child: FractionalTranslation(
+                  translation: const Offset(0, -1),
+                  child: above,
+                ),
+              ),
+          ],
         ),
         child: SizedBox(
           width: constraints.maxWidth - widget.decoration.padding.horizontal,

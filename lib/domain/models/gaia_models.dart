@@ -1031,6 +1031,15 @@ gaiaChatSections(List<GaiaChat> chats, List<GaiaProject> projects) {
   );
 }
 
+/// [projects] in the order the chat lists show them ([gaiaChatSections]).
+List<GaiaProject> gaiaProjectsListed(
+  List<GaiaChat> chats,
+  List<GaiaProject> projects,
+) => [
+  for (final section in gaiaChatSections(chats, projects).projects)
+    section.project,
+];
+
 /// A prompt waiting its turn (§13): in [chatId]'s queue, or the global one
 /// when that's null. [order] places it; [consumedAt] marks one sent, kept
 /// so another device doesn't send it again.

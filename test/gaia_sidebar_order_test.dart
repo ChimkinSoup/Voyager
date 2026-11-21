@@ -158,6 +158,20 @@ void main() {
     expect(sections.projects.map((s) => s.project.id), ['a', 'b']);
   });
 
+  test('the move-to-project menus list projects in the sidebar order', () {
+    final chats = [
+      _chat('a', projectId: 'a', minutes: 1),
+      _chat('b', projectId: 'b', minutes: 3),
+      _chat('c', projectId: 'c', minutes: 2),
+    ];
+    final projects = [_project('a'), _project('b'), _project('c')];
+    expect(gaiaProjectsListed(chats, projects).map((p) => p.id), [
+      'b',
+      'c',
+      'a',
+    ]);
+  });
+
   test('the order syncs, and an unpin clears it on the other device', () {
     final pinned = gaiaPinned(_chat('c'), true, const []);
     final remote = mergeGaiaChatFromRemote(

@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/gestures.dart'
     show computeHitSlop, kDoubleTapSlop, kDoubleTapTimeout, kPrimaryButton;
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart' show SchedulerBinding, SchedulerPhase;
 import 'package:flutter/services.dart';
 import 'package:flutter/rendering.dart' show RenderAbstractViewport, RenderFlex;
 import 'package:intl/intl.dart';
@@ -376,6 +377,22 @@ class _GaiaShell extends StatelessWidget {
       return _PickUpPill(controller: controller);
     }
     final floater = controller.layout != GaiaMode.window;
+    // Built once out here, so a scroll's rebuild of the chat body around
+    // them leaves them be. Also rebuilt alone as a reply's text streams in.
+    final messages = ValueListenableBuilder(
+      valueListenable: controller.streamed,
+      builder: (context, _, _) => _Messages(
+        messages: controller.messages,
+        imageFile: controller.imageFile,
+        uploading: controller.uploadingImages,
+        tier: controller.nextTier,
+        running: controller.currentRunning,
+        onEdit: (message) => _editMessage(context, controller, message),
+        onAttach: controller.attachMessage,
+        controller: controller,
+      ),
+    );
+    final composer = _Composer(controller: controller);
     Widget chat({bool sidebarShown = false, VoidCallback? toggleSidebar}) =>
         Column(
           children: [
@@ -387,25 +404,15 @@ class _GaiaShell extends StatelessWidget {
             const Divider(height: 1),
             Expanded(
               // The composer's chips float over the messages' foot.
-              child: GaiaChatBody(
-                // Also rebuilt alone as a reply's text streams in.
-                messages: ValueListenableBuilder(
-                  valueListenable: controller.streamed,
-                  builder: (context, _, _) => _Messages(
-                    messages: controller.messages,
-                    imageFile: controller.imageFile,
-                    uploading: controller.uploadingImages,
-                    tier: controller.nextTier,
-                    running: controller.currentRunning,
-                    onEdit: (message) =>
-                        _editMessage(context, controller, message),
-                    onAttach: controller.attachMessage,
-                    controller: controller,
-                  ),
+              child: ValueListenableBuilder(
+                valueListenable: controller.scrolledUnder,
+                builder: (context, under, _) => GaiaChatBody(
+                  messages: messages,
+                  composer: composer,
+                  halo: Theme.of(context).scaffoldBackgroundColor,
+                  haloFade: kGaiaChatFade,
+                  haloShown: under.composer,
                 ),
-                composer: _Composer(controller: controller),
-                halo: Theme.of(context).scaffoldBackgroundColor,
-                haloFade: _TopFade._fade,
               ),
             ),
           ],
@@ -460,6 +467,8 @@ class _GaiaShell extends StatelessWidget {
                     // Below the header and its divider.
                     top: kGaiaHeaderHeight + 1,
                     left: floater ? null : controller.sidebar.edge,
+                    placing: controller.debug.placeStars,
+                    under: controller.scrolledUnder,
                     child: GaiaSky(
                       active: controller.focused,
                       shown:
@@ -925,7 +934,10 @@ class _ProjectCrumbState extends State<_ProjectCrumb> {
                 Offset(details.localPosition.dx, crumb.size.height),
               ),
               [
-                for (final other in controller.projects)
+                for (final other in gaiaProjectsListed(
+                  controller.chats,
+                  controller.projects,
+                ))
                   if (other.id != project?.id)
                     GaiaMenuItem(
                       label: 'Move to ',
@@ -1469,7 +1481,10 @@ class _SidebarState extends State<_Sidebar> {
     final controller = widget.controller;
     final inProject = controller.project(chat.projectId);
     showGaiaMenu(context, position, [
-      for (final project in controller.projects)
+      for (final project in gaiaProjectsListed(
+        controller.chats,
+        controller.projects,
+      ))
         if (project.id != inProject?.id)
           GaiaMenuItem(
             label: '',
@@ -2642,15 +2657,36 @@ class _MessagesState extends State<_Messages>
     );
   }
 
+  /// How far the list runs on under the header and the composer, over the
+  /// fades there. None while it's unshown, going back to where it was.
+  ({double header, double composer}) _under() =>
+      _scroll.hasClients && _restoring == null
+      // Reversed: before is under the composer, after under the header.
+      ? (
+          header: (_scroll.position.extentAfter / kGaiaChatFade).clamp(
+            0.0,
+            1.0,
+          ),
+          composer: (_scroll.position.extentBefore / kGaiaChatFade).clamp(
+            0.0,
+            1.0,
+          ),
+        )
+      : (header: 0.0, composer: 0.0);
+
   /// [_over] afresh once the list's laid out.
   void _place() {
     if (_placing) return;
     _placing = true;
+    // Called after a frame too, as a metrics notification comes: the
+    // callback would otherwise wait for a frame nothing has asked for.
+    WidgetsBinding.instance.ensureVisualUpdate();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _placing = false;
       if (!mounted) return;
       final (:pinned, :chapter, :chapterOff, :across) = _cutOff();
       final scrolledUp = _scroll.hasClients && _scroll.offset > 100;
+      widget.controller.scrolledUnder.value = _under();
       final chatId = _chatId;
       if (_restoring == null && chatId != null) {
         final places = widget.controller.scrolledTo;
@@ -3066,6 +3102,12 @@ class _MessagesState extends State<_Messages>
                 (notification is ScrollMetricsNotification &&
                     notification.depth == 0)) {
               _place();
+              // The fades in the same frame as the scroll, not the next,
+              // unless it's mid-frame.
+              if (SchedulerBinding.instance.schedulerPhase !=
+                  SchedulerPhase.persistentCallbacks) {
+                widget.controller.scrolledUnder.value = _under();
+              }
             }
             return false;
           },
@@ -3085,13 +3127,17 @@ class _MessagesState extends State<_Messages>
                   right: 0,
                   child: IgnorePointer(
                     child: ValueListenableBuilder(
-                      valueListenable: _over,
-                      builder: (context, over, _) => _TopFade(
-                        color: Theme.of(context).scaffoldBackgroundColor,
-                        band: 8 + GaiaPinnedPrompt.heightOf(context),
-                        covered:
-                            _overShown(over.chat) &&
-                            (over.pinned != null || over.chapterOff),
+                      valueListenable: widget.controller.scrolledUnder,
+                      builder: (context, under, _) => ValueListenableBuilder(
+                        valueListenable: _over,
+                        builder: (context, over, _) => _TopFade(
+                          color: Theme.of(context).scaffoldBackgroundColor,
+                          shown: under.header,
+                          band: 8 + GaiaPinnedPrompt.heightOf(context),
+                          covered:
+                              _overShown(over.chat) &&
+                              (over.pinned != null || over.chapterOff),
+                        ),
                       ),
                     ),
                   ),
@@ -3228,14 +3274,18 @@ class _MessagesState extends State<_Messages>
                           final shown = _overShown(over.chat);
                           return IgnorePointer(
                             ignoring: !(shown && over.scrolledUp),
-                            child: AnimatedSwitcher(
-                              // As over the top.
-                              key: ValueKey(shown),
-                              duration: GaiaMotion.quick,
-                              transitionBuilder: gaiaPinnedFade,
-                              child: shown && over.scrolledUp
-                                  ? _ToBottom(onTap: _toBottom)
-                                  : const SizedBox.shrink(),
+                            // Over the composer's halo, not faded into it
+                            // with the messages; outside the button's fade.
+                            child: GaiaHaloHole(
+                              child: AnimatedSwitcher(
+                                // As over the top.
+                                key: ValueKey(shown),
+                                duration: GaiaMotion.quick,
+                                transitionBuilder: gaiaPinnedFade,
+                                child: shown && over.scrolledUp
+                                    ? _ToBottom(onTap: _toBottom)
+                                    : const SizedBox.shrink(),
+                              ),
                             ),
                           );
                         },
@@ -3252,36 +3302,44 @@ class _MessagesState extends State<_Messages>
   }
 }
 
-/// The chat's top edge: [color], the surface's, fading out downwards over a
-/// few pixels, and while [covered] by the pinned prompt, solid for [band],
-/// the prompt's depth, first. A gradient over the list rather than a mask on
-/// it, which would composite the whole chat every frame it scrolls.
+/// The chat's top edge: [color], the surface's, fading out downwards over
+/// [kGaiaChatFade], as much as [shown]: as far as the messages are scrolled
+/// under the header, so at the chat's start it isn't over its first. While
+/// [covered] by the pinned prompt, solid for [band], the prompt's depth,
+/// first, then fading out in full. A gradient over the list rather than a
+/// mask on it, which would composite the whole chat every frame it scrolls.
 class _TopFade extends StatelessWidget {
   const _TopFade({
     required this.color,
+    required this.shown,
     required this.band,
     required this.covered,
   });
 
   final Color color;
+  final double shown;
   final double band;
   final bool covered;
 
-  /// How far the fade runs.
-  static const _fade = 16.0;
-
   @override
   Widget build(BuildContext context) {
-    final clear = color.withValues(alpha: 0);
+    const fade = kGaiaChatFade;
+    final top = gaiaFade(
+      color.withValues(alpha: color.a * shown),
+      clear: 1,
+      full: 0,
+    );
+    final under = gaiaFade(color, clear: 1, full: band / (band + fade));
     return Stack(
       children: [
         Container(
-          height: _fade,
+          height: fade,
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [color, clear],
+              colors: top.colors,
+              stops: top.stops,
             ),
           ),
         ),
@@ -3289,13 +3347,13 @@ class _TopFade extends StatelessWidget {
           duration: GaiaMotion.quick,
           opacity: covered ? 1 : 0,
           child: Container(
-            height: band + _fade,
+            height: band + fade,
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [color, color, clear],
-                stops: [0, band / (band + _fade), 1],
+                colors: [color, ...under.colors],
+                stops: [0, ...under.stops],
               ),
             ),
           ),
@@ -5168,6 +5226,17 @@ class _ComposerState extends State<_Composer> {
       // What else the draft held becomes what's remembered, queued, or asked
       // beside the chat. `/btw` with nothing else opens the panel.
       _cutToken();
+      // Picked again over a draft it already starts, it comes off.
+      final draft = _text.text.trimLeft();
+      final prefix = '/${item.builtin!.name}';
+      if (draft == prefix || draft.startsWith('$prefix ')) {
+        final rest = draft.substring(prefix.length).trimLeft();
+        _text.value = TextEditingValue(
+          text: rest,
+          selection: TextSelection.collapsed(offset: rest.length),
+        );
+        return;
+      }
       if (item.builtin == GaiaBuiltin.btw && _text.text.trim().isEmpty) {
         _used(item.name);
         _record('/${item.name}');
@@ -5175,7 +5244,7 @@ class _ComposerState extends State<_Composer> {
         _focus.requestFocus();
         return;
       }
-      final text = '/${item.builtin!.name} ${_text.text.trim()}';
+      final text = '/${item.builtin!.name} ${_text.text.trimLeft()}';
       _text.value = TextEditingValue(
         text: text,
         selection: TextSelection.collapsed(offset: text.length),

@@ -93,7 +93,7 @@ void main() {
       ),
     );
     await settle(tester);
-    await tester.tap(find.text('Memories'));
+    await tester.tap(find.textContaining(RegExp(r'^Memories')));
     await settle(tester);
   }
 
@@ -549,6 +549,36 @@ void main() {
       expect(shown.top, greaterThanOrEqualTo(0));
       expect(shown.bottom, lessThanOrEqualTo(800));
     },
+  );
+
+  testWidgets(
+    'a topic picked below a long inbox is scrolled to, the inbox above it',
+    (tester) async {
+      await pump(
+        tester,
+        seed: () => repository.upsertMemoryTopics(const [], [
+          for (var i = 0; i < 40; i++)
+            _memory(
+              'p$i',
+              'Proposal $i',
+              [],
+            ).copyWith(status: GaiaMemoryStatus.proposed),
+        ]),
+      );
+      tester.view.physicalSize = const Size(1300, 800);
+      await settle(tester);
+      await tester.tap(row('Obsidian'));
+      await settle(tester);
+      final shown = tester.getRect(find.text('Vault lives in Dropbox'));
+      expect(shown.top, greaterThanOrEqualTo(0));
+      expect(shown.bottom, lessThanOrEqualTo(800));
+      // Only the memories' pane scrolls: the search above it stays put.
+      expect(
+        tester.getRect(find.text('Search memories and topics')).top,
+        greaterThanOrEqualTo(0),
+      );
+    },
+    variant: _desktop,
   );
 
   testWidgets(

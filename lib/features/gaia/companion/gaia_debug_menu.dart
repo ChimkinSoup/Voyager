@@ -212,7 +212,9 @@ class _DebugMenu extends StatelessWidget {
         Text(
           'Sent, a message gathers into the chat out of particles, swept from '
           'left to right: its text and attachments, but not its bubble. Pick '
-          'a message to send it again.',
+          'a message to send it again. Past the particle cap, only some of a '
+          "long message's pixels are particles; the rest fade in ahead of the "
+          'sweep.',
           style: muted,
         ),
         const _AppearPreview(),
@@ -563,6 +565,17 @@ class _DebugMenu extends StatelessWidget {
           ),
           value: debug.skyFigures,
           onChanged: debug.setSkyFigures,
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Place stars'),
+          subtitle: const Text(
+            'Hold Ctrl over the chat: click to place a star in the starfield '
+            'behind, Shift+click for a small cluster, drag to move either, '
+            'right-click to take one away. They go when this is turned off.',
+          ),
+          value: debug.placeStars,
+          onChanged: debug.setPlaceStars,
         ),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
@@ -1166,6 +1179,11 @@ const _longPrompt =
     'thing feel longer. Any numbers you can pull from last month would help '
     'too.';
 
+/// Long enough to have more inked pixels than [GaiaAppear] makes particles
+/// of, as a prompt filling the window does.
+const _overCapPrompt =
+    '$_longPrompt\n\n$_longPrompt\n\n$_longPrompt\n\n$_longPrompt';
+
 const _appearScenarios = <String, _AppearScenario>{
   'Short text': (images: 0, uploading: false, files: false, text: 'Hi Gaia!'),
   'Long text': (images: 0, uploading: false, files: false, text: _longPrompt),
@@ -1197,6 +1215,12 @@ const _appearScenarios = <String, _AppearScenario>{
     text: 'Which of these reads best?',
   ),
   'Everything': (images: 2, uploading: false, files: true, text: _longPrompt),
+  'Past the particle cap': (
+    images: 0,
+    uploading: false,
+    files: false,
+    text: _overCapPrompt,
+  ),
 };
 
 /// A sent message on the chat's background, laid out as in the chat,

@@ -1316,6 +1316,11 @@ class GaiaController extends ChangeNotifier {
   /// chunk made streaming stutter.
   final streamed = ValueNotifier(0);
 
+  /// How far the chat's messages are scrolled under its [header] and under
+  /// the [composer], over the length of the fades there: 0 with none under it, up to 1.
+  /// The fades over those edges show that much, so at rest nothing fades.
+  final scrolledUnder = ValueNotifier((header: 0.0, composer: 0.0));
+
   /// The main instance's device, whose native sessions this companion runs.
   var _deviceId = '';
 

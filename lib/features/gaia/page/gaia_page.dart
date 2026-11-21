@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -250,6 +251,7 @@ class _ChatsTabState extends ConsumerState<_ChatsTab> {
     // Grouped by project (GAIA_PROJECTS_HLD.md §7.3). A search lists what it
     // found on its own, forks or projects or not.
     final sections = gaiaChatSections(shown, query.isEmpty ? projects : []);
+    final listed = gaiaProjectsListed(chats, projects);
     List<GaiaForkGroup> found(bool pinned) => [
       for (final chat in shown)
         if (chat.pinned == pinned) (chat: chat, forks: const <GaiaChat>[]),
@@ -260,7 +262,7 @@ class _ChatsTabState extends ConsumerState<_ChatsTab> {
       for (final (:chat, :forks) in groups) ...[
         _ChatRow(
           chat: chat,
-          projects: projects,
+          projects: listed,
           running: running.contains(chat.id),
           open: forks.isEmpty ? null : !_collapsed.contains(chat.id),
           onFold: () => setState(() {
@@ -273,7 +275,7 @@ class _ChatsTabState extends ConsumerState<_ChatsTab> {
               last: i == forks.length - 1,
               child: _ChatRow(
                 chat: fork,
-                projects: projects,
+                projects: listed,
                 running: running.contains(fork.id),
               ),
             ),
@@ -804,6 +806,47 @@ class _MemoriesTabState extends ConsumerState<_MemoriesTab> {
 
   final _focusKey = GlobalKey();
 
+  /// The shown topic's title, above its memories.
+  final _titleKey = GlobalKey();
+
+  /// The two panes, on a wide window.
+  final _panesKey = GlobalKey();
+
+  /// The panes' height: what's left of the page below the search, measured
+  /// after a frame. Null until then.
+  double? _panesHeight;
+
+  /// [_panesHeight] afresh, from where the panes start on the page.
+  void _fitPanes() {
+    final context = _panesKey.currentContext;
+    final box = context?.findRenderObject();
+    if (!mounted || box is! RenderBox || !box.attached) return;
+    final page = Scrollable.of(context!).position;
+    final top = RenderAbstractViewport.of(box).getOffsetToReveal(box, 0).offset;
+    // 24: the page's padding below them.
+    final height = max(400.0, page.viewportDimension - top - 24);
+    if (height != _panesHeight) setState(() => _panesHeight = height);
+  }
+
+  /// [id]'s memories shown, scrolled to below the inbox, which every topic
+  /// shows first.
+  void _select(String? id) {
+    setState(() => _selected = id);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final context = _titleKey.currentContext;
+      if (!mounted || context == null) return;
+      // Its own pane to the top: the page around it only if that still
+      // leaves the title below the window, as panes at their least can.
+      Scrollable.of(
+        context,
+      ).position.ensureVisible(context.findRenderObject()!);
+      Scrollable.ensureVisible(
+        context,
+        alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+      );
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -851,7 +894,7 @@ class _MemoriesTabState extends ConsumerState<_MemoriesTab> {
                 selected: _validSelected(tree),
                 moveWithin: null,
                 onSelect: (id) {
-                  setState(() => _selected = id);
+                  _select(id);
                   Navigator.of(dialogContext).pop();
                 },
               );
@@ -1003,6 +1046,7 @@ class _MemoriesTabState extends ConsumerState<_MemoriesTab> {
           const SizedBox(height: 16),
         ],
         Row(
+          key: _titleKey,
           children: [
             Expanded(
               child: Text(
@@ -1110,11 +1154,18 @@ class _MemoriesTabState extends ConsumerState<_MemoriesTab> {
         const SizedBox(height: 12),
         LayoutBuilder(
           builder: (context, constraints) {
-            // Each pane scrolls on its own, a window high, so a memory far
-            // down the list can still be dragged onto any topic.
+            // Each pane scrolls on its own, filling the page below the
+            // search, so a memory far down the list can still be dragged
+            // onto any topic.
             if (constraints.maxWidth >= 640) {
+              // Again as the window resizes, or the text above rewraps.
+              MediaQuery.sizeOf(context);
+              WidgetsBinding.instance.addPostFrameCallback((_) => _fitPanes());
               return SizedBox(
-                height: max(400, MediaQuery.sizeOf(context).height - 48),
+                key: _panesKey,
+                height:
+                    _panesHeight ??
+                    max(400, MediaQuery.sizeOf(context).height - 48),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -1126,7 +1177,7 @@ class _MemoriesTabState extends ConsumerState<_MemoriesTab> {
                           selected: selected,
                           visible: visible,
                           moveWithin: moveWithin,
-                          onSelect: (id) => setState(() => _selected = id),
+                          onSelect: _select,
                         ),
                       ),
                     ),
@@ -1178,19 +1229,24 @@ class _DraggedTopic extends _Dragged {
 /// What follows the pointer while [text]'s row is dragged.
 Widget _dragLabel(BuildContext context, String text) {
   final theme = Theme.of(context);
-  return Material(
-    elevation: 4,
-    borderRadius: BorderRadius.circular(8),
-    color: theme.colorScheme.surfaceContainerHigh,
-    child: ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 260),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        child: Text(
-          text,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: theme.textTheme.bodySmall,
+  // Beside the pointer (pointerDragAnchorStrategy puts the origin at it),
+  // whichever part of the row was grabbed, without hiding the topic under it.
+  return Transform.translate(
+    offset: const Offset(14, -12),
+    child: Material(
+      elevation: 4,
+      borderRadius: BorderRadius.circular(8),
+      color: theme.colorScheme.surfaceContainerHigh,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 260),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall,
+          ),
         ),
       ),
     ),
@@ -1503,6 +1559,7 @@ class _TopicTreeState extends ConsumerState<_TopicTree> {
         onAcceptWithDetails: (details) => _drop(details.data, topic.id),
         builder: (context, candidates, rejected) => Draggable<_Dragged>(
           data: _DraggedTopic(topic.id),
+          dragAnchorStrategy: pointerDragAnchorStrategy,
           feedback: _dragLabel(context, topic.name),
           child: ContextMenuRegion(
             items: menu,
@@ -1970,6 +2027,7 @@ class _MemoryRow extends ConsumerWidget {
     if (!isWindows) return tile;
     return Draggable<_Dragged>(
       data: _DraggedMemory(memory.id),
+      dragAnchorStrategy: pointerDragAnchorStrategy,
       feedback: _dragLabel(context, memory.text),
       childWhenDragging: Opacity(opacity: 0.5, child: tile),
       child: tile,

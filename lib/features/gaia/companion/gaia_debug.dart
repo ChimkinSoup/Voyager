@@ -83,14 +83,18 @@ class GaiaDebug extends ChangeNotifier {
   /// How deeply its stars shimmer, 0 to 1.
   var skyTwinkle = 0.7;
 
-  /// Stars a second that sparkle into a four-pointed glint.
-  var skySparkles = 8.0;
+  /// Stars a second that sparkle into a four-pointed glint, in a large
+  /// window; fewer in a smaller one.
+  var skySparkles = 5.0;
 
   /// Logical pixels a second the pen tracing a constellation moves.
   var skyTraceSpeed = 150.0;
 
   /// Once traced, a constellation's figure is sketched over it.
   var skyFigures = false;
+
+  /// Ctrl+click places stars in the starfield behind a chat, to move about.
+  var placeStars = false;
 
   /// The average seconds from one meteor or satellite to the next.
   var skyEventInterval = 10.0;
@@ -167,6 +171,7 @@ class GaiaDebug extends ChangeNotifier {
       skySparkles = number('skySparkles', skySparkles, 0, 20);
       skyTraceSpeed = number('skyTraceSpeed', skyTraceSpeed, 20, 300);
       skyFigures = json['skyFigures'] == true;
+      placeStars = json['placeStars'] == true;
       skyEventInterval = number('skyEventInterval', skyEventInterval, 3, 60);
       skyAurora = number('skyAurora', skyAurora, 0, 1);
       skySatellite =
@@ -254,6 +259,8 @@ class GaiaDebug extends ChangeNotifier {
 
   Future<void> setSkyFigures(bool value) => _set(() => skyFigures = value);
 
+  Future<void> setPlaceStars(bool value) => _set(() => placeStars = value);
+
   Future<void> setSkyEventInterval(double value, {bool save = true}) =>
       _set(() => skyEventInterval = value, save: save);
 
@@ -338,6 +345,7 @@ class GaiaDebug extends ChangeNotifier {
           'skySparkles': skySparkles,
           'skyTraceSpeed': skyTraceSpeed,
           'skyFigures': skyFigures,
+          'placeStars': placeStars,
           'skyEventInterval': skyEventInterval,
           'skyAurora': skyAurora,
           'skySatellite': skySatellite.name,

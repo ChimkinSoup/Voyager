@@ -1,6 +1,8 @@
 #include "flutter_window.h"
 
 #include <flutter/standard_method_codec.h>
+#include <propkey.h>
+#include <shobjidl.h>
 
 #include <optional>
 #include <utility>
@@ -280,6 +282,35 @@ bool FlutterWindow::OnCreate() {
   return true;
 }
 
+namespace {
+
+// Clears the taskbar properties main.cpp sets on Gaia's window, while it
+// still exists, as SHGetPropertyStoreForWindow's docs ask. A window without
+// an AppUserModel ID, like the main one, is left alone.
+void ClearAppUserModelProperties(HWND hwnd) {
+  IPropertyStore* store = nullptr;
+  if (FAILED(::SHGetPropertyStoreForWindow(hwnd, IID_PPV_ARGS(&store)))) {
+    return;
+  }
+  PROPVARIANT id{};
+  if (SUCCEEDED(store->GetValue(PKEY_AppUserModel_ID, &id)) &&
+      id.vt != VT_EMPTY) {
+    const PROPERTYKEY* keys[] = {
+        &PKEY_AppUserModel_ID,
+        &PKEY_AppUserModel_RelaunchCommand,
+        &PKEY_AppUserModel_RelaunchDisplayNameResource,
+        &PKEY_AppUserModel_RelaunchIconResource,
+    };
+    const PROPVARIANT empty{};
+    for (const auto* key : keys) store->SetValue(*key, empty);
+    store->Commit();
+  }
+  ::PropVariantClear(&id);
+  store->Release();
+}
+
+}  // namespace
+
 void FlutterWindow::OnDestroy() {
   WatchCover(false);
   g_cover_window = nullptr;
@@ -303,6 +334,9 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  // Before Flutter: a plugin handling it would skip this.
+  if (message == WM_DESTROY) ClearAppUserModelProperties(hwnd);
+
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     std::optional<LRESULT> result =

@@ -4,6 +4,8 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
+import 'package:voyager/features/gaia/companion/gaia_style.dart';
 
 /// The starfield behind Gaia's chat: dim stars turning slowly about a pole
 /// above the middle, leaning towards the cursor while it's over them. It
@@ -16,6 +18,8 @@ class GaiaStarfield extends StatefulWidget {
     this.rotation = 0,
     this.top = 0,
     this.left,
+    this.placing = false,
+    this.under,
     required this.child,
   });
 
@@ -33,6 +37,17 @@ class GaiaStarfield extends StatefulWidget {
   /// moves, so it covers them, but fade out at it.
   final ValueListenable<double>? left;
 
+  /// How far the chat's messages run under its header and composer
+  /// ([GaiaController.scrolledUnder]). The fades over those edges paint the
+  /// surface over the stars too, as much as that; the stars there are drawn
+  /// brighter by as much, so they show the fades' full strength however far
+  /// the chat's scrolled.
+  final ValueListenable<({double header, double composer})>? under;
+
+  /// Debug: Ctrl+click places a star, which Ctrl+drag moves and
+  /// Ctrl+right-click takes away. They go when this does.
+  final bool placing;
+
   final Widget child;
 
   /// Turns the stars of the starfield behind [context] about a pole above
@@ -45,6 +60,11 @@ class GaiaStarfield extends StatefulWidget {
   /// stay behind.
   static void Function(double glow)? glowOf(BuildContext context) =>
       context.getInheritedWidgetOfExactType<_StarfieldScope>()?.stars.setGlow;
+
+  /// Fades the stars of the starfield behind [context] out round the
+  /// composer's field, [box] in global coordinates; null once it's gone.
+  static void Function(RRect? box)? clearOf(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<_StarfieldScope>()?.clear;
 
   /// How far, in logical pixels, the nearest stars of the starfield behind
   /// [context] lean towards the cursor just now. A [GaiaSky] over them leans
@@ -61,9 +81,14 @@ class GaiaStarfield extends StatefulWidget {
 }
 
 class _StarfieldScope extends InheritedWidget {
-  const _StarfieldScope({required this.stars, required super.child});
+  const _StarfieldScope({
+    required this.stars,
+    required this.clear,
+    required super.child,
+  });
 
   final _Stars stars;
+  final void Function(RRect? box) clear;
 
   @override
   bool updateShouldNotify(_StarfieldScope oldWidget) =>
@@ -103,17 +128,52 @@ class _GaiaStarfieldState extends State<GaiaStarfield>
   var _reduced = false;
   var _hovered = false;
 
+  /// Ctrl is held while [GaiaStarfield.placing]: the stars take the
+  /// clicks, not the chat.
+  var _ctrl = false;
+
+  /// The placed star, or cluster, being dragged.
+  int? _dragging;
+
   @override
   void initState() {
     super.initState();
     _stars.rate = widget.rotation * pi / 180 / 60;
     widget.active.addListener(_sync);
+    HardwareKeyboard.instance.addHandler(_key);
+  }
+
+  bool _key(KeyEvent _) {
+    final ctrl = widget.placing && HardwareKeyboard.instance.isControlPressed;
+    if (ctrl != _ctrl) setState(() => _ctrl = ctrl);
+    return false;
+  }
+
+  /// [local] in the stars' own space, below [GaiaStarfield.top].
+  Offset _field(Offset local) => local - Offset(0, widget.top);
+
+  /// [global], the composer's field, into the stars' space.
+  void _clear(RRect? global) {
+    final box = context.findRenderObject();
+    if (global == null || box is! RenderBox || !box.attached) {
+      return _stars.setClear(null);
+    }
+    // Through the transform, not a shift: Gaia's zoom scales both.
+    final rect = Rect.fromPoints(
+      box.globalToLocal(global.outerRect.topLeft),
+      box.globalToLocal(global.outerRect.bottomRight),
+    ).shift(Offset(0, -widget.top));
+    _stars.setClear(RRect.fromRectAndRadius(rect, global.tlRadius));
   }
 
   @override
   void didUpdateWidget(GaiaStarfield oldWidget) {
     super.didUpdateWidget(oldWidget);
     _stars.rate = widget.rotation * pi / 180 / 60;
+    if (oldWidget.placing && !widget.placing) {
+      _ctrl = false;
+      _stars.unplace();
+    }
     if (oldWidget.active != widget.active) {
       oldWidget.active.removeListener(_sync);
       widget.active.addListener(_sync);
@@ -132,6 +192,7 @@ class _GaiaStarfieldState extends State<GaiaStarfield>
   @override
   void dispose() {
     widget.active.removeListener(_sync);
+    HardwareKeyboard.instance.removeHandler(_key);
     _wake?.cancel();
     _ticker.dispose();
     _stars.dispose();
@@ -139,6 +200,8 @@ class _GaiaStarfieldState extends State<GaiaStarfield>
   }
 
   void _sync() {
+    // Ctrl let go in another app sends no key-up here.
+    if (!widget.active.value && _ctrl) setState(() => _ctrl = false);
     final run =
         widget.active.value && (_hovered || _stars.rate > 0) && !_reduced;
     if (!run) {
@@ -200,9 +263,59 @@ class _GaiaStarfieldState extends State<GaiaStarfield>
       // the chat in front of them, nor the window around them.
       child: RepaintBoundary(
         child: CustomPaint(
-          painter: _StarPainter(_stars, widget.top, widget.left),
+          painter: _StarPainter(
+            _stars,
+            widget.top,
+            widget.left,
+            widget.under,
+          ),
           child: RepaintBoundary(
-            child: _StarfieldScope(stars: _stars, child: widget.child),
+            child: _StarfieldScope(
+              stars: _stars,
+              clear: _clear,
+              // A stack throughout, so the chat isn't rebuilt from scratch as
+              // the placing layer comes and goes.
+              child: Stack(
+                fit: StackFit.passthrough,
+                children: [
+                  widget.child,
+                  if (_ctrl)
+                    Positioned.fill(
+                      child: MouseRegion(
+                        cursor: SystemMouseCursors.precise,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          // Ctrl+Shift always makes a new cluster; Ctrl
+                          // picks up the star or cluster under the cursor,
+                          // else places a star.
+                          onPanDown: (details) {
+                            final at = _field(details.localPosition);
+                            _dragging = HardwareKeyboard.instance.isShiftPressed
+                                ? _stars.placeCluster(at)
+                                : _stars.nearestPlaced(at) ?? _stars.place(at);
+                          },
+                          onPanUpdate: (details) {
+                            if (_dragging case final i?) {
+                              _stars.dragPlaced(
+                                i,
+                                _field(details.localPosition),
+                              );
+                            }
+                          },
+                          onPanEnd: (_) => _dragging = null,
+                          onPanCancel: () => _dragging = null,
+                          onSecondaryTapUp: (details) {
+                            final at = _field(details.localPosition);
+                            if (_stars.nearestPlaced(at) case final i?) {
+                              _stars.removePlaced(i);
+                            }
+                          },
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -231,6 +344,101 @@ class _Stars extends ChangeNotifier {
       ]);
 
   final Float32List x, y, radius, alpha, depth;
+
+  /// Stars placed by hand, each a lone star or a cluster of them, in a
+  /// share of the area as the rest are: drawn as the nearest, brightest of
+  /// them ([placedRadius], [placedAlpha], depth 1).
+  final placed = <List<Offset>>[];
+
+  static const placedRadius = 1.4;
+  static const placedAlpha = 0.7;
+
+  /// Logical pixels from a placed star a click picks it up within.
+  static const _pick = 16.0;
+
+  /// A cluster's stars, and the radius, in logical pixels, they're
+  /// scattered within.
+  static const _clusterStars = 12;
+  static const _clusterRadius = 18.0;
+
+  /// Logical pixels a dragged star keeps above the cursor, so it can be
+  /// seen; a cluster keeps its whole radius further.
+  static const _dragGap = 20.0;
+
+  /// The placed star or cluster with a star nearest [at], in the stars'
+  /// space, if one's in reach.
+  int? nearestPlaced(Offset at) {
+    int? found;
+    var best = _pick;
+    for (var i = 0; i < placed.length; i++) {
+      for (final share in placed[i]) {
+        final drawn = _pixels(share) + lean;
+        final distance = (drawn - at).distance;
+        if (distance < best) {
+          best = distance;
+          found = i;
+        }
+      }
+    }
+    return found;
+  }
+
+  Offset _pixels(Offset share) =>
+      Offset(share.dx * size.width, share.dy * size.height);
+
+  Offset _share(Offset pixels) =>
+      Offset(pixels.dx / size.width, pixels.dy / size.height);
+
+  /// Places a star at [at], returning its index.
+  int place(Offset at) {
+    placed.add([_share(at - lean)]);
+    notifyListeners();
+    return placed.length - 1;
+  }
+
+  /// Places a cluster of stars scattered evenly in a small circle about
+  /// [at], returning its index.
+  int placeCluster(Offset at) {
+    final random = Random();
+    placed.add([
+      for (var i = 0; i < _clusterStars; i++)
+        _share(
+          at -
+              lean +
+              Offset.fromDirection(
+                random.nextDouble() * 2 * pi,
+                _clusterRadius * sqrt(random.nextDouble()),
+              ),
+        ),
+    ]);
+    notifyListeners();
+    return placed.length - 1;
+  }
+
+  /// Moves placed star or cluster [i] so its middle sits a little above
+  /// [cursor].
+  void dragPlaced(int i, Offset cursor) {
+    final group = placed[i];
+    final gap = _dragGap + (group.length > 1 ? _clusterRadius : 0);
+    final middle =
+        group.fold(Offset.zero, (sum, share) => sum + _pixels(share)) /
+        group.length.toDouble();
+    final by = _share(cursor - Offset(0, gap) - lean - middle);
+    for (var j = 0; j < group.length; j++) {
+      group[j] += by;
+    }
+    notifyListeners();
+  }
+
+  void removePlaced(int i) {
+    placed.removeAt(i);
+    notifyListeners();
+  }
+
+  void unplace() {
+    placed.clear();
+    notifyListeners();
+  }
 
   /// Where the nearest stars' lean has eased to, in logical pixels: each
   /// leans by it times its [depth], all easing alike.
@@ -262,6 +470,15 @@ class _Stars extends ChangeNotifier {
 
   /// The lean has caught up with the cursor, or come to rest without it.
   bool get settled => (_aim - lean).distance < 0.01;
+
+  /// The composer's field, which the stars fade out round, in their space.
+  RRect? clear;
+
+  void setClear(RRect? value) {
+    if (value == clear) return;
+    clear = value;
+    notifyListeners();
+  }
 
   void setGlow(double value) {
     if (value == glow) return;
@@ -298,6 +515,15 @@ class _Stars extends ChangeNotifier {
       x[i] = (w / 2 + px * c - py * s) / w % 1;
       y[i] = (px * s + py * c - h / 2) / h % 1;
     }
+    for (final group in placed) {
+      for (var i = 0; i < group.length; i++) {
+        final px = group[i].dx * w - w / 2, py = group[i].dy * h + h / 2;
+        group[i] = Offset(
+          (w / 2 + px * c - py * s) / w % 1,
+          (px * s + py * c - h / 2) / h % 1,
+        );
+      }
+    }
     notifyListeners();
   }
 
@@ -309,16 +535,29 @@ class _Stars extends ChangeNotifier {
 }
 
 class _StarPainter extends CustomPainter {
-  _StarPainter(this.stars, this.top, this.left)
-    : super(repaint: Listenable.merge([stars, left]));
+  _StarPainter(this.stars, this.top, this.left, this.under)
+    : super(repaint: Listenable.merge([stars, left, under]));
 
   final _Stars stars;
   final double top;
   final ValueListenable<double>? left;
+  final ValueListenable<({double header, double composer})>? under;
 
   /// Stars fade out over this distance from the edges, so wrapping round
   /// doesn't pop.
   static const _edge = 20.0;
+
+  /// Stars fade out over this distance from the composer's field, so its
+  /// edge doesn't cut through them.
+  static const _clearEdge = 6.0;
+
+  /// How far ([x], [y]) is outside [box]'s rounded outline.
+  static double _outside(RRect box, double x, double y) {
+    final radius = box.tlRadiusX;
+    final dx = max(max(box.left + radius - x, x - box.right + radius), 0.0);
+    final dy = max(max(box.top + radius - y, y - box.bottom + radius), 0.0);
+    return sqrt(dx * dx + dy * dy) - radius;
+  }
 
   static const _minRadius = 1.0;
 
@@ -331,29 +570,67 @@ class _StarPainter extends CustomPainter {
     final paint = Paint();
     final from = max(0.0, left?.value ?? 0);
     final glow = 1 + stars.glow;
-    for (var i = 0; i < count; i++) {
-      final px = stars.x[i] * size.width + stars.lean.dx * stars.depth[i];
-      final py = stars.y[i] * size.height + stars.lean.dy * stars.depth[i];
-      final r = stars.radius[i];
+    final shown = under?.value;
+    final field = stars.clear?.top;
+    const fade = kGaiaChatFade;
+    // How much of a star at [py] shows past the chat's fades over its header
+    // (the stars' top) and its composer's field, which cover it [shown]:
+    // what makes theirs up to the full fade.
+    double dim(double py) {
+      if (shown == null) return 1;
+      var full = 0.0, over = 0.0;
+      if (py < fade) {
+        full = gaiaFadeAt(1 - py / fade);
+        over = full * shown.header;
+      } else if (field != null && py > field - fade && py < field) {
+        full = gaiaFadeAt(1 - (field - py) / fade);
+        over = full * shown.composer;
+      }
+      if (full == 0) return 1;
+      return over >= 1 ? 0 : (1 - full) / (1 - over);
+    }
+
+    void star(double x, double y, double r, double a, double depth) {
+      final px = x * size.width + stars.lean.dx * depth;
+      final py = y * size.height + stars.lean.dy * depth;
       final nearest = min(
         min(px - from - r, size.width - px - r),
         min(py - r, size.height - py - r),
       );
-      if (nearest <= 0) continue;
+      if (nearest <= 0) return;
+      final clear = stars.clear;
+      final around = clear == null ? _clearEdge : _outside(clear, px, py) - r;
+      if (around <= 0) return;
       // No smaller than a pixel or so across, dimmed to give the same light:
       // a smaller dot flashes as it moves, bright on a pixel and dim
       // between two.
       final drawn = max(r, _minRadius);
       final alpha = min(
         1.0,
-        stars.alpha[i] *
+        a *
             glow *
             min(nearest / _edge, 1) *
+            min(around / _clearEdge, 1) *
             (r / drawn) *
             (r / drawn),
       );
-      paint.color = Colors.white.withValues(alpha: alpha);
+      paint.color = Colors.white.withValues(alpha: alpha * dim(py));
       canvas.drawCircle(Offset(px, py), drawn, paint);
+    }
+
+    for (var i = 0; i < count; i++) {
+      star(
+        stars.x[i],
+        stars.y[i],
+        stars.radius[i],
+        stars.alpha[i],
+        stars.depth[i],
+      );
+    }
+    for (final group in stars.placed) {
+      for (final at in group) {
+        star(at.dx, at.dy, _Stars.placedRadius, _Stars.placedAlpha, 1);
+      }
     }
   }
 
@@ -361,5 +638,6 @@ class _StarPainter extends CustomPainter {
   bool shouldRepaint(_StarPainter oldDelegate) =>
       oldDelegate.stars != stars ||
       oldDelegate.top != top ||
-      oldDelegate.left != left;
+      oldDelegate.left != left ||
+      oldDelegate.under != under;
 }

@@ -520,6 +520,24 @@ void main() {
     expect(controller.btwPanelOpen, isTrue);
   });
 
+  testWidgets('/btw picked after a draft keeps its trailing space', (
+    tester,
+  ) async {
+    final controller = await pump(tester);
+    Future<void> pick(String text) async {
+      await tester.enterText(find.byType(GaiaTextField), text);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+    }
+
+    await pick('hi /btw');
+    expect(controller.draft.text, '/btw hi ');
+    // Picked again, it comes off.
+    await pick('/btw hi /btw');
+    expect(controller.draft.text, 'hi ');
+  });
+
   testWidgets('the palette stands in for them while it shows', (tester) async {
     final controller = await pump(tester);
     await tester.tap(find.text('2 btws'));

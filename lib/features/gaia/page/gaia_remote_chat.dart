@@ -377,7 +377,7 @@ class _GaiaRemoteChatPageState extends ConsumerState<GaiaRemoteChatPage> {
             if (project != null || projects.isNotEmpty)
               _ProjectCrumb(
                 project: project,
-                projects: projects,
+                projects: gaiaProjectsListed(chats, projects),
                 onMove: (id) async {
                   if (chat == null) {
                     setState(() => _newProjectId = id);

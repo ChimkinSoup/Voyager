@@ -54,6 +54,47 @@ abstract final class GaiaRadius {
   static const panel = 12.0;
 }
 
+/// How far the chat fades into the surface under what's over its edges:
+/// the header, the pinned prompt, the composer and the btw panel.
+const kGaiaChatFade = 32.0;
+
+/// [color] easing in from clear at [clear] to itself at [full], fractions of
+/// a gradient's length, as colors and stops in order. Eased at both ends: a
+/// straight fade shows its ends as edges, which trace what it fades under
+/// like a glow round it.
+({List<Color> colors, List<double> stops}) gaiaFade(
+  Color color, {
+  required double clear,
+  required double full,
+}) {
+  const steps = _gaiaFadeSteps;
+  final up = clear < full;
+  final lo = up ? clear : full, hi = up ? full : clear;
+  return (
+    colors: [
+      for (var k = 0; k <= steps; k++)
+        color.withValues(
+          alpha:
+              color.a *
+              Curves.easeInOut.transform(up ? k / steps : 1 - k / steps),
+        ),
+    ],
+    stops: [for (var k = 0; k <= steps; k++) lo + (hi - lo) * k / steps],
+  );
+}
+
+/// [gaiaFade]'s strength [t] of the way from its clear end to its full one,
+/// 0 to 1, stepped as its stops are.
+double gaiaFadeAt(double t) {
+  final at = t.clamp(0.0, 1.0) * _gaiaFadeSteps;
+  final step = at.floor().clamp(0, _gaiaFadeSteps - 1);
+  final from = Curves.easeInOut.transform(step / _gaiaFadeSteps);
+  final to = Curves.easeInOut.transform((step + 1) / _gaiaFadeSteps);
+  return from + (to - from) * (at - step);
+}
+
+const _gaiaFadeSteps = 8;
+
 /// The chat's header: room for the buttons' shadows. A divider's 1
 /// sits under it.
 const kGaiaHeaderHeight = 52.0;

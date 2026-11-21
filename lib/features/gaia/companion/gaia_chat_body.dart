@@ -1,7 +1,9 @@
 import 'dart:math';
 
 import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
+import 'package:voyager/features/gaia/companion/gaia_starfield.dart';
 import 'package:voyager/features/gaia/companion/gaia_style.dart';
 
 /// A chat's messages with its composer over their foot. What's above the
@@ -10,11 +12,12 @@ import 'package:voyager/features/gaia/companion/gaia_style.dart';
 /// list's [GaiaFloatGap] keeps that much room at its end, so at the bottom
 /// nothing's under it.
 ///
-/// Between them it paints [halo], what's behind the chat, fading into the
-/// field ([GaiaFieldBox]) on every side: solid under the field and the gap
-/// round it that its hover light shows in, then fading out over [haloFade],
-/// round its rounded corners. So over the messages, the foot of them among
-/// it, but under the chips above the field.
+/// Between them it paints [halo], what's behind the chat: solid under the
+/// field ([GaiaFieldBox]) and the gap round it that its hover light shows
+/// in, and fading up from the field's top over [haloFade], across the
+/// composer's width, by [haloShown]. So over the messages, the foot of them
+/// among it, but under the chips above the field. Only across, not round the
+/// field's sides and corners: a fade tracing its outline reads as a glow.
 class GaiaChatBody extends MultiChildRenderObjectWidget {
   GaiaChatBody({
     super.key,
@@ -22,20 +25,26 @@ class GaiaChatBody extends MultiChildRenderObjectWidget {
     required Widget composer,
     required this.halo,
     required this.haloFade,
+    required this.haloShown,
   }) : super(children: [messages, composer]);
 
   final Color halo;
   final double haloFade;
 
+  /// How much of the fade over the field's top shows, 0 to 1: as far as the
+  /// messages are scrolled under it, so at rest it isn't over the newest.
+  final double haloShown;
+
   @override
   RenderObject createRenderObject(BuildContext context) =>
-      _RenderChatBody(halo, haloFade);
+      _RenderChatBody(halo, haloFade, haloShown);
 
   @override
   void updateRenderObject(BuildContext context, RenderObject renderObject) {
     renderObject as _RenderChatBody
       ..halo = halo
-      ..haloFade = haloFade;
+      ..haloFade = haloFade
+      ..haloShown = haloShown;
   }
 }
 
@@ -45,7 +54,26 @@ class GaiaFieldBox extends SingleChildRenderObjectWidget {
   const GaiaFieldBox({super.key, super.child});
 
   @override
-  RenderObject createRenderObject(BuildContext context) => _RenderFieldBox();
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderFieldBox(GaiaStarfield.clearOf(context));
+
+  @override
+  void updateRenderObject(BuildContext context, RenderObject renderObject) {
+    (renderObject as _RenderFieldBox).clearStars = GaiaStarfield.clearOf(
+      context,
+    );
+  }
+}
+
+/// What the chat body's halo leaves out, at a chip's corners: a button over
+/// the messages' foot, which would otherwise fade with them. The halo's fade
+/// is painted under it instead, so as it fades in or out, what shows through
+/// it is faded as round it. Outside the button's own fade.
+class GaiaHaloHole extends SingleChildRenderObjectWidget {
+  const GaiaHaloHole({super.key, super.child});
+
+  @override
+  RenderObject createRenderObject(BuildContext context) => _RenderHaloHole();
 }
 
 /// Where the composer's field starts: what's above it floats.
@@ -80,25 +108,41 @@ class _RenderChatBody extends RenderBox
     with
         ContainerRenderObjectMixin<RenderBox, _BodyParentData>,
         RenderBoxContainerDefaultsMixin<RenderBox, _BodyParentData> {
-  _RenderChatBody(this._halo, this._haloFade);
+  _RenderChatBody(this._halo, this._haloFade, this._haloShown);
 
   Color _halo;
   set halo(Color value) {
     if (value == _halo) return;
     _halo = value;
-    markNeedsPaint();
+    _markNeedsPaint();
   }
 
   double _haloFade;
   set haloFade(double value) {
     if (value == _haloFade) return;
     _haloFade = value;
+    _markNeedsPaint();
+  }
+
+  double _haloShown;
+  set haloShown(double value) {
+    if (value == _haloShown) return;
+    _haloShown = value;
+    _markNeedsPaint();
+  }
+
+  /// This and the holes, which paint some of the halo themselves.
+  void _markNeedsPaint() {
     markNeedsPaint();
+    for (final hole in _holes) {
+      hole.markNeedsPaint();
+    }
   }
 
   _RenderFieldLine? _line;
   _RenderFieldBox? _field;
   final _gaps = <_RenderFloatGap>{};
+  final _holes = <_RenderHaloHole>{};
   final _lifts = <_RenderAboveFloat>{};
 
   /// From the composer's top to its field's.
@@ -210,6 +254,49 @@ class _RenderChatBody extends RenderBox
       (size.width - composer.size.width) / 2,
       top,
     );
+    // The field may have moved under them.
+    for (final hole in _holes) {
+      hole.markNeedsPaint();
+    }
+  }
+
+  /// The band over the field's top that the halo fades up across, in this
+  /// body's coordinates: as wide as the composer. Null without a field.
+  Rect? _band() {
+    final field = _field;
+    final composer = lastChild;
+    if (field == null || !field.attached || !field.hasSize) return null;
+    if (composer == null || !composer.hasSize) return null;
+    final top = MatrixUtils.transformPoint(
+      field.getTransformTo(this),
+      Offset.zero,
+    ).dy;
+    final left = (composer.parentData! as _BodyParentData).offset.dx;
+    return Rect.fromLTRB(
+      left,
+      top - _haloFade,
+      left + composer.size.width,
+      top,
+    );
+  }
+
+  /// [_halo] fading in down [band], as much as [_haloShown].
+  void _paintBand(Canvas canvas, Rect band) {
+    final (:colors, :stops) = gaiaFade(
+      _halo.withValues(alpha: _halo.a * _haloShown),
+      clear: 0,
+      full: 1,
+    );
+    canvas.drawRect(
+      band,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: colors,
+          stops: stops,
+        ).createShader(band),
+    );
   }
 
   @override
@@ -232,6 +319,14 @@ class _RenderChatBody extends RenderBox
       _paintHalo(
         context.canvas,
         edge,
+        [
+          for (final hole in _holes)
+            if (hole.attached && hole.hasSize)
+              MatrixUtils.transformRect(
+                hole.getTransformTo(this),
+                Offset.zero & hole.size,
+              ).shift(offset),
+        ],
         // Not past the composer's sides: its padding can be narrower than
         // the fade, which would reach over the sidebar's divider.
         Rect.fromLTRB(
@@ -245,77 +340,34 @@ class _RenderChatBody extends RenderBox
     context.paintChild(composer, at);
   }
 
-  void _paintHalo(Canvas canvas, Rect edge, Rect clip) {
-    final color = _halo, fade = _haloFade;
-    const r = GaiaRadius.chip + 2;
-    final clear = color.withValues(alpha: 0);
-    final paint = Paint()..color = color;
+  void _paintHalo(Canvas canvas, Rect edge, List<Rect> holes, Rect clip) {
+    final paint = Paint()..color = _halo;
+    // A difference, not even-odd: holes overlapping, or past the clip,
+    // stay holes.
+    final cut = Path();
+    for (final hole in holes) {
+      cut.addRRect(
+        RRect.fromRectAndRadius(hole, const Radius.circular(GaiaRadius.chip)),
+      );
+    }
+    final shape = Path.combine(
+      PathOperation.difference,
+      Path()..addRect(clip),
+      cut,
+    );
     canvas
       ..save()
-      ..clipRect(clip)
+      ..clipPath(shape)
+      // Rounded as the field's outline the stars fade round, so no square
+      // corner cuts them.
       ..drawRRect(
-        RRect.fromRectAndRadius(edge, const Radius.circular(r)),
+        RRect.fromRectAndRadius(edge, const Radius.circular(GaiaRadius.row)),
         paint,
       );
-    // Each side, straight out from it, between the corners.
-    for (final (band, from, to) in [
-      (
-        Rect.fromLTRB(edge.left + r, edge.top - fade, edge.right - r, edge.top),
-        Alignment.bottomCenter,
-        Alignment.topCenter,
-      ),
-      (
-        Rect.fromLTRB(
-          edge.left + r,
-          edge.bottom,
-          edge.right - r,
-          edge.bottom + fade,
-        ),
-        Alignment.topCenter,
-        Alignment.bottomCenter,
-      ),
-      (
-        Rect.fromLTRB(
-          edge.left - fade,
-          edge.top + r,
-          edge.left,
-          edge.bottom - r,
-        ),
-        Alignment.centerRight,
-        Alignment.centerLeft,
-      ),
-      (
-        Rect.fromLTRB(
-          edge.right,
-          edge.top + r,
-          edge.right + fade,
-          edge.bottom - r,
-        ),
-        Alignment.centerLeft,
-        Alignment.centerRight,
-      ),
-    ]) {
-      paint.shader = LinearGradient(
-        begin: from,
-        end: to,
-        colors: [color, clear],
-      ).createShader(band);
-      canvas.drawRect(band, paint);
-    }
-    // Each corner, round out from its curve.
-    for (final (centre, out) in [
-      (edge.topLeft + const Offset(r, r), const Offset(-1, -1)),
-      (edge.topRight + const Offset(-r, r), const Offset(1, -1)),
-      (edge.bottomLeft + const Offset(r, -r), const Offset(-1, 1)),
-      (edge.bottomRight + const Offset(-r, -r), const Offset(1, 1)),
-    ]) {
-      paint.shader = RadialGradient(
-        colors: [color, color, clear],
-        stops: [0, r / (r + fade), 1],
-      ).createShader(Rect.fromCircle(center: centre, radius: r + fade));
-      canvas.drawRect(
-        Rect.fromPoints(centre, centre + out * (r + fade)),
-        paint,
+    if (_haloShown > 0) {
+      _paintBand(
+        canvas,
+        Rect.fromLTRB(clip.left, edge.top - _haloFade, clip.right, edge.top),
       );
     }
     canvas.restore();
@@ -349,7 +401,65 @@ class _RenderFieldLine extends RenderBox {
   void performLayout() => size = constraints.smallest;
 }
 
+class _RenderHaloHole extends RenderProxyBox {
+  _RenderChatBody? _body;
+
+  @override
+  void attach(PipelineOwner owner) {
+    super.attach(owner);
+    _body = _RenderChatBody._of(this)
+      ?.._holes.add(this)
+      ..markNeedsPaint();
+  }
+
+  @override
+  void detach() {
+    _body
+      ?.._holes.remove(this)
+      ..markNeedsPaint();
+    _body = null;
+    super.detach();
+  }
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    _body?.markNeedsPaint();
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    final body = _body;
+    final band = body?._band();
+    if (body != null && band != null && body._haloShown > 0) {
+      final origin = MatrixUtils.transformPoint(
+        getTransformTo(body),
+        Offset.zero,
+      );
+      context.canvas
+        ..save()
+        ..clipRRect(
+          RRect.fromRectAndRadius(
+            offset & size,
+            const Radius.circular(GaiaRadius.chip),
+          ),
+        );
+      body._paintBand(context.canvas, band.shift(offset - origin));
+      context.canvas.restore();
+    }
+    super.paint(context, offset);
+  }
+}
+
 class _RenderFieldBox extends RenderProxyBox {
+  _RenderFieldBox(this.clearStars);
+
+  /// Tells the starfield where the field is, for its stars to fade round.
+  void Function(RRect? box)? clearStars;
+
+  /// The field's outline as last told, in global coordinates.
+  RRect? _told;
+
   _RenderChatBody? _body;
 
   @override
@@ -362,7 +472,25 @@ class _RenderFieldBox extends RenderProxyBox {
   void detach() {
     if (_body?._field == this) _body!._field = null;
     _body = null;
+    if (_told != null) clearStars?.call(null);
+    _told = null;
     super.detach();
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    super.paint(context, offset);
+    // Rounded as the light in its gap is.
+    final box = RRect.fromRectAndRadius(
+      MatrixUtils.transformRect(getTransformTo(null), Offset.zero & size),
+      const Radius.circular(GaiaRadius.row),
+    );
+    if (box == _told) return;
+    _told = box;
+    // Not mid-paint: the starfield repaints for it.
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      if (attached && _told == box) clearStars?.call(box);
+    });
   }
 }
 

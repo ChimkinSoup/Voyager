@@ -8,6 +8,7 @@ import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_markdown.dart';
 import 'package:voyager/features/gaia/companion/gaia_notch.dart';
+import 'package:voyager/features/gaia/companion/gaia_scroll_fade.dart';
 import 'package:voyager/features/gaia/companion/gaia_spinner.dart';
 import 'package:voyager/features/gaia/companion/gaia_style.dart';
 import 'package:voyager/features/gaia/companion/gaia_text_field.dart';
@@ -279,6 +280,35 @@ class GaiaBtwDockState extends State<GaiaBtwDock> {
           // under the palette and back, it keeps its state, so it's simply
           // there again.
           child: GaiaGrowIn(
+            // The chat under it fades into the surface over its top edge,
+            // rather than its lines being cut through at it.
+            // In full however far the chat's scrolled: it lies over the
+            // chat rather than lifting it, so even at its newest the chat
+            // runs on under it.
+            above: IgnorePointer(
+              child: SizedBox(
+                height: kGaiaChatFade,
+                child: Builder(
+                  builder: (context) {
+                    final (:colors, :stops) = gaiaFade(
+                      Theme.of(context).scaffoldBackgroundColor,
+                      clear: 0,
+                      full: 1,
+                    );
+                    return DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: colors,
+                          stops: stops,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
             // Squared off at the bottom, where it meets the composer.
             decoration: BoxDecoration(
               // Opaque, as the field it sits on.
@@ -365,11 +395,13 @@ class GaiaBtwDockState extends State<GaiaBtwDock> {
             constraints: const BoxConstraints(maxHeight: _answerMax),
             child: ScrollConfiguration(
               behavior: behavior.copyWith(scrollbars: false),
-              child: SingleChildScrollView(
-                padding: EdgeInsets.fromLTRB(8, picker == null ? 8 : 0, 8, 4),
-                child: ScrollConfiguration(
-                  behavior: behavior,
-                  child: _card(current, answer, accent),
+              child: GaiaScrollFade(
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.fromLTRB(8, picker == null ? 8 : 0, 8, 4),
+                  child: ScrollConfiguration(
+                    behavior: behavior,
+                    child: _card(current, answer, accent),
+                  ),
                 ),
               ),
             ),
@@ -471,12 +503,14 @@ class GaiaBtwDockState extends State<GaiaBtwDock> {
         ),
         child: ScrollConfiguration(
           behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-          child: ListView(
-            controller: _list,
-            shrinkWrap: true,
-            itemExtent: _rowExtent,
-            padding: _listPad,
-            children: [for (final btw in btws) _row(btw, current)],
+          child: GaiaScrollFade(
+            child: ListView(
+              controller: _list,
+              shrinkWrap: true,
+              itemExtent: _rowExtent,
+              padding: _listPad,
+              children: [for (final btw in btws) _row(btw, current)],
+            ),
           ),
         ),
       );
