@@ -361,6 +361,7 @@ class FakeClaudeRunner
     String? promptId,
     GaiaForkCut? fork,
     bool toolless = false,
+    GaiaTier? tier,
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
     accounts.add(account);
@@ -521,7 +522,11 @@ class FakeUtilityRunner implements ClaudeUtilityRunner {
   String get workingDirectory => '';
 
   @override
-  void configure({required String model, required String configDir}) {
+  void configure({
+    required String model,
+    required String configDir,
+    required String account,
+  }) {
     this.model = model;
     this.configDir = configDir;
   }
@@ -532,15 +537,20 @@ class FakeUtilityRunner implements ClaudeUtilityRunner {
   /// Each job's usage label, null for none, in order.
   final usages = <String?>[];
 
+  /// Each job's token source, in order.
+  final sources = <String>[];
+
   @override
   Future<String> generate(
     String job,
     String input, {
     required Duration timeout,
+    required String source,
     List<GaiaImageInput> images = const [],
     String? usage,
   }) async {
     jobs.add(job);
+    sources.add(source);
     inputs.add(input);
     this.images.add(images);
     usages.add(usage);

@@ -11,6 +11,7 @@ import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_runner.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
+import 'package:voyager/features/gaia/usage/gaia_tokens.dart';
 
 /// How long a process started ahead of a job waits for one.
 const _spareTimeout = Duration(minutes: 5);
@@ -31,6 +32,7 @@ class ClaudeUtilityRunner {
   final String workingDirectory;
   var _model = kGaiaDefaultUtilityModel;
   var _configDir = '';
+  var _account = kGaiaClaudeCodeAdapter;
 
   /// Processes started ahead, two at most: the router and memory recall run
   /// side by side on a new chat's first message (GAIA_MEMORY_TOPICS_HLD.md
@@ -43,8 +45,14 @@ class ClaudeUtilityRunner {
   /// starting under the old settings isn't kept.
   var _generation = 0;
 
-  /// A change lets go of the processes started ahead.
-  void configure({required String model, required String configDir}) {
+  /// A change lets go of the processes started ahead. [account] is the
+  /// key of the account [configDir] is, which the jobs' tokens count for.
+  void configure({
+    required String model,
+    required String configDir,
+    required String account,
+  }) {
+    _account = account;
     if (model == _model && configDir == _configDir) return;
     _model = model;
     _configDir = configDir;
@@ -79,13 +87,16 @@ class ClaudeUtilityRunner {
   /// service doesn't pile them up.
   /// With a [usage] label, the job's tokens and the account's five-hour
   /// window after it are logged under it (GAIA_MEMORY_TOPICS_HLD.md §11).
+  /// Its tokens are counted under [source], the job's name.
   Future<String> generate(
     String job,
     String input, {
     required Duration timeout,
+    required String source,
     List<GaiaImageInput> images = const [],
     String? usage,
   }) async {
+    final tokensFor = (account: _account, source: '$kGaiaTokensUtility$source');
     final elapsed = Stopwatch()..start();
     final content = await claudeUserContent(
       '$job\n\n<input>\n$input\n</input>',
@@ -104,6 +115,7 @@ class ClaudeUtilityRunner {
         process,
         content,
         usage,
+        tokensFor,
         elapsed,
         ahead,
       ).timeout(timeout - elapsed.elapsed);
@@ -120,6 +132,7 @@ class ClaudeUtilityRunner {
     Process process,
     Object content,
     String? usage,
+    GaiaTokensFor tokensFor,
     Stopwatch elapsed,
     bool ahead,
   ) async {
@@ -153,6 +166,9 @@ class ClaudeUtilityRunner {
         fiveHour = event.usage.fiveHour?.used;
       }
       if (event is ClaudeResult) {
+        if (event.tokens.isNotEmpty) {
+          gaiaTokensUsed?.call(tokensFor, event.tokens);
+        }
         if (usage != null) {
           debugPrint(
             '[gaia] utility usage, $usage: ${claudeUtilityTokens(event.modelUsage)}'

@@ -7,7 +7,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:voyager/core/utils/moon.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
+import 'package:voyager/features/gaia/companion/gaia_moon.dart';
 import 'package:voyager/features/gaia/companion/gaia_starfield.dart';
 
 /// How the sky leaves once a prompt is sent from it.
@@ -98,6 +100,34 @@ enum GaiaRareAurora {
 /// held at a strength.
 enum GaiaSkyShower { calendar, off, light, medium, peak }
 
+/// The moon, for its light on the sky and its phase in the header: as it
+/// really is just now, at a phase and hour the debug panel sets, or none.
+enum GaiaSkyMoon { real, set, off }
+
+/// The moon's phase and the local hour, as [moon] has them; null when off.
+({double phase, double hour})? gaiaMoonTime(
+  GaiaSkyMoon moon,
+  double phaseSet,
+  double hourSet,
+) {
+  final now = DateTime.now();
+  return switch (moon) {
+    GaiaSkyMoon.real => (
+      phase: moonPhaseAt(now),
+      hour: now.hour + now.minute / 60,
+    ),
+    GaiaSkyMoon.set => (phase: phaseSet, hour: hourSet),
+    GaiaSkyMoon.off => null,
+  };
+}
+
+/// The moonlight on the sky just now, 0 to 1, as [moon] has it.
+double gaiaMoonlight(GaiaSkyMoon moon, double phaseSet, double hourSet) =>
+    switch (gaiaMoonTime(moon, phaseSet, hourSet)) {
+      final t? => moonlightAt(t.phase, t.hour),
+      null => 0,
+    };
+
 /// A yearly meteor shower: its peak, the days it's active either side of
 /// it, and how strong it is at its peak against the strongest, 0 to 1.
 typedef _Shower = ({
@@ -181,6 +211,11 @@ class GaiaSky extends StatefulWidget {
     this.rareAurora = false,
     this.rareColours,
     this.shower = GaiaSkyShower.off,
+    this.moon = GaiaSkyMoon.real,
+    this.moonPhase = 0.5,
+    this.moonHour = 0,
+    this.moonModel = GaiaMoonModel.cratered,
+    this.moonPlace = GaiaMoonPlace.sidebar,
     this.satellite = GaiaSatellite.dot,
     required this.exit,
     this.plainBlink = false,
@@ -247,6 +282,17 @@ class GaiaSky extends StatefulWidget {
   final GaiaRareAurora? rareColours;
 
   final GaiaSkyShower shower;
+
+  final GaiaSkyMoon moon;
+
+  /// With [moon] set: its phase, 0 new, 0.5 full, back to 1; and the local
+  /// hour, 0 to 24.
+  final double moonPhase;
+  final double moonHour;
+
+  /// How the moon is drawn, and whether in the sky's corner.
+  final GaiaMoonModel moonModel;
+  final GaiaMoonPlace moonPlace;
 
   /// A change sends one across at once, to see it by, if fewer than three
   /// are up.
@@ -438,6 +484,11 @@ class _GaiaSkyState extends State<GaiaSky> with SingleTickerProviderStateMixin {
         GaiaSkyShower.medium => 0.4,
         GaiaSkyShower.peak => 1,
       }
+      ..moon = widget.moon
+      ..moonPhaseSet = widget.moonPhase
+      ..moonHourSet = widget.moonHour
+      ..moonModel = widget.moonModel
+      ..moonPlace = widget.moonPlace
       ..plainBlink = widget.plainBlink
       ..exitTime = widget.exitTime;
     // Not mid-exit: the exit under way keeps the way it's going.
@@ -566,6 +617,7 @@ class _GaiaSkyState extends State<GaiaSky> with SingleTickerProviderStateMixin {
           Theme.of(context).scaffoldBackgroundColor,
           _clearRects,
           _lean,
+          gaiaMoonLook(context),
         ),
         child: RepaintBoundary(
           child: _SkyScope(clear: _clear, child: widget.child),
@@ -1478,6 +1530,21 @@ class _Sky extends ChangeNotifier {
 
   /// The meteor shower's strength, 0 to 1.
   var shower = 0.0;
+
+  var moon = GaiaSkyMoon.real;
+  var moonPhaseSet = 0.5, moonHourSet = 0.0;
+
+  var moonModel = GaiaMoonModel.cratered;
+  var moonPlace = GaiaMoonPlace.sidebar;
+
+  /// Set by each paint: the moon's phase, null when off; and how much its
+  /// light washes out the faint stars and the shower's meteors, 0 to 1.
+  double? moonPhase;
+  var moonlight = 0.0;
+
+  /// The moon in the corner as last drawn, and what it was drawn by.
+  ui.Picture? moonPicture;
+  Object? moonDrawnBy;
   var satellite = GaiaSatellite.dot;
   var auroraExit = GaiaAuroraExit.rise;
   var exit = GaiaSkyExit.warp;
@@ -1627,9 +1694,17 @@ class _Sky extends ChangeNotifier {
   Offset star(int i) =>
       _around(v[i], sqrt(_rMin2 + u[i] * (_rMax2 - _rMin2))) + lean * depth[i];
 
-  double starAlpha(int i) =>
-      bright[i] *
-      (1 - twinkle * 0.7 * (0.5 + 0.5 * sin(time * rate[i] + phase[i])));
+  double starAlpha(int i) {
+    final alpha =
+        bright[i] *
+        (1 - twinkle * 0.7 * (0.5 + 0.5 * sin(time * rate[i] + phase[i])));
+    return moonlit(alpha, moonlight);
+  }
+
+  void placeMoon() {
+    moonPhase = gaiaMoonTime(moon, moonPhaseSet, moonHourSet)?.phase;
+    moonlight = gaiaMoonlight(moon, moonPhaseSet, moonHourSet);
+  }
 
   /// [c]'s radius in logical pixels.
   double _scale(_Constellation c) =>
@@ -1654,6 +1729,12 @@ class _Sky extends ChangeNotifier {
 
   /// Repaints, with nothing moved.
   void repaint() => notifyListeners();
+
+  @override
+  void dispose() {
+    moonPicture?.dispose();
+    super.dispose();
+  }
 
   /// Comes in with a new chat: an aurora of its own, now and then the rare
   /// one, and a radiant somewhere new.
@@ -1857,7 +1938,8 @@ class _Sky extends ChangeNotifier {
       streaks.add(_showerMeteor());
     }
     // In bursts, spaced at random, so they don't come in step.
-    final burstRate = shower * _burstPeak / 60;
+    // Fewer of them seen by moonlight.
+    final burstRate = shower * (1 - 0.7 * moonlight) * _burstPeak / 60;
     if (burstRate <= 0) return;
     _nextShower -= dt;
     if (_nextShower > 0) return;
@@ -2136,6 +2218,7 @@ class _SkyPainter extends CustomPainter {
     this.background,
     this.clears,
     this.lean,
+    this.moonLook,
   ) : super(repaint: Listenable.merge([sky, left]));
 
   final _Sky sky;
@@ -2151,6 +2234,8 @@ class _SkyPainter extends CustomPainter {
 
   /// How far the nearest stars lean towards the cursor just now.
   final Offset Function()? lean;
+
+  final GaiaMoonLook moonLook;
 
   /// Stars fade out over this distance from the edges.
   static const _edge = 24.0;
@@ -2184,6 +2269,7 @@ class _SkyPainter extends CustomPainter {
     canvas.translate(0, top);
     final from = max(0.0, left?.value ?? 0);
     sky.layout(size, from);
+    sky.placeMoon();
     final kept = clears();
     sky.hidden = [
       for (final (rect, _) in kept) rect.shift(Offset(0, -top)).inflate(36),
@@ -2230,6 +2316,7 @@ class _SkyPainter extends CustomPainter {
     _stars(canvas, size, from, opacity, exiting);
     if (exiting == null) _sparkles(canvas, opacity);
     if (going > 0) {
+      _moon(canvas, size, going);
       _lines(canvas, going);
       _figure(canvas, going);
       _streaks(canvas, size, from, going);
@@ -2260,6 +2347,30 @@ class _SkyPainter extends CustomPainter {
         clear,
       );
     }
+  }
+
+  static const _moonSize = 22.0;
+
+  /// The moon, still in the top right corner, if it's placed in the sky:
+  /// hiding the stars behind it, its dark part too.
+  void _moon(Canvas canvas, Size size, double fade) {
+    final phase = sky.moonPhase;
+    if (phase == null || sky.moonPlace != GaiaMoonPlace.sky) return;
+    // A day's turn moves it a hair; redrawn about every hour and a half.
+    final by = ((phase * 500).round(), sky.moonModel, moonLook);
+    if (by != sky.moonDrawnBy) {
+      sky.moonPicture?.dispose();
+      sky.moonPicture = gaiaMoonPicture(phase, sky.moonModel, moonLook, _moonSize);
+      sky.moonDrawnBy = by;
+    }
+    final at = Offset(size.width - 56 - _moonSize, 36);
+    final box = at & const Size.square(_moonSize);
+    canvas
+      ..saveLayer(box.inflate(2), Paint()..color = Color.fromRGBO(0, 0, 0, fade))
+      ..drawOval(box.deflate(0.5), Paint()..color = background)
+      ..translate(at.dx, at.dy)
+      ..drawPicture(sky.moonPicture!)
+      ..restore();
   }
 
   /// Sparkling stars: each swells into a four-pointed glint, then settles.
@@ -2927,7 +3038,8 @@ class _SkyPainter extends CustomPainter {
       oldDelegate.left != left ||
       oldDelegate.background != background ||
       oldDelegate.clears != clears ||
-      oldDelegate.lean != lean;
+      oldDelegate.lean != lean ||
+      oldDelegate.moonLook != moonLook;
 }
 
 /// The sky debug panel over the chat: each part of the sky, changed live,
@@ -3158,6 +3270,118 @@ class GaiaSkyPanel extends StatelessWidget {
                                   '${percent(s.strength)} of a peak',
                             null => 'No shower tonight',
                           }),
+                        ),
+                        Row(
+                          children: [
+                            const SizedBox(width: 64, child: Text('Moon')),
+                            Expanded(
+                              child: Wrap(
+                                spacing: 6,
+                                children: [
+                                  for (final moon in GaiaSkyMoon.values)
+                                    ChoiceChip(
+                                      label: Text(switch (moon) {
+                                        GaiaSkyMoon.real => 'Real',
+                                        GaiaSkyMoon.set => 'Set',
+                                        GaiaSkyMoon.off => 'Off',
+                                      }),
+                                      visualDensity: VisualDensity.compact,
+                                      selected: debug.skyMoon == moon,
+                                      onSelected: (_) =>
+                                          debug.setSkyMoon(moon),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (debug.skyMoon == GaiaSkyMoon.set) ...[
+                          row(
+                            'Phase',
+                            debug.skyMoonPhase,
+                            0,
+                            1,
+                            debug.skyMoonPhase.toStringAsFixed(2),
+                            debug.setSkyMoonPhase,
+                          ),
+                          row(
+                            'Hour',
+                            debug.skyMoonHour,
+                            0,
+                            24,
+                            '${debug.skyMoonHour.floor()}:'
+                                '${(debug.skyMoonHour % 1 * 60).floor().toString().padLeft(2, '0')}',
+                            debug.setSkyMoonHour,
+                          ),
+                        ],
+                        if (gaiaMoonTime(
+                              debug.skyMoon,
+                              debug.skyMoonPhase,
+                              debug.skyMoonHour,
+                            )
+                            case final moon?)
+                          Row(
+                            children: [
+                              const SizedBox(
+                                width: 64,
+                                child: Text('Model'),
+                              ),
+                              Expanded(
+                                child: Wrap(
+                                  spacing: 6,
+                                  children: [
+                                    for (final model in GaiaMoonModel.values)
+                                      ChoiceChip(
+                                        label: Text(model.label),
+                                        visualDensity: VisualDensity.compact,
+                                        selected: debug.skyMoonModel == model,
+                                        onSelected: (_) =>
+                                            debug.setSkyMoonModel(model),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              // Large enough to judge it by.
+                              GaiaMoonIcon(
+                                phase: moon.phase,
+                                model: debug.skyMoonModel,
+                                size: 56,
+                              ),
+                            ],
+                          ),
+                        if (debug.skyMoon != GaiaSkyMoon.off)
+                          Row(
+                            children: [
+                              const SizedBox(width: 64, child: Text('Place')),
+                              Expanded(
+                                child: Wrap(
+                                  spacing: 6,
+                                  children: [
+                                    for (final place in GaiaMoonPlace.values)
+                                      ChoiceChip(
+                                        label: Text(place.label),
+                                        visualDensity: VisualDensity.compact,
+                                        selected: debug.skyMoonPlace == place,
+                                        onSelected: (_) =>
+                                            debug.setSkyMoonPlace(place),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Builder(
+                            builder: (context) {
+                              final phase = moonPhaseAt(DateTime.now());
+                              final lit = (1 - cos(2 * pi * phase)) / 2;
+                              return Text(
+                                'Tonight: ${percent(lit)} lit, '
+                                '${phase < 0.5 ? 'waxing' : 'waning'}',
+                              );
+                            },
+                          ),
                         ),
                         row(
                           'Aurora',

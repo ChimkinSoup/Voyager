@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
@@ -30,6 +29,7 @@ import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/features/shell/shell_back_interceptor.dart';
 import 'package:voyager/features/shell/shell_page_transition.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
+import 'package:voyager/core/utils/moon.dart';
 import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/core/widgets/voyager_prose_text.dart';
 import 'package:voyager/core/widgets/compact_back_bar.dart';
@@ -1629,7 +1629,7 @@ class _DreamEntryListTile extends StatelessWidget {
                 child: CustomPaint(
                   size: const Size.square(10),
                   painter: _MoonPhasePainter(
-                    phase: _moonPhase(entry.entryDate),
+                    phase: moonPhaseAt(entry.entryDate),
                     color: dateStyle?.color ?? theme.colorScheme.onSurface,
                     litIsInk: theme.brightness == Brightness.dark,
                   ),
@@ -1725,14 +1725,6 @@ class _DreamEntryListTile extends StatelessWidget {
   }
 }
 
-/// Where [date] falls in the lunar cycle: 0 new, 0.5 full, back to 1.
-double _moonPhase(DateTime date) {
-  const synodicMonthDays = 29.530588853;
-  final knownNewMoon = DateTime.utc(2000, 1, 6, 18, 14);
-  final days = date.toUtc().difference(knownNewMoon).inMinutes / 1440;
-  return (days / synodicMonthDays) % 1;
-}
-
 /// The moon as it looked on a dream's night, waxing on the right and waning
 /// on the left.
 class _MoonPhasePainter extends CustomPainter {
@@ -1754,23 +1746,7 @@ class _MoonPhasePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final r = size.shortestSide / 2;
     final disc = Rect.fromCircle(center: Offset.zero, radius: r);
-    // The terminator is a half-ellipse whose width runs r → 0 → r across
-    // the half cycle; it bulges toward the lit side until the half moon.
-    final k = math.cos(2 * math.pi * phase);
-    final lit = Path()
-      ..moveTo(0, -r)
-      ..arcTo(disc, -math.pi / 2, math.pi, false)
-      ..arcTo(
-        Rect.fromCenter(
-          center: Offset.zero,
-          width: 2 * r * k.abs(),
-          height: 2 * r,
-        ),
-        math.pi / 2,
-        k > 0 ? -math.pi : math.pi,
-        false,
-      )
-      ..close();
+    final lit = moonLitPath(r, phase);
 
     // Drawn opaque inside a layer that applies [color]'s alpha once, so
     // where the parts overlap the moon isn't darker than elsewhere.

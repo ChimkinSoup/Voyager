@@ -35,6 +35,7 @@ import 'package:win32/win32.dart' show AllowSetForegroundWindow;
 import 'package:voyager/features/gaia/gaia_text_settings.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 import 'package:voyager/features/gaia/tools/gaia_proposals.dart';
+import 'package:voyager/features/gaia/usage/gaia_tokens.dart';
 import 'package:voyager/features/gaia/usage/gaia_usage.dart';
 import 'package:voyager/features/gaia/usage/gaia_usage_limits.dart';
 import 'package:voyager/features/gaia/utility/gaia_utility.dart';
@@ -2011,6 +2012,9 @@ class GaiaController extends ChangeNotifier {
       textSettings.value = GaiaTextSettings.fromJson(json.cast());
     }
     _deviceId = hello['deviceId']! as String;
+    if (hello['tokens'] case final List rows) {
+      tokens.value = _tokenRows(rows);
+    }
     await _applySettings((hello['settings']! as Map).cast<String, Object?>());
     if (_usageSources.isNotEmpty) {
       _usageTimer ??= Timer.periodic(_usageEvery, (_) {
@@ -2136,6 +2140,10 @@ class GaiaController extends ChangeNotifier {
 
   /// How each account's last read ended (§6.4); none before the first.
   final usageHealth = <String, GaiaUsageHealth>{};
+
+  /// Gaia's lifetime token count, every desktop's, as the main instance last
+  /// sent it: null until read, and while signed out.
+  final tokens = ValueNotifier<List<GaiaTokenRow>?>(null);
   final _usageCheckedAt = <String, DateTime>{};
   final _runAuth = <String, GaiaRunAuth>{};
   final _runWorkedAt = <String, DateTime>{};
@@ -2595,6 +2603,10 @@ class GaiaController extends ChangeNotifier {
   Future<void> _killAll() =>
       Future.wait([for (final runner in _runners.values) runner.killAll()]);
 
+  static List<GaiaTokenRow> _tokenRows(List rows) => [
+    for (final row in rows) GaiaTokenRow.fromJson(row as Map),
+  ];
+
   void _onEvent(String event, Map<String, Object?> params) {
     switch (event) {
       case 'summon':
@@ -2650,6 +2662,11 @@ class GaiaController extends ChangeNotifier {
             btwId: params['btwId'] as String?,
           ),
         );
+      case 'tokens':
+        tokens.value = switch (params['rows']) {
+          final List rows => _tokenRows(rows),
+          _ => null,
+        };
       case 'accent':
         accent.value = params['argb']! as int;
       case 'text':
@@ -4662,6 +4679,7 @@ class GaiaController extends ChangeNotifier {
               ? null
               : (sessionId: fork.sourceSessionId, keepAt: fork.keepAt),
           toolless: true,
+          tier: tier,
           onEvent: onEvent,
         );
       }
@@ -6733,6 +6751,7 @@ class GaiaController extends ChangeNotifier {
               fork: fork == null
                   ? null
                   : (sessionId: fork.sourceSessionId, keepAt: fork.keepAt),
+              tier: tier,
               onEvent: onEvent,
             );
       // A resume that found no session, say one under another Claude config
@@ -6772,6 +6791,7 @@ class GaiaController extends ChangeNotifier {
           sessionInstructions: await newSessionPrompt(),
           account: account,
           promptId: question.id,
+          tier: tier,
           onEvent: onEvent,
         );
       }

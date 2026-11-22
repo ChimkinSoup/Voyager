@@ -306,9 +306,25 @@ class _GaiaPaletteState extends State<GaiaPalette>
   /// Each row's, by its label, to bring the highlighted one into view.
   final _rows = <String, GlobalKey>{};
 
+  /// For the frame the rows change under the highlight, which then moves at
+  /// once: fading, a lit row's light would go with it as it moves, and the
+  /// highlight would seem to jump to the row that took its place and back.
+  /// A row's hover goes for that frame too: it's the pointer's until the
+  /// next, and would light the row that moved out from under it.
+  var _snap = false;
+
   @override
   void didUpdateWidget(GaiaPalette old) {
     super.didUpdateWidget(old);
+    if (!listEquals(
+      [for (final item in old.items) item.label],
+      [for (final item in widget.items) item.label],
+    )) {
+      _snap = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _snap = false);
+      });
+    }
     if (old.highlight == widget.highlight) return;
     final up = widget.highlight < old.highlight;
     // Once its row is laid out.
@@ -391,8 +407,12 @@ class _GaiaPaletteState extends State<GaiaPalette>
                 key: _rows.putIfAbsent(item.label, GlobalKey.new),
                 child: _Pressable(
                   onPressed: item.onPressed,
-                  builder: (lit) =>
-                      _menuRow(context, item, lit || index == widget.highlight),
+                  builder: (lit) => _menuRow(
+                    context,
+                    item,
+                    (lit && !_snap) || index == widget.highlight,
+                    fade: _snap ? Duration.zero : _fade,
+                  ),
                 ),
               ),
             ),
@@ -606,7 +626,12 @@ class _MenuShellState extends State<_MenuShell>
   }
 }
 
-Widget _menuRow(BuildContext context, GaiaMenuItem item, bool lit) {
+Widget _menuRow(
+  BuildContext context,
+  GaiaMenuItem item,
+  bool lit, {
+  Duration fade = _fade,
+}) {
   final error = Theme.of(context).colorScheme.error;
   final color = item.destructive
       ? error
@@ -614,7 +639,7 @@ Widget _menuRow(BuildContext context, GaiaMenuItem item, bool lit) {
       ? Colors.white
       : _dim;
   return AnimatedContainer(
-    duration: _fade,
+    duration: fade,
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
     decoration: BoxDecoration(
       color: item.destructive

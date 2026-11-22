@@ -208,12 +208,17 @@ class GaiaGlowRing extends StatefulWidget {
     required this.radius,
     required this.hovered,
     this.color,
+    this.backdrop = 1,
     required this.child,
   });
 
   /// The outer corner radius.
   final double radius;
   final bool hovered;
+
+  /// How much of the ring and its fill shows behind [child]: 0 leaves the
+  /// child bare, as the composer's closed + is.
+  final double backdrop;
 
   /// The light's colour; the accent when null.
   final Color? color;
@@ -330,25 +335,33 @@ class _GaiaGlowRingState extends State<GaiaGlowRing>
     final colors = Theme.of(context).colorScheme;
     final outer = widget.radius;
     final accent = widget.color ?? colors.primary;
+    final backdrop = widget.backdrop;
     return Container(
       decoration: BoxDecoration(
-        color: GaiaInk.hairline,
+        color: GaiaInk.hairline.withValues(
+          alpha: GaiaInk.hairline.a * backdrop,
+        ),
         borderRadius: BorderRadius.circular(outer),
       ),
       child: Stack(
         children: [
           Positioned.fill(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(outer),
-              child: ImageFiltered(
-                imageFilter: ImageFilter.blur(sigmaX: 2, sigmaY: 2),
-                child: CustomPaint(
-                  painter: GaiaGlowPainter(
-                    angle: _angle,
-                    hover: _hover,
-                    cursor: () => _cursor,
-                    idle: Color.lerp(accent, Colors.white, 0.5)!,
-                    lit: HSLColor.fromColor(accent).withSaturation(1).toColor(),
+            child: Opacity(
+              opacity: backdrop,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(outer),
+                child: ImageFiltered(
+                  imageFilter: ImageFilter.blur(sigmaX: 2, sigmaY: 2),
+                  child: CustomPaint(
+                    painter: GaiaGlowPainter(
+                      angle: _angle,
+                      hover: _hover,
+                      cursor: () => _cursor,
+                      idle: Color.lerp(accent, Colors.white, 0.5)!,
+                      lit: HSLColor.fromColor(
+                        accent,
+                      ).withSaturation(1).toColor(),
+                    ),
                   ),
                 ),
               ),
@@ -360,7 +373,11 @@ class _GaiaGlowRingState extends State<GaiaGlowRing>
             child: Container(
               clipBehavior: Clip.antiAlias,
               decoration: BoxDecoration(
-                color: Color.lerp(colors.surface, Colors.black, 0.5),
+                color: Color.lerp(
+                  colors.surface,
+                  Colors.black,
+                  0.5,
+                )!.withValues(alpha: backdrop),
                 borderRadius: BorderRadius.circular(outer - 1),
               ),
               child: widget.child,

@@ -20,6 +20,9 @@ class GaiaActionIcon extends StatefulWidget {
     required this.onPressed,
     this.compact = false,
     this.tooltip = true,
+    this.fill = true,
+    this.litColor,
+    this.restColor,
   });
 
   /// Its tooltip, or with no [tooltip] its name to a screen reader alone.
@@ -28,10 +31,22 @@ class GaiaActionIcon extends StatefulWidget {
   /// Whether hovering it shows [label].
   final bool tooltip;
   final IconData icon;
-  final VoidCallback onPressed;
+
+  /// Null disables it: dimmed, and nothing lights it.
+  final VoidCallback? onPressed;
 
   /// 24 square rather than [kGaiaActionIconExtent], for a list's row.
   final bool compact;
+
+  /// Whether hovering it fills its square; without, only the icon lights,
+  /// as the composer's + does.
+  final bool fill;
+
+  /// The icon's colour under the cursor; [GaiaInk.bright] when null.
+  final Color? litColor;
+
+  /// The icon's colour at rest; [GaiaInk.faint] when null.
+  final Color? restColor;
 
   @override
   State<GaiaActionIcon> createState() => _GaiaActionIconState();
@@ -45,12 +60,14 @@ class _GaiaActionIconState extends State<GaiaActionIcon> {
 
   @override
   Widget build(BuildContext context) {
-    final lit = _hovered || _focused;
+    final enabled = widget.onPressed != null;
+    final lit = enabled && (_hovered || _focused);
     final button = FocusableActionDetector(
-      mouseCursor: SystemMouseCursors.click,
+      enabled: enabled,
+      mouseCursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
       actions: {
         ActivateIntent: CallbackAction<ActivateIntent>(
-          onInvoke: (_) => widget.onPressed(),
+          onInvoke: (_) => widget.onPressed?.call(),
         ),
       },
       onShowHoverHighlight: (hovered) => setState(() => _hovered = hovered),
@@ -65,17 +82,24 @@ class _GaiaActionIconState extends State<GaiaActionIcon> {
             (widget.compact ? 4 : kGaiaActionIconPadding) - 1,
           ),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: lit ? 0.06 : 0),
+            color: Colors.white.withValues(
+              alpha: lit && widget.fill ? 0.06 : 0,
+            ),
             borderRadius: BorderRadius.circular(GaiaRadius.chip),
             // Tabbed to, it's edged too: the fill alone is easy to miss.
             border: Border.all(
               color: Colors.white.withValues(alpha: _focused ? 0.3 : 0),
             ),
           ),
-          child: Icon(
-            widget.icon,
-            size: _iconSize,
-            color: lit ? GaiaInk.bright : GaiaInk.faint,
+          child: Opacity(
+            opacity: enabled ? 1 : 0.5,
+            child: Icon(
+              widget.icon,
+              size: _iconSize,
+              color: lit
+                  ? widget.litColor ?? GaiaInk.bright
+                  : widget.restColor ?? GaiaInk.faint,
+            ),
           ),
         ),
       ),

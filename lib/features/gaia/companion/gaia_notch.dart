@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter/rendering.dart';
@@ -106,12 +107,21 @@ class GaiaNotchItem<T> {
 /// sits in that place itself, so whatever it's in (as Gaia's composer)
 /// still counts the cursor over it as over itself.
 class GaiaNotch extends StatefulWidget {
-  const GaiaNotch({super.key, required this.items, this.opensRight = false});
+  const GaiaNotch({
+    super.key,
+    required this.items,
+    this.opensRight = false,
+    this.bare = false,
+  });
 
   final List<GaiaNotchItem<Object?>> items;
 
   /// For one at the left of what it's in, as the composer's +.
   final bool opensRight;
+
+  /// Closed, a faint trigger with no ring or fill behind it, as the
+  /// composer's + is: the ring fades in as it opens.
+  final bool bare;
 
   @override
   State<GaiaNotch> createState() => _GaiaNotchState();
@@ -407,107 +417,118 @@ class _GaiaNotchState extends State<GaiaNotch> with TickerProviderStateMixin {
       onExit: (_) => setState(() => _hovered = false),
       child: AnimatedBuilder(
         animation: Listenable.merge([_panel, _move]),
-        builder: (context, ring) => DecoratedBox(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(_radius),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(
-                  alpha:
-                      0.55 *
-                      (open
-                          ? _panel.value
-                          : shown != null
-                          ? 1 - _move.value
-                          : 0),
-                ),
-                offset: const Offset(0, 12),
-                blurRadius: 40,
-                spreadRadius: -8,
-              ),
-            ],
-          ),
-          child: ring,
-        ),
-        child: GaiaGlowRing(
-          radius: _radius,
-          hovered: _hovered,
-          child: AnimatedSize(
-            duration: _springTime,
-            curve: const _SpringCurve(_shellSpring),
-            // Closed, it follows a trigger easing to a new width a frame
-            // behind; from the left, that frame clips only the bar's end,
-            // past the text.
-            alignment: shown == null ? Alignment.bottomLeft : _corner,
-            child: Stack(
-              key: _frame,
-              alignment: _corner,
-              clipBehavior: Clip.none,
-              children: [
-                _Ghost(
-                  sizes: !open,
-                  left: widget.opensRight,
-                  child: IgnorePointer(
-                    ignoring: open,
-                    child: ExcludeFocus(
-                      excluding: open,
-                      child: AnimatedBuilder(
-                        animation: Listenable.merge([_panel, _move]),
-                        builder: (context, _) => _Bar(
-                          items: widget.items,
-                          pending: _pending,
-                          onOpen: _openItem,
-                          fade: open
-                              ? 1 - _panel.value
-                              : shown != null
-                              ? _move.value
-                              : 1,
-                          frame: _frame,
-                          triggers: _triggers,
-                          triggerTexts: _triggerTexts,
-                          rows: _rows,
-                          texts: _texts,
-                          flight: flight,
-                          // At 1 in the trigger, at 0 in the row.
-                          at: open ? ReverseAnimation(_moved) : _moved,
-                        ),
-                      ),
-                    ),
+        builder: (context, inner) {
+          final t = _moved.value.clamp(0.0, 1.0);
+          return DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(_radius),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(
+                    alpha:
+                        0.55 *
+                        (open
+                            ? _panel.value
+                            : shown != null
+                            ? 1 - _move.value
+                            : 0),
                   ),
+                  offset: const Offset(0, 12),
+                  blurRadius: 40,
+                  spreadRadius: -8,
                 ),
-                if (shown != null)
-                  _Ghost(
-                    sizes: open,
-                    left: widget.opensRight,
-                    // On its way out: no longer clickable or focusable.
-                    child: IgnorePointer(
-                      ignoring: !open,
-                      child: ExcludeFocus(
-                        excluding: !open,
-                        child: FadeTransition(
-                          // Closing, each option fades out on its own.
-                          opacity: open ? _panel : kAlwaysCompleteAnimation,
-                          child: _Options(
-                            key: ValueKey(shown),
-                            items: widget.items,
-                            focused: shown,
-                            minWidth: _barWidth,
-                            frame: _frame,
-                            rows: _rows,
-                            texts: _texts,
-                            triggers: _triggerTexts,
-                            hidden: flight,
-                            leaving: open ? null : _move,
-                            drawnIn: open ? null : _moved,
-                            onSelect: _select,
-                            onClose: _close,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
               ],
             ),
+            child: GaiaGlowRing(
+              radius: _radius,
+              hovered: _hovered,
+              backdrop: !widget.bare
+                  ? 1
+                  : open
+                  ? t
+                  : shown != null
+                  ? 1 - t
+                  : 0,
+              child: inner!,
+            ),
+          );
+        },
+        child: AnimatedSize(
+          duration: _springTime,
+          curve: const _SpringCurve(_shellSpring),
+          // Closed, it follows a trigger easing to a new width a frame
+          // behind; from the left, that frame clips only the bar's end,
+          // past the text.
+          alignment: shown == null ? Alignment.bottomLeft : _corner,
+          child: Stack(
+            key: _frame,
+            alignment: _corner,
+            clipBehavior: Clip.none,
+            children: [
+              _Ghost(
+                sizes: !open,
+                left: widget.opensRight,
+                child: IgnorePointer(
+                  ignoring: open,
+                  child: ExcludeFocus(
+                    excluding: open,
+                    child: AnimatedBuilder(
+                      animation: Listenable.merge([_panel, _move]),
+                      builder: (context, _) => _Bar(
+                        items: widget.items,
+                        faint: widget.bare,
+                        pending: _pending,
+                        onOpen: _openItem,
+                        fade: open
+                            ? 1 - _panel.value
+                            : shown != null
+                            ? _move.value
+                            : 1,
+                        frame: _frame,
+                        triggers: _triggers,
+                        triggerTexts: _triggerTexts,
+                        rows: _rows,
+                        texts: _texts,
+                        flight: flight,
+                        // At 1 in the trigger, at 0 in the row.
+                        at: open ? ReverseAnimation(_moved) : _moved,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              if (shown != null)
+                _Ghost(
+                  sizes: open,
+                  left: widget.opensRight,
+                  // On its way out: no longer clickable or focusable.
+                  child: IgnorePointer(
+                    ignoring: !open,
+                    child: ExcludeFocus(
+                      excluding: !open,
+                      child: FadeTransition(
+                        // Closing, each option fades out on its own.
+                        opacity: open ? _panel : kAlwaysCompleteAnimation,
+                        child: _Options(
+                          key: ValueKey(shown),
+                          items: widget.items,
+                          focused: shown,
+                          minWidth: _barWidth,
+                          frame: _frame,
+                          rows: _rows,
+                          texts: _texts,
+                          triggers: _triggerTexts,
+                          hidden: flight,
+                          leaving: open ? null : _move,
+                          drawnIn: open ? null : _moved,
+                          onSelect: _select,
+                          onClose: _close,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
       ),
@@ -583,9 +604,13 @@ class _Bar extends StatelessWidget {
     this.texts,
     this.flight,
     this.at = kAlwaysCompleteAnimation,
+    this.faint = false,
   });
 
   final List<GaiaNotchItem<Object?>> items;
+
+  /// An icon trigger at rest in [GaiaInk.faint] rather than muted.
+  final bool faint;
   final ({int item, int option})? pending;
   final ValueChanged<int> onOpen;
   final double fade;
@@ -638,7 +663,13 @@ class _Bar extends StatelessWidget {
         alignment: Alignment.center,
         child: KeyedSubtree(
           key: triggerTexts?.putIfAbsent(index, GlobalKey.new),
-          child: trigger(highlighted ? Colors.white : _muted),
+          child: trigger(
+            highlighted
+                ? Colors.white
+                : faint
+                ? GaiaInk.faint
+                : _muted,
+          ),
         ),
       );
     }

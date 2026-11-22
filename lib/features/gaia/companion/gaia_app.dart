@@ -38,6 +38,7 @@ import 'package:voyager/features/gaia/companion/gaia_commands.dart';
 import 'package:voyager/features/gaia/companion/gaia_composer_text.dart';
 import 'package:voyager/features/dev/dev_fps_counter_tile.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
+import 'package:voyager/features/gaia/usage/gaia_tokens.dart';
 import 'package:voyager/features/gaia/usage/gaia_usage.dart';
 import 'package:voyager/features/gaia/usage/gaia_usage_bar.dart';
 import 'package:voyager/features/gaia/usage/gaia_usage_limits.dart';
@@ -62,6 +63,7 @@ import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
 import 'package:voyager/features/gaia/companion/gaia_pinned_prompt.dart';
 import 'package:voyager/features/gaia/companion/gaia_tier_picker.dart';
 import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
+import 'package:voyager/features/gaia/companion/gaia_moon.dart';
 import 'package:voyager/features/gaia/companion/gaia_sky.dart';
 import 'package:voyager/features/gaia/companion/gaia_spinner.dart';
 import 'package:voyager/features/gaia/companion/gaia_starfield.dart';
@@ -470,6 +472,11 @@ class _GaiaShell extends StatelessWidget {
                     left: floater ? null : controller.sidebar.edge,
                     placing: controller.debug.placeStars,
                     under: controller.scrolledUnder,
+                    moonlight: () => gaiaMoonlight(
+                      controller.debug.skyMoon,
+                      controller.debug.skyMoonPhase,
+                      controller.debug.skyMoonHour,
+                    ),
                     child: GaiaSky(
                       active: controller.focused,
                       shown:
@@ -492,6 +499,11 @@ class _GaiaShell extends StatelessWidget {
                       rareAurora: controller.debug.skyRareAurora,
                       rareColours: controller.debug.skyRareColours,
                       shower: controller.debug.skyShower,
+                      moon: controller.debug.skyMoon,
+                      moonPhase: controller.debug.skyMoonPhase,
+                      moonHour: controller.debug.skyMoonHour,
+                      moonModel: controller.debug.skyMoonModel,
+                      moonPlace: controller.debug.skyMoonPlace,
                       satellite: controller.debug.skySatellite,
                       exit: controller.debug.skyExit,
                       plainBlink: controller.debug.skyPlainBlink,
@@ -1874,7 +1886,27 @@ class _SidebarState extends State<_Sidebar> {
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Align(
                       alignment: Alignment.centerLeft,
-                      child: Text('Gaia', style: theme.textTheme.titleMedium),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // The app's name as its mark: bigger and bolder.
+                          Text(
+                            'Gaia',
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          if (_placedMoon(
+                                controller,
+                                GaiaMoonPlace.sidebar,
+                                size: 18,
+                              )
+                              case final moon?) ...[
+                            const SizedBox(width: 10),
+                            moon,
+                          ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -3190,6 +3222,11 @@ class _MessagesState extends State<_Messages>
                         ? _EmptyChat(
                             key: ValueKey(greeting),
                             greeting: _greetingLine,
+                            moon: _placedMoon(
+                              widget.controller,
+                              GaiaMoonPlace.greeting,
+                              size: 22,
+                            ),
                             sendKey: '${_sendCombo(widget.controller)}',
                             leaving: empty
                                 ? null
@@ -3421,6 +3458,23 @@ class _Enter extends StatelessWidget {
   );
 }
 
+/// The moon for [place], if it's placed there and on.
+Widget? _placedMoon(
+  GaiaController controller,
+  GaiaMoonPlace place, {
+  required double size,
+}) {
+  final debug = controller.debug;
+  if (debug.skyMoonPlace != place) return null;
+  final moon = gaiaMoonTime(
+    debug.skyMoon,
+    debug.skyMoonPhase,
+    debug.skyMoonHour,
+  );
+  if (moon == null) return null;
+  return GaiaMoonIcon(phase: moon.phase, model: debug.skyMoonModel, size: size);
+}
+
 /// What a chat with no messages shows: a line to start from, and the keys
 /// worth knowing before the first message. Not clickable: the composer under
 /// it already has the focus.
@@ -3428,6 +3482,7 @@ class _EmptyChat extends StatelessWidget {
   const _EmptyChat({
     super.key,
     required this.greeting,
+    this.moon,
     required this.sendKey,
     this.leaving,
     this.back = Duration.zero,
@@ -3437,6 +3492,9 @@ class _EmptyChat extends StatelessWidget {
   /// The chat's line, drawn once for it (GAIA_GREETINGS_HLD.md §5): this is
   /// rebuilt on every keystroke and resize.
   final String greeting;
+
+  /// Before the line, at its height.
+  final Widget? moon;
 
   /// The send keybind, as the user set it.
   final String sendKey;
@@ -3483,7 +3541,7 @@ class _EmptyChat extends StatelessWidget {
       );
     }
 
-    final line = Text(
+    final text = Text(
       greeting,
       textAlign: TextAlign.center,
       style: const TextStyle(
@@ -3492,6 +3550,16 @@ class _EmptyChat extends StatelessWidget {
         color: GaiaInk.dim,
       ),
     );
+    final line = moon == null
+        ? text
+        : Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              moon!,
+              const SizedBox(width: 12),
+              Flexible(child: text),
+            ],
+          );
     final hints = Wrap(
       alignment: WrapAlignment.center,
       spacing: 20,
@@ -3547,6 +3615,63 @@ class _EmptyChat extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// The composer's stop while a reply runs: faint, breathing toward red
+/// and back, and red under the cursor. Still where Gaia's idle motion is,
+/// or with animations off.
+class _BreathingStop extends StatefulWidget {
+  const _BreathingStop({super.key, required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  State<_BreathingStop> createState() => _BreathingStopState();
+}
+
+class _BreathingStopState extends State<_BreathingStop>
+    with SingleTickerProviderStateMixin {
+  late final _breath = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1200),
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (GaiaAmbient.of(context) && !MediaQuery.disableAnimationsOf(context)) {
+      if (!_breath.isAnimating) _breath.repeat(reverse: true);
+    } else {
+      _breath.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _breath.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final red = Theme.of(context).colorScheme.error;
+    return AnimatedBuilder(
+      animation: _breath,
+      builder: (context, _) => GaiaActionIcon(
+        label: 'Stop',
+        icon: Icons.stop,
+        tooltip: false,
+        fill: false,
+        litColor: red,
+        restColor: Color.lerp(
+          GaiaInk.faint,
+          red,
+          0.6 * Curves.easeInOut.transform(_breath.value),
+        ),
+        onPressed: widget.onPressed,
       ),
     );
   }
@@ -6197,6 +6322,7 @@ class _ComposerState extends State<_Composer> {
                                 ),
                                 child: GaiaNotch(
                                   opensRight: true,
+                                  bare: true,
                                   items: [
                                     GaiaNotchItem<bool?>(
                                       trigger: (color) => Icon(
@@ -6235,23 +6361,51 @@ class _ComposerState extends State<_Composer> {
                               // [_submit] takes before that stop: a side question
                               // (GAIA_BTW_HLD.md §3), /queue (§13) and /remember
                               // (§11) send as Enter does.
-                              trailing:
-                                  running &&
-                                      gaiaBtwText(_text.text) == null &&
-                                      gaiaQueueText(_text.text) == null &&
-                                      gaiaRememberText(_text.text) == null
-                                  ? GaiaButton(
-                                      icon: Icons.stop,
-                                      size: 32,
-                                      onPressed: () => controller.stop(
-                                        controller.currentChatId!,
+                              trailing: AnimatedSwitcher(
+                                duration:
+                                    MediaQuery.disableAnimationsOf(context)
+                                    ? Duration.zero
+                                    : GaiaMotion.quick,
+                                transitionBuilder: (child, animation) =>
+                                    FadeTransition(
+                                      opacity: animation,
+                                      child: ScaleTransition(
+                                        scale: Tween(
+                                          begin: 0.6,
+                                          end: 1.0,
+                                        ).animate(animation),
+                                        child: child,
                                       ),
-                                    )
-                                  : GaiaButton(
-                                      icon: Icons.arrow_upward,
-                                      size: 32,
-                                      onPressed: _send,
                                     ),
+                                child:
+                                    running &&
+                                        gaiaBtwText(_text.text) == null &&
+                                        gaiaQueueText(_text.text) == null &&
+                                        gaiaRememberText(_text.text) == null
+                                    ? _BreathingStop(
+                                        key: const ValueKey('stop'),
+                                        onPressed: () => controller.stop(
+                                          controller.currentChatId!,
+                                        ),
+                                      )
+                                    : GaiaActionIcon(
+                                        key: const ValueKey('send'),
+                                        label: 'Send',
+                                        icon: Icons.arrow_upward,
+                                        tooltip: false,
+                                        fill: false,
+                                        // The ring's light, lit.
+                                        litColor: HSLColor.fromColor(
+                                          Theme.of(context).colorScheme.primary,
+                                        ).withSaturation(1).toColor(),
+                                        // A card answers to an empty send.
+                                        onPressed:
+                                            controller.draftIsEmpty &&
+                                                card == null
+                                            ? null
+                                            : _send,
+                                      ),
+                              ),
                             ),
                           ),
                         ),
@@ -7393,7 +7547,7 @@ Future<void> _showGaiaUsage(BuildContext context, GaiaController controller) {
     context: context,
     // Rebuilt as usage reads land, which may be after it opens.
     builder: (context) => ListenableBuilder(
-      listenable: controller,
+      listenable: Listenable.merge([controller, controller.tokens]),
       builder: (context, _) {
         final adapter = controller.agentFor(controller.nextTier)?.adapter;
         final accounts = adapter == null
@@ -7427,6 +7581,21 @@ Future<void> _showGaiaUsage(BuildContext context, GaiaController controller) {
             ),
           ],
         );
+        final tokens = controller.tokens.value;
+        String accountLabel(String key) {
+          for (final adapter in [kGaiaClaudeCodeAdapter, kGaiaCodexAdapter]) {
+            for (final account in controller.accountsFor(adapter)) {
+              if (account.key == key) {
+                return '${adapter == kGaiaCodexAdapter ? 'Codex' : 'Claude'}'
+                    ' · ${account.label}';
+              }
+            }
+          }
+          // Removed, or only on another desktop.
+          return '${key.split('/').first == kGaiaCodexAdapter ? 'Codex' : 'Claude'}'
+              ' · other account';
+        }
+
         return Dialog(
           child: SizedBox(
             width: 480,
@@ -7465,6 +7634,18 @@ Future<void> _showGaiaUsage(BuildContext context, GaiaController controller) {
                     else
                       Text('Not read yet', style: muted),
                   ],
+                  const SizedBox(height: 28),
+                  Text(
+                    'Lifetime tokens',
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  if (tokens == null)
+                    Text('Not read yet', style: muted)
+                  else
+                    ...gaiaTokenLines(context, tokens, accountLabel),
                 ],
               ),
             ),
@@ -7473,6 +7654,122 @@ Future<void> _showGaiaUsage(BuildContext context, GaiaController controller) {
       },
     ),
   );
+}
+
+/// `/usage`'s lifetime tokens: the total, then each account's when there are
+/// several, each by tier with its models, then the utility model by job.
+/// Biggest first.
+@visibleForTesting
+List<Widget> gaiaTokenLines(
+  BuildContext context,
+  List<GaiaTokenRow> rows,
+  String Function(String key) accountLabel,
+) {
+  final theme = Theme.of(context);
+  final muted = theme.colorScheme.onSurfaceVariant;
+  String compact(int n) => NumberFormat.compact().format(n);
+  GaiaTokenCount sum(Iterable<GaiaTokenRow> rows) =>
+      rows.fold(const GaiaTokenCount(), (sum, row) => sum + row.count);
+  String detail(GaiaTokenCount used) =>
+      '${compact(used.input)} in · ${compact(used.output)} out · '
+      '${compact(used.cacheRead)} cache read · '
+      '${compact(used.cacheWrite)} cache write';
+  List<(String, List<GaiaTokenRow>)> by(
+    Iterable<GaiaTokenRow> rows,
+    String Function(GaiaTokenRow row) key,
+  ) {
+    final groups = <String, List<GaiaTokenRow>>{};
+    for (final row in rows) {
+      groups.putIfAbsent(key(row), () => []).add(row);
+    }
+    return [for (final MapEntry(:key, :value) in groups.entries) (key, value)]
+      ..sort((a, b) => sum(b.$2).total.compareTo(sum(a.$2).total));
+  }
+
+  // Its in, out and cache split under it, or in its tooltip.
+  Widget line(
+    String name,
+    GaiaTokenCount used, {
+    int depth = 0,
+    bool bold = false,
+    bool split = false,
+  }) {
+    final style =
+        (depth == 0 ? theme.textTheme.bodyLarge : theme.textTheme.bodyMedium)
+            ?.copyWith(
+              fontWeight: bold ? FontWeight.w600 : null,
+              color: depth > 1 ? muted : null,
+            );
+    final row = Row(
+      children: [
+        Expanded(child: Text(name, style: style)),
+        Text(compact(used.total), style: style),
+      ],
+    );
+    return Padding(
+      padding: EdgeInsets.only(left: 16.0 * depth, top: depth == 0 ? 14 : 6),
+      child: split
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                row,
+                const SizedBox(height: 2),
+                Text(
+                  detail(used),
+                  style: theme.textTheme.bodySmall?.copyWith(color: muted),
+                ),
+              ],
+            )
+          : Tooltip(message: detail(used), child: row),
+    );
+  }
+
+  List<Widget> sources(List<GaiaTokenRow> rows, int depth) {
+    List<Widget> group(
+      String name,
+      List<GaiaTokenRow> rows,
+      String Function(GaiaTokenRow row) part,
+    ) => [
+      if (rows.isNotEmpty) ...[
+        line(name, sum(rows), depth: depth, split: true),
+        for (final (key, rows) in by(rows, part))
+          line(key, sum(rows), depth: depth + 1),
+      ],
+    ];
+    final utility = [
+      for (final row in rows)
+        if (row.source.startsWith(kGaiaTokensUtility)) row,
+    ];
+    return [
+      for (final tier in GaiaTier.values)
+        ...group(tier.label, [
+          for (final row in rows)
+            if (row.source == tier.name) row,
+        ], (row) => row.model),
+      ...group('Utility', utility, (row) {
+        final job = row.source.substring(kGaiaTokensUtility.length);
+        return job.isEmpty ? job : job[0].toUpperCase() + job.substring(1);
+      }),
+      ...group('Other', [
+        for (final row in rows)
+          if (!GaiaTier.values.any((tier) => tier.name == row.source) &&
+              !row.source.startsWith(kGaiaTokensUtility))
+            row,
+      ], (row) => row.model),
+    ];
+  }
+
+  final accounts = by(rows, (row) => row.account);
+  return [
+    line('All', sum(rows), bold: true, split: true),
+    if (accounts.length < 2)
+      ...sources(rows, 0)
+    else
+      for (final (account, rows) in accounts) ...[
+        line(accountLabel(account), sum(rows), bold: true, split: true),
+        ...sources(rows, 1),
+      ],
+  ];
 }
 
 /// Auto, once the user has read its notice on this device (§4).

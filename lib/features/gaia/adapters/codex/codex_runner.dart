@@ -104,6 +104,8 @@ class CodexRunner implements GaiaAgentRunner {
     // Codex doesn't fork natively (GAIA_FORKING_HLD.md §6).
     GaiaForkCut? fork,
     bool toolless = false,
+    // Its tokens go uncounted: `exec` is only the app-server's fallback.
+    GaiaTier? tier,
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
     // `exec` always has its shell (GAIA_BTW_HLD.md §6).

@@ -332,6 +332,7 @@ void main() {
         ..configure(
           model: kGaiaDefaultUtilityModel,
           configDir: Platform.environment['GAIA_CLAUDE_CONFIG_DIR'] ?? '',
+          account: kGaiaClaudeCodeAdapter,
         );
       final utility = GaiaUtility(runner);
 
@@ -351,6 +352,7 @@ void main() {
           'Reply with the word in <input>, in capitals.',
           'gaia',
           timeout: const Duration(seconds: 30),
+          source: 'check',
         ),
         'GAIA',
       );
@@ -367,6 +369,7 @@ void main() {
         ..configure(
           model: kGaiaDefaultUtilityModel,
           configDir: Platform.environment['GAIA_CLAUDE_CONFIG_DIR'] ?? '',
+          account: kGaiaClaudeCodeAdapter,
         );
       await expectLater(
         runner.generate(
@@ -374,6 +377,7 @@ void main() {
           'Write 300 numbered lines, each a different sentence of 25 words.',
           '',
           timeout: const Duration(seconds: 4),
+          source: 'check',
         ),
         throwsA(isA<TimeoutException>()),
       );
@@ -386,4 +390,13 @@ void main() {
       expect(left.stdout.toString().trim(), '0');
     },
   );
+
+  test('each job counts its tokens under its own name', () async {
+    final runner = FakeUtilityRunner((_) => 'A title');
+    final utility = GaiaUtility(runner);
+    await utility.title('q', 'r');
+    await utility.summarize('t');
+    await utility.route('hi');
+    expect(runner.sources, ['chat title', 'handoff summary', 'routing']);
+  });
 }

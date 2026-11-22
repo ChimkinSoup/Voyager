@@ -161,6 +161,11 @@ abstract final class FirestoreCollections {
   static const gaiaWatch = 'gaia_watch';
   static const gaiaLeases = 'gaia_leases';
   static const gaiaNotify = 'gaia_notify';
+
+  /// Gaia's lifetime token count, a document per model, added to with
+  /// increments straight through Firestore. Not in [records]: a running
+  /// count, not records to back up.
+  static const gaiaTokens = 'gaia_tokens';
   static const syncOperations = 'sync_operations';
 
   /// One record per document `permanentlyDeleteFromRemote` purged, written

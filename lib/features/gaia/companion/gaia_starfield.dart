@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+import 'package:voyager/core/utils/moon.dart';
 import 'package:voyager/features/gaia/companion/gaia_style.dart';
 
 /// The starfield behind Gaia's chat: dim stars turning slowly about a pole
@@ -21,6 +22,7 @@ class GaiaStarfield extends StatefulWidget {
     this.left,
     this.placing = false,
     this.under,
+    this.moonlight = _noMoonlight,
     required this.child,
   });
 
@@ -48,6 +50,12 @@ class GaiaStarfield extends StatefulWidget {
   /// brighter by as much, so they show the fades' full strength however far
   /// the chat's scrolled.
   final ValueListenable<({double header, double composer})>? under;
+
+  /// How much the moon's light washes out the faint stars, 0 to 1: read
+  /// as each frame paints, as the moon moves.
+  final double Function() moonlight;
+
+  static double _noMoonlight() => 0;
 
   /// Debug: Ctrl+click places a star, which Ctrl+drag moves and
   /// Ctrl+right-click takes away. They go when this does.
@@ -274,6 +282,7 @@ class _GaiaStarfieldState extends State<GaiaStarfield>
             widget.top,
             widget.left,
             widget.under,
+            widget.moonlight,
           ),
           child: RepaintBoundary(
             child: _StarfieldScope(
@@ -562,13 +571,14 @@ class _Stars extends ChangeNotifier {
 }
 
 class _StarPainter extends CustomPainter {
-  _StarPainter(this.stars, this.top, this.left, this.under)
+  _StarPainter(this.stars, this.top, this.left, this.under, this.moonlight)
     : super(repaint: Listenable.merge([stars, left, under]));
 
   final _Stars stars;
   final double top;
   final ValueListenable<double>? left;
   final ValueListenable<({double header, double composer})>? under;
+  final double Function() moonlight;
 
   /// Stars fade out over this distance from the edges, so wrapping round
   /// doesn't pop.
@@ -599,6 +609,7 @@ class _StarPainter extends CustomPainter {
     final glow = 1 + stars.glow;
     final shown = under?.value;
     final field = stars.clear?.top;
+    final moonlight = this.moonlight();
     const fade = kGaiaChatFade;
     // How much of a star at [py] shows past the chat's fades over its header
     // (the stars' top) and its composer's field, which cover it [shown]:
@@ -641,7 +652,7 @@ class _StarPainter extends CustomPainter {
       final drawn = max(r, _minRadius);
       final alpha = min(
         1.0,
-        a *
+        moonlit(a, moonlight) *
             glow *
             min(nearest / _edge, 1) *
             min(around / _clearEdge, 1) *
@@ -676,5 +687,6 @@ class _StarPainter extends CustomPainter {
       oldDelegate.stars != stars ||
       oldDelegate.top != top ||
       oldDelegate.left != left ||
-      oldDelegate.under != under;
+      oldDelegate.under != under ||
+      oldDelegate.moonlight != moonlight;
 }

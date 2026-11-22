@@ -634,7 +634,8 @@ void main() {
       const ClaudeTextStart(),
       const ClaudeTextDelta('Partly'),
     ]);
-    await tester.tap(find.byIcon(Icons.arrow_upward));
+    // The last: the one fading in over the one going.
+    await tester.tap(find.byIcon(Icons.arrow_upward).last);
     await tester.pump(const Duration(seconds: 1));
     expect(runner.stopped, isEmpty);
     expect(controller.currentRunning, isTrue);
@@ -651,7 +652,7 @@ void main() {
     ]) {
       controller.draft.text = draft;
       await tester.pump();
-      await tester.tap(find.byIcon(Icons.arrow_upward));
+      await tester.tap(find.byIcon(Icons.arrow_upward).last);
       await tester.pump(const Duration(seconds: 1));
       expect(requests, contains(method), reason: draft);
       expect(runner.stopped, isEmpty, reason: draft);
@@ -661,6 +662,9 @@ void main() {
 
     // Any other draft: the button is the reply's stop again.
     controller.draft.text = 'later';
+    await tester.pump();
+    // Once send has faded out.
+    await tester.pump(const Duration(milliseconds: 200));
     await tester.pump();
     expect(find.byIcon(Icons.arrow_upward), findsNothing);
 

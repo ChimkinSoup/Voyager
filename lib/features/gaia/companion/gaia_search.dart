@@ -289,7 +289,7 @@ class _GaiaSearchState extends State<_GaiaSearch> {
                         focusNode: _focus,
                         autofocus: true,
                         hintText: 'Search chats',
-                        leading: const SizedBox(width: 24),
+                        leading: const SizedBox(width: 28),
                       ),
                       const IgnorePointer(
                         child: Padding(

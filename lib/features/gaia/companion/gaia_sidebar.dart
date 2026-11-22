@@ -8,7 +8,7 @@ const kGaiaSidebarMinWidth = 200.0;
 const kGaiaSidebarMaxWidth = 420.0;
 
 /// The narrowest the chat gets beside the sidebar before the sidebar hides.
-const _chatRoom = 400.0;
+const _chatRoom = 600.0;
 
 /// The narrowest the chat gets beside a sidebar the user opened anyway.
 const _squeezedChatRoom = 300.0;

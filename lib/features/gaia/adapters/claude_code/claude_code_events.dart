@@ -11,13 +11,14 @@
 import 'dart:convert';
 
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
+import 'package:voyager/features/gaia/usage/gaia_tokens.dart';
 import 'package:voyager/features/gaia/usage/gaia_usage.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 
 /// The Claude Code versions the adapter is tested against: at least the
 /// first, and below the second. Outside it, chats still run, with an
 /// "untested CLI version" chip.
-const kClaudeCodeTestedVersions = ((2, 1, 300), (2, 1, 327));
+const kClaudeCodeTestedVersions = ((2, 1, 300), (2, 1, 331));
 
 sealed class ClaudeEvent {
   const ClaudeEvent();
@@ -112,6 +113,7 @@ class ClaudeResult extends ClaudeEvent {
     required this.text,
     this.contextTokens,
     this.modelUsage,
+    this.tokens = const {},
     this.promptIds,
     this.cliStarted = false,
   });
@@ -136,6 +138,9 @@ class ClaudeResult extends ClaudeEvent {
 
   /// `modelUsage` as the CLI sent it, for [contextWindowOf].
   final Object? modelUsage;
+
+  /// Each model's tokens since the process's last result: see [claudeTokens].
+  final Map<String, GaiaTokenCount> tokens;
 
   /// The context window of [model], the session's (its `init`'s), in tokens.
   int? contextWindowOf(String? model) =>
@@ -354,6 +359,7 @@ ClaudeEvent parseClaudeLine(String line) {
         text: decoded['result'] as String? ?? field<String>(decoded, 'subtype'),
         contextTokens: claudeContextTokens(decoded['usage']),
         modelUsage: decoded['modelUsage'],
+        tokens: claudeTokens(decoded['model_usage_since_last_result']),
         promptIds: switch (decoded['user_message_uuids']) {
           final List ids when ids.isNotEmpty => [
             for (final id in ids)
@@ -443,6 +449,23 @@ int? claudeContextTokens(Object? usage) {
   return count('input_tokens') +
       count('cache_read_input_tokens') +
       count('cache_creation_input_tokens');
+}
+
+/// `model_usage_since_last_result` (observed on 2.1.310): each model's tokens
+/// since the process's last result, where `modelUsage` sums the whole
+/// process, which runs several turns. Empty when it's missing.
+Map<String, GaiaTokenCount> claudeTokens(Object? usage) {
+  if (usage is! Map) return const {};
+  return {
+    for (final MapEntry(:key, :value) in usage.entries)
+      if (value is Map)
+        '$key': GaiaTokenCount(
+          input: (value['inputTokens'] as num?)?.toInt() ?? 0,
+          output: (value['outputTokens'] as num?)?.toInt() ?? 0,
+          cacheRead: (value['cacheReadInputTokens'] as num?)?.toInt() ?? 0,
+          cacheWrite: (value['cacheCreationInputTokens'] as num?)?.toInt() ?? 0,
+        ),
+  };
 }
 
 /// `modelUsage.<model>.contextWindow` (observed on 2.1.310) of [model], the

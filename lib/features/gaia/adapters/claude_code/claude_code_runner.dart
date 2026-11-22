@@ -40,6 +40,7 @@ import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
+import 'package:voyager/features/gaia/usage/gaia_tokens.dart';
 
 const _uuid = Uuid();
 
@@ -290,6 +291,7 @@ class ClaudeCodeRunner
     String? promptId,
     GaiaForkCut? fork,
     bool toolless = false,
+    GaiaTier? tier,
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
     // Kept from the CLI even typed past the palette (GAIA_NATIVE_COMMANDS.md
@@ -326,6 +328,10 @@ class ClaudeCodeRunner
       promptId: promptId,
       fork: fork,
       toolless: toolless,
+      tokensFor: (
+        account: account?.key ?? kGaiaClaudeCodeAdapter,
+        source: tier?.name ?? kGaiaTokensOther,
+      ),
       onEvent: (event) {
         if (event is ClaudeTextDelta) streamed = true;
         if (event is ClaudeCompacted) compacted = event;
@@ -396,6 +402,7 @@ class ClaudeCodeRunner
     promptId: promptId,
     fork: null,
     toolless: false,
+    tokensFor: (account: kGaiaClaudeCodeAdapter, source: kGaiaTokensOther),
     onEvent: onEvent,
   )).$1;
 
@@ -418,6 +425,7 @@ class ClaudeCodeRunner
     required String? promptId,
     required GaiaForkCut? fork,
     required bool toolless,
+    required GaiaTokensFor tokensFor,
     required void Function(ClaudeEvent event) onEvent,
   }) async {
     // Only a new session is made as a fork.
@@ -506,6 +514,7 @@ class ClaudeCodeRunner
     // From here to the prompt going, nothing's awaited: a stop finds it live.
     _starting.remove(chatId);
     _live[chatId] = process;
+    process.tokensFor = tokensFor;
     // The session after a turn on a cut process: read once for both checks.
     List<Map<String, Object?>>? entries;
     try {
@@ -802,6 +811,7 @@ class ClaudeCodeRunner
       toolless: false,
       sessionArgs: ['--resume', turn.sessionId, ...cut.args],
     );
+    check.tokensFor = process.tokensFor;
     final refused = await check.ready.timeout(
       const Duration(seconds: 30),
       onTimeout: () => 'it never answered',
@@ -1180,6 +1190,9 @@ class _ClaudeProcess {
   GaiaTurnTools? _tools;
   Completer<ClaudeResult>? _turn;
 
+  /// Who its tokens are counted for: its latest turn's.
+  GaiaTokensFor? tokensFor;
+
   bool get inTurn => _turn != null;
 
   /// [content] is text, or content blocks ([claudeUserContent]). [promptId]
@@ -1289,6 +1302,14 @@ class _ClaudeProcess {
       _fail('Unreadable output from Claude Code: ${error.reason}');
       unawaited(kill());
       return;
+    }
+    // Every result's, a turn's or not: each is what the process used since
+    // the last.
+    if ((event, tokensFor) case (
+      ClaudeResult(:final tokens),
+      final tokensFor?,
+    ) when tokens.isNotEmpty) {
+      gaiaTokensUsed?.call(tokensFor, tokens);
     }
     if (event is ClaudeInit) {
       started = true;

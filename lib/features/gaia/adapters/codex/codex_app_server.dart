@@ -89,6 +89,7 @@ import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/features/gaia/host/gaia_window_context.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 import 'package:voyager/features/gaia/tools/gaia_tool_pipe.dart';
+import 'package:voyager/features/gaia/usage/gaia_tokens.dart';
 import 'package:voyager/features/gaia/usage/sources/codex_rate_limits.dart';
 
 /// Gaia's tools as Codex's client-hosted tools (§5.3).
@@ -231,6 +232,10 @@ class CodexAppServerClient {
   /// Threads this process has started or resumed.
   final _loaded = <String>{};
 
+  /// Who each thread's tokens are counted for, and on which model: its last
+  /// turn's.
+  final _counted = <String, ({GaiaTokensFor tokensFor, String model})>{};
+
   /// File changes in progress, by item id: their approvals name only the
   /// item.
   final _changes = <String, List<Object?>>{};
@@ -277,6 +282,10 @@ class CodexAppServerClient {
     Future<void> Function(String threadId)? onNewThread,
     bool compact = false,
     bool toolless = false,
+    GaiaTokensFor tokensFor = (
+      account: kGaiaCodexAdapter,
+      source: kGaiaTokensOther,
+    ),
   }) async {
     final String thread;
     if (threadId == null && fork != null) {
@@ -355,6 +364,7 @@ class CodexAppServerClient {
     // A stop's turn is only taken back straight after it.
     _stoppedTurns.remove(thread);
     final turn = _turns[thread] = _Turn(tools, onEvent);
+    _counted[thread] = (tokensFor: tokensFor, model: model);
     // It can fail before it's returned: stopped, or the process gone.
     turn.done.future.ignore();
     onThread?.call(thread);
@@ -613,6 +623,21 @@ class CodexAppServerClient {
         final usage = _map(params, 'tokenUsage', line);
         final last = _map(usage, 'last', line);
         turn?.contextTokens = _field<int>(last, 'totalTokens', line);
+        // `last` is one model call's, and each call sends one (checked on
+        // 0.166.0: `total` grows by it). Read leniently, as it's only counted.
+        if (_counted[threadId] case (:final tokensFor, :final model)) {
+          int count(String key) => (last[key] as num?)?.toInt() ?? 0;
+          // Cached input is part of `inputTokens`.
+          final cached = count('cachedInputTokens');
+          gaiaTokensUsed?.call(tokensFor, {
+            model: GaiaTokenCount(
+              input: count('inputTokens') - cached,
+              output: count('outputTokens'),
+              cacheRead: cached,
+              cacheWrite: count('cacheWriteInputTokens'),
+            ),
+          });
+        }
         // Only shown, so read leniently: a later update without it keeps
         // the one seen.
         if (turn != null) {
@@ -964,6 +989,7 @@ class CodexAppServerRunner implements GaiaAgentRunner {
     String? promptId,
     GaiaForkCut? fork,
     bool toolless = false,
+    GaiaTier? tier,
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
     // Before anything's awaited: a stop from here on is caught.
@@ -983,6 +1009,10 @@ class CodexAppServerRunner implements GaiaAgentRunner {
         promptId: promptId,
         fork: sessionId == null ? fork : null,
         toolless: toolless,
+        tokensFor: (
+          account: account?.key ?? kGaiaCodexAdapter,
+          source: tier?.name ?? kGaiaTokensOther,
+        ),
         onEvent: onEvent,
       );
       // Stopped while it opened, then ended there with nothing sent (a home
@@ -1007,6 +1037,7 @@ class CodexAppServerRunner implements GaiaAgentRunner {
     required String? promptId,
     required GaiaForkCut? fork,
     required bool toolless,
+    required GaiaTokensFor tokensFor,
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
     // A command of Codex's own (GAIA_NATIVE_COMMANDS.md §6): `/compact` is a
@@ -1128,6 +1159,7 @@ class CodexAppServerRunner implements GaiaAgentRunner {
         clientId: promptId,
         fork: fork,
         toolless: toolless,
+        tokensFor: tokensFor,
         onThread: (threadId) {
           // Once the thread is up, so what Codex starts with it, such as MCP
           // servers, is never taken for a command.
@@ -1593,6 +1625,7 @@ class CodexAccountRunners
     String? promptId,
     GaiaForkCut? fork,
     bool toolless = false,
+    GaiaTier? tier,
     required void Function(GaiaAgentEvent event) onEvent,
   }) async {
     // Before anything's awaited: a stop from here on is caught.
@@ -1615,9 +1648,11 @@ class CodexAccountRunners
         directories: directories,
         tools: tools,
         sessionInstructions: sessionInstructions,
+        account: account,
         promptId: promptId,
         fork: fork,
         toolless: toolless,
+        tier: tier,
         onEvent: onEvent,
       );
     } finally {

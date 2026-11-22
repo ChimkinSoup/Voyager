@@ -7,6 +7,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:voyager/core/dev/fps_monitor_controller.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
+import 'package:voyager/features/gaia/companion/gaia_moon.dart';
 import 'package:voyager/features/gaia/companion/gaia_sky.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 import 'package:voyager/features/gaia/tools/gaia_proposals.dart';
@@ -133,6 +134,20 @@ class GaiaDebug extends ChangeNotifier {
   /// The meteor shower: as the calendar has one, or held at a strength.
   var skyShower = GaiaSkyShower.calendar;
 
+  /// The moon: as it really is, at [skyMoonPhase] and [skyMoonHour], or none.
+  var skyMoon = GaiaSkyMoon.real;
+
+  /// With [skyMoon] set: its phase, 0 new, 0.5 full, back to 1; and the
+  /// local hour, 0 to 24.
+  var skyMoonPhase = 0.5;
+  var skyMoonHour = 0.0;
+
+  /// How the header's moon is drawn.
+  var skyMoonModel = GaiaMoonModel.cratered;
+
+  /// Where the moon's phase shows.
+  var skyMoonPlace = GaiaMoonPlace.sidebar;
+
   /// How a satellite crossing the sky looks.
   var skySatellite = GaiaSatellite.trail;
 
@@ -226,6 +241,15 @@ class GaiaDebug extends ChangeNotifier {
           .asNameMap()[json['skyRareColours']];
       skyShower =
           GaiaSkyShower.values.asNameMap()[json['skyShower']] ?? skyShower;
+      skyMoon = GaiaSkyMoon.values.asNameMap()[json['skyMoon']] ?? skyMoon;
+      skyMoonPhase = number('skyMoonPhase', skyMoonPhase, 0, 1);
+      skyMoonHour = number('skyMoonHour', skyMoonHour, 0, 24);
+      skyMoonModel =
+          GaiaMoonModel.values.asNameMap()[json['skyMoonModel']] ??
+          skyMoonModel;
+      skyMoonPlace =
+          GaiaMoonPlace.values.asNameMap()[json['skyMoonPlace']] ??
+          skyMoonPlace;
       skyExit = GaiaSkyExit.values.asNameMap()[json['skyExit']] ?? skyExit;
       skyPlainBlink = json['skyPlainBlink'] != false;
       skyExitTime = number('skyExitTime', skyExitTime, 0.3, 4);
@@ -332,6 +356,20 @@ class GaiaDebug extends ChangeNotifier {
   Future<void> setSkyShower(GaiaSkyShower value) =>
       _set(() => skyShower = value);
 
+  Future<void> setSkyMoon(GaiaSkyMoon value) => _set(() => skyMoon = value);
+
+  Future<void> setSkyMoonPhase(double value, {bool save = true}) =>
+      _set(() => skyMoonPhase = value, save: save);
+
+  Future<void> setSkyMoonHour(double value, {bool save = true}) =>
+      _set(() => skyMoonHour = value, save: save);
+
+  Future<void> setSkyMoonModel(GaiaMoonModel value) =>
+      _set(() => skyMoonModel = value);
+
+  Future<void> setSkyMoonPlace(GaiaMoonPlace value) =>
+      _set(() => skyMoonPlace = value);
+
   Future<void> setSkySatellite(GaiaSatellite value) =>
       _set(() => skySatellite = value);
 
@@ -366,6 +404,11 @@ class GaiaDebug extends ChangeNotifier {
       skyTraceSpeed = defaults.skyTraceSpeed;
       skyEventInterval = defaults.skyEventInterval;
       skyShower = defaults.skyShower;
+      skyMoon = defaults.skyMoon;
+      skyMoonPhase = defaults.skyMoonPhase;
+      skyMoonHour = defaults.skyMoonHour;
+      skyMoonModel = defaults.skyMoonModel;
+      skyMoonPlace = defaults.skyMoonPlace;
       skyAurora = defaults.skyAurora;
       skyAuroraDrift = defaults.skyAuroraDrift;
       skyRareAurora = defaults.skyRareAurora;
@@ -448,6 +491,11 @@ class GaiaDebug extends ChangeNotifier {
           'skyRareAurora': skyRareAurora,
           'skyRareColours': skyRareColours?.name,
           'skyShower': skyShower.name,
+          'skyMoon': skyMoon.name,
+          'skyMoonPhase': skyMoonPhase,
+          'skyMoonHour': skyMoonHour,
+          'skyMoonModel': skyMoonModel.name,
+          'skyMoonPlace': skyMoonPlace.name,
           'skyExit': skyExit.name,
           'skyPlainBlink': skyPlainBlink,
           'skyExitTime': skyExitTime,

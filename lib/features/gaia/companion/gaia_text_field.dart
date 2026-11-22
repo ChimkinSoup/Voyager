@@ -444,10 +444,12 @@ class _GaiaTextFieldState extends State<GaiaTextField>
     final style = withSquiggleRoom(
       theme.textTheme.bodyLarge!.copyWith(color: theme.colorScheme.onSurface),
     );
+    // None beside a button: its own padding is the gap, as wide as the one
+    // between it and the field's edge.
     final padding = EdgeInsets.fromLTRB(
-      widget.leading == null ? 12 : 4,
+      widget.leading == null ? 12 : 0,
       13,
-      12,
+      widget.trailing == null ? 12 : 0,
       13,
     );
     // Borderless and unfilled, so no input gap: only the density's shift
@@ -559,7 +561,7 @@ class _GaiaTextFieldState extends State<GaiaTextField>
               enabledBorder: InputBorder.none,
               focusedBorder: InputBorder.none,
               isDense: true,
-              // Less on the left past a leading button.
+              // None past a leading or trailing button.
               contentPadding: padding,
             ),
           ),
@@ -673,7 +675,9 @@ class _GaiaTextFieldState extends State<GaiaTextField>
                   ),
                   if (widget.trailing case final trailing?)
                     Padding(
-                      padding: const EdgeInsets.all(4),
+                      // None on its left: the text already keeps a strip
+                      // there for the caret.
+                      padding: const EdgeInsets.fromLTRB(0, 4, 4, 4),
                       // Part of the field, so clicking it keeps the focus.
                       child: TextFieldTapRegion(child: trailing),
                     ),

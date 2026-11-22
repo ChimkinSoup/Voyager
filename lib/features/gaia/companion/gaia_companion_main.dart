@@ -17,6 +17,7 @@ import 'package:voyager/features/gaia/companion/gaia_app.dart';
 import 'package:voyager/features/gaia/companion/gaia_command_history.dart';
 import 'package:voyager/features/gaia/companion/gaia_command_uses.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
+import 'package:voyager/features/gaia/usage/gaia_tokens.dart';
 import 'package:voyager/features/gaia/usage/sources/claude_oauth_usage.dart';
 import 'package:voyager/features/gaia/usage/sources/codex_rate_limits.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
@@ -98,6 +99,12 @@ Future<void> gaiaCompanionMain({bool dev = false}) async {
   final drafts = Directory(p.join(root.path, 'gaia', 'drafts'));
   if (await drafts.exists()) await drafts.delete(recursive: true);
   final pipe = dev ? GaiaDevPipe() : GaiaPipe();
+  // Counted by the main instance, which has Firestore.
+  gaiaTokensUsed = (tokensFor, byModel) => pipe.notify('tokensUsed', {
+    'account': tokensFor.account,
+    'source': tokensFor.source,
+    'models': gaiaTokensToJson(byModel),
+  });
   final debug = GaiaDebug(file: File(p.join(root.path, 'gaia', 'debug.json')));
   await debug.load();
   final sidebar = GaiaSidebar(

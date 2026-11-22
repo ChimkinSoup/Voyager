@@ -27,7 +27,9 @@ import 'package:voyager/features/gaia/host/gaia_window_context.dart';
 import 'package:voyager/features/gaia/remote/gaia_beacon_service.dart';
 import 'package:voyager/features/gaia/remote/gaia_power.dart';
 import 'package:voyager/features/gaia/remote/gaia_remote.dart';
+import 'package:voyager/features/gaia/remote/gaia_token_counter.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
+import 'package:voyager/features/gaia/usage/gaia_tokens.dart';
 import 'package:voyager/features/gaia/usage/gaia_usage.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_window.dart';
 import 'package:voyager/features/hotkeys/hotkey_repeat.dart';
@@ -97,11 +99,11 @@ const kGaiaNotificationBtwSeparator = '#btw:';
 /// tool, arguments}`, `osRun {chatId, cardId, once}`, `osDrop {cardId}`,
 /// `osStop {chatId}`, `osResume {chatId?}`, `autoConsented` (a bool),
 /// `setAuto {chatId, on, consented}`, `isAuto {chatId}` (a bool), `rearm`,
-/// and the `runs {runs}`, `runDone {chatId, title,
+/// and the `runs {runs}`, `tokensUsed {account, source, models}`, `runDone {chatId, title,
 /// body, btwId?}`, `toasted {title, body}` and `drained` events. Main to companion: the `abort`, `stop
 /// {chatId}` and `drain` requests, and the `hotkey {key}`, `openChat
 /// {chatId, btwId?}`, `split {left, top, width, height}`, `accent {argb}`, `settings
-/// {..}` and `changed` events.
+/// {..}`, `tokens {rows}` and `changed` events.
 class GaiaHost {
   /// The app uses [instance]. Tests pass a fake [pipe], their own
   /// [abortFlag] file, and a [killCompanion] that kills nothing real.
@@ -256,6 +258,9 @@ class GaiaHost {
   /// null for none, where every run is local.
   GaiaBeaconService? _beacon;
   GaiaBeaconService? get beacon => _beacon;
+
+  /// The lifetime token count; null for none, where tokens go uncounted.
+  GaiaTokenCounter? _tokens;
   Future<void> Function(String word)? _addWord;
 
   /// Shows a memory on the Gaia page (GAIA_MEMORY_TOPICS_HLD.md §4.5).
@@ -354,8 +359,13 @@ class GaiaHost {
     GaiaBeaconService? beacon,
     GaiaPower? power,
     bool Function()? vaultUnlocked,
+    GaiaTokenCounter? tokens,
   }) {
     if (_attached.isCompleted) return;
+    _tokens = tokens
+      ?..totals.addListener(() {
+        if (_pipe.connected) _pipe.notify('tokens', {'rows': _tokenTotals});
+      });
     if (vaultUnlocked != null) _vaultUnlocked = vaultUnlocked;
     _addWord = addWord;
     _openMemory = openMemory;
@@ -1181,6 +1191,12 @@ class GaiaHost {
     );
   }
 
+  /// The lifetime token count, for the companion; null until read.
+  List<Object?>? get _tokenTotals => switch (_tokens?.totals.value) {
+    final rows? => [for (final row in rows) row.toJson()],
+    null => null,
+  };
+
   void _onEvent(String event, Map<String, Object?> params) {
     switch (event) {
       case 'runs':
@@ -1202,6 +1218,13 @@ class GaiaHost {
           for (final MapEntry(:key, :value) in params.entries)
             key: GaiaAccountUsage.fromJson((value! as Map).cast()),
         };
+      case 'tokensUsed':
+        unawaited(
+          _tokens?.add((
+            account: params['account']! as String,
+            source: params['source']! as String,
+          ), gaiaTokensFromJson(params['models'])),
+        );
       case 'localRun':
         _beacon?.onLocalRun(params['chatId']! as String);
       case 'runDone':
@@ -1264,6 +1287,7 @@ class GaiaHost {
           'deviceId': store.deviceId,
           'settings': _settings.toJson(),
           'text': _text.toJson(),
+          'tokens': _tokenTotals,
         };
       case 'chats':
         return [for (final chat in await store.chats()) chat.toJson()];

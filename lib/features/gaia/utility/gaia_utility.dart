@@ -46,14 +46,16 @@ class GaiaUtility {
 
   void apply(Map<String, Object?> settings) {
     final model = (settings['utilityModel'] as String? ?? '').trim();
+    final account = gaiaCurrentAccount(
+      kGaiaClaudeCodeAdapter,
+      gaiaAccountsFromJson(settings['accounts']),
+      gaiaCurrentAccountsFromJson(settings['currentAccounts']),
+      settings['claudeConfigDir'] as String? ?? '',
+    );
     _runner.configure(
       model: model.isEmpty ? kGaiaDefaultUtilityModel : model,
-      configDir: gaiaCurrentAccount(
-        kGaiaClaudeCodeAdapter,
-        gaiaAccountsFromJson(settings['accounts']),
-        gaiaCurrentAccountsFromJson(settings['currentAccounts']),
-        settings['claudeConfigDir'] as String? ?? '',
-      ).dir,
+      configDir: account.dir,
+      account: account.key,
     );
     autoRoute = settings['autoRoute'] != false;
     rubric = settings['routerRubric'] as String? ?? '';
@@ -93,6 +95,7 @@ class GaiaUtility {
         '\n\nReply with exactly one word: quick, standard or deep.',
         _clip(prompt, 4000),
         timeout: _routeTimeout,
+        source: 'routing',
       );
       final tier = parseRoute(answer);
       debugPrint(
@@ -132,6 +135,7 @@ class GaiaUtility {
             '${[for (final memory in candidates) '${memory.id} · ${memory.topic ?? 'Unsorted'} · ${_clip(memory.text, 1000)}'].join('\n')}',
         usage: 'memory recall',
         timeout: _routeTimeout,
+        source: 'memory recall',
       );
       final picks = parseRecallAnswer(answer, candidates);
       debugPrint(
@@ -158,6 +162,7 @@ class GaiaUtility {
         'User: ${_clip(question, 2000)}\n\n'
             'Assistant: ${_clip(reply, 2000)}',
         timeout: _titleTimeout,
+        source: 'chat title',
       );
       return cleanTitle(answer);
     } catch (error) {
@@ -188,6 +193,7 @@ class GaiaUtility {
         'Reply with the title only.',
         turn.map(line).join('\n\n'),
         timeout: _titleTimeout,
+        source: 'chapter title',
       );
       return cleanTitle(answer);
     } catch (error) {
@@ -206,6 +212,7 @@ class GaiaUtility {
         'open questions; leave out pleasantries.',
         _clip(transcript, 200000),
         timeout: _summaryTimeout,
+        source: 'handoff summary',
       );
       return answer.trim().isEmpty ? null : answer.trim();
     } catch (error) {
@@ -232,6 +239,7 @@ class GaiaUtility {
             ? 'Chat:\n$turns'
             : 'Summary so far: $previous\n\nNew turns:\n$turns',
         timeout: _summaryTimeout,
+        source: 'chat summary',
       );
       final summary = answer.trim();
       return summary.isEmpty ? null : _clip(summary, 500);
@@ -253,6 +261,7 @@ class GaiaUtility {
         gaiaImageToken(image.label),
         images: [image],
         timeout: _captionTimeout,
+        source: 'image caption',
       );
       return answer.trim().isEmpty ? null : _clip(answer.trim(), 1000);
     } catch (error) {
@@ -276,6 +285,7 @@ class GaiaUtility {
             'or {"name": "...", "parent": "<id>" or null}, "tags": ["..."]}.',
         'Fact: ${_clip(text, 1000)}\n\n${_topicLines(topics)}',
         timeout: _placeTimeout,
+        source: 'memory filing',
       );
       final placement = parsePlacementAnswer(answer, topics);
       debugPrint(
@@ -313,6 +323,7 @@ class GaiaUtility {
             '${[for (final (i, memory) in memories.indexed) '${i + 1}. ${_clip(memory.text.replaceAll(RegExp(r'\s+'), ' ').trim(), 1000)}'].join('\n')}'
             '\n\n${_topicLines(topics)}',
         timeout: _sortTimeout,
+        source: 'memory filing',
       );
       final placements = parseSortAnswer(answer, memories, topics);
       debugPrint(
@@ -370,6 +381,7 @@ class GaiaUtility {
             // The newest kept: the chat is marked read up to its last.
             'New turns:\n${transcript.length <= 100000 ? transcript : transcript.substring(transcript.length - 100000)}',
         timeout: _curateTimeout,
+        source: 'memory curation',
       );
       return parseCuratorAnswer(answer, topics);
     } catch (error) {

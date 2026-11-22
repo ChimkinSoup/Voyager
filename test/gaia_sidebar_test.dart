@@ -72,7 +72,8 @@ void main() {
 
   testWidgets('hides when the window narrows, and comes back', (tester) async {
     await pumpLayout(tester, 1200);
-    await pumpLayout(tester, 560);
+    // Half a 1440-wide screen.
+    await pumpLayout(tester, 720);
     expect(sideWidth(tester), isNull);
     expect(sidebar.open, isTrue);
 
@@ -82,8 +83,8 @@ void main() {
 
   testWidgets('shrinks before it hides', (tester) async {
     sidebar.width = 400;
-    await pumpLayout(tester, 700);
-    expect(chatWidth(tester), greaterThanOrEqualTo(400));
+    await pumpLayout(tester, 900);
+    expect(chatWidth(tester), greaterThanOrEqualTo(600));
     expect(sideWidth(tester), lessThan(400));
   });
 
@@ -143,7 +144,7 @@ void main() {
     tester,
   ) async {
     sidebar.width = 400;
-    await pumpLayout(tester, 700);
+    await pumpLayout(tester, 900);
     await dragEdge(tester, [-200]);
     expect(sidebar.open, isFalse);
     expect(sidebar.width, 400);

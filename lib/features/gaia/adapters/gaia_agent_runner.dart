@@ -257,6 +257,7 @@ abstract interface class GaiaAgentRunner {
   /// reports [GaiaTurnResult.sessionFound] false. [toolless] runs it with no
   /// tools at all, the CLI's own included: a side question's
   /// (GAIA_BTW_HLD.md §6), whose process isn't kept for a next turn.
+  /// [tier] is what the turn's tokens are counted under; null for none.
   /// [onEvent] gets each event of the turn; the future completes with its
   /// result, or throws a [GaiaRunException].
   Future<GaiaTurnResult> send({
@@ -273,6 +274,7 @@ abstract interface class GaiaAgentRunner {
     String? promptId,
     GaiaForkCut? fork,
     bool toolless = false,
+    GaiaTier? tier,
     required void Function(GaiaAgentEvent event) onEvent,
   });
 
