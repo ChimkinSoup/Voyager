@@ -4449,7 +4449,9 @@ class _ComboDialogState extends State<_ComboDialog> {
     }
     final combo = gaiaComboFromEvent(event);
     if (combo == null) return false;
-    if (widget.keybind.global && !combo.hasModifier) {
+    // Settings' plain key would be eaten from every Gaia text box.
+    if ((widget.keybind.global || widget.keybind == GaiaKeybind.settings) &&
+        !combo.hasModifier) {
       setState(() => _refused = '$combo needs Ctrl, Alt or Win with it.');
       return true;
     }

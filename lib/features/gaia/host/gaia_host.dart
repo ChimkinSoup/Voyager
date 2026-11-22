@@ -1967,6 +1967,40 @@ class GaiaHost {
           params['chatId'] as String?,
           draining: params['draining'] == true,
         ))?.toJson();
+      case 'queueEdit':
+        await store.changeQueued(
+          params['id']! as String,
+          text: params['text']! as String,
+        );
+        return null;
+      case 'queueDelete':
+        await store.changeQueued(params['id']! as String, delete: true);
+        return null;
+      case 'queueReorder':
+        await store.changeQueued(
+          params['id']! as String,
+          order: (params['order']! as num).toDouble(),
+        );
+        return null;
+      case 'actions':
+        return [
+          for (final (:chat, :message, :card) in await store.actions())
+            {
+              'chat': chat.toJson(),
+              'message': message.toJson(),
+              'cardId': card.id,
+            },
+        ];
+      case 'undoAction':
+        final message =
+            await store.message(params['messageId']! as String) ??
+            (throw GaiaPipeException('That message is gone.'));
+        try {
+          await undoProposal(message, params['cardId']! as String);
+        } on GaiaReadException catch (error) {
+          throw GaiaPipeException(error.message);
+        }
+        return null;
       case 'setDrain':
         await store.setDrain(
           params['chatId']! as String,
@@ -2171,7 +2205,8 @@ class GaiaHost {
       _memories ?? (throw GaiaPipeException('Voyager data is not ready'));
 
   /// Takes back what accepted proposal card [cardId] of [message] committed,
-  /// for the Gaia page's action log (§17), and marks the card undone.
+  /// for the action log (§17) on the Gaia page or the settings panel, and
+  /// marks the card undone.
   /// Throws a [GaiaReadException] saying why it can't.
   Future<void> undoProposal(GaiaMessage message, String cardId) async {
     if (_aborted) throw GaiaReadException('Gaia is aborted.');

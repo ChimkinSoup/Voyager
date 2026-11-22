@@ -1,6 +1,6 @@
 # Gaia — Settings Panel and Memory Review (HLD)
 
-Status: **Design (2026-11-20), open questions decided (§11). Nothing built.** Moves the Gaia page's management tabs
+Status: **Design (2026-11-20), open questions decided (§11). Phase 1 built and checked live 2026-11-22 (§10.1); Phases 2-7 not built.** Moves the Gaia page's management tabs
 (GAIA_HLD.md §17) into the companion, in Gaia's own look, so everything Gaia needs is
 reachable from the Gaia window. The Memories tab is redesigned rather than ported, and
 gains a new card-by-card review with an "Ask Gaia" chat about the memory in front of you.
@@ -385,6 +385,87 @@ that as a card (§11).
 | 7 | **Desktop page → link.** §9. | The Windows Gaia page shows only the link and tab buttons; Android's is unchanged. |
 
 After Phase 4 is a natural point for the UI pass you mentioned (look and feel only).
+
+### 10.1 Phase 1 as built (2026-11-22)
+
+**Built:** `companion/gaia_settings_panel.dart` (`GaiaSettingsPanel`, `GaiaPanelTab`,
+the view, `GaiaPanelScroll`), `companion/settings/gaia_actions_tab.dart` and
+`gaia_queue_tab.dart`; the gear in `_Sidebar`'s footer and in the floaters' header;
+`GaiaKeybind.settings` (Ctrl+, rebindable, so it also shows in the page's key list);
+Ctrl+1 … Ctrl+6. The action-log query moved to `host/gaia_actions.dart`
+(`gaiaActions`), which `gaiaActionsProvider` and the host's `actions` request both call.
+New requests: `actions`, `undoAction` {messageId, cardId}, `queueEdit`, `queueDelete`,
+`queueReorder` (through `GaiaChatStore.changeQueued`, which leaves a prompt that's been
+sent or deleted meanwhile alone).
+
+**Where it differs from the design above:**
+- The sidebar and chat stay built under the panel (`Visibility(maintainState)` +
+  `ExcludeFocus`), which is how the chat "comes back as it was": draft, scroll and
+  focus. The window header stays, titled "Settings" with no project crumb or New chat;
+  the tab strip and the panel's × are a row under it.
+- The four tabs still to come show "Not here yet. It's on the Gaia page in Voyager for now."
+- Queue: clicking a prompt edits it (Enter saves, Shift+Enter is a newline, Esc
+  cancels, clicking away saves); the page's tap-to-copy became a Copy icon beside
+  Delete on hover. Drain uses a Material `Switch`, as the proposal card does.
+- `selectChat` closes the panel, so search results, toasts and the Actions tab's chat
+  link show the chat rather than leaving it under the panel.
+- A floater showing closes the panel, so "open in full" comes back to the chat; a plain
+  hide and show keeps it. Ctrl+N and Ctrl+Shift+N do nothing while it's open.
+
+**Tests:** `test/gaia_settings_panel_test.dart` (14: open/close/toggle, stars paused
+under the panel, chat and draft
+restored, floater → window, Ctrl+N tabs, Actions list/refetch on `changed`/no refetch
+out of view/undo/refused undo/chat link, Queue groups/edit/cancel/delete/drain/drag,
+last tab kept); host tests for `actions`/`undoAction` and the queue requests in
+`gaia_host_test.dart`. All 1,962 `test/gaia_*_test.dart` pass.
+
+**Checked live** on `gaiaqa` (qa-128), from a scratchpad copy of the Debug build with
+this tree's Dart bundle, real main instance and companion over the real pipe:
+- The gear opens the panel at the last tab over the real action log; Esc closes it and
+  the composer has the focus back with its draft; Ctrl+, opens and closes it; Ctrl+3
+  and Ctrl+2 switch tabs; the floater's gear and Ctrl+, in a floater open the Gaia window
+  with the panel at the last tab.
+- Actions: a renamed chat's name updated in its row while the panel was open (the
+  `changed` refetch); Undo of a fresh `/propose2` event struck the row through and
+  soft-deleted the event in the database; Undo of an old reminder change was refused
+  with the host's own reason as a toast ("It's been changed since…").
+- Queue: new prompts appeared on the `queue` event; an in-place edit was stored
+  (version 2) and an Esc-cancelled one wasn't (version 1); a drag of the handle moved a
+  prompt above another and stored its new order; hover showed Copy and Delete, and Delete
+  soft-deleted the prompt; Drain on sent that chat's waiting prompt at once (a dummy
+  reply, no provider call), as on the page, and was set back off.
+
+The first pass ran its drag, hover and Delete as VM-injected pointer events, because
+the blank screen saver was up (`awake on` hadn't been run, and the harness read it as a
+locked session). **Second pass, same day**, with the screen kept awake, covered what the
+first left out:
+- **Real mouse:** hovering a row showed Copy and Delete; a real drag of the handle moved
+  a prompt above another; Copy put the prompt on the clipboard (checked with
+  `Get-Clipboard`) and showed its toast; Delete removed the row.
+- **Drain off from the panel** while prompts were waiting: a `/slow` dummy reply running,
+  two prompts queued with drain on, then the switch turned off in the panel. Drain was
+  stored off, the reply finished, and both prompts stayed queued.
+- **A rebound key:** Ctrl+Shift+O saved to the synced settings, as the page's key
+  editor saves it. With no restart, Ctrl+, stopped toggling the panel and Ctrl+Shift+O
+  opened and closed it. Then it was set back to the default.
+- **The Gaia page side by side:** the main window's Queue and Actions tabs showed the
+  same rows as the panel (the edited prompt, the drain chat's two prompts, the undone
+  event struck through).
+- **Another device:** a second desktop profile (`qb`) signed into the same account
+  pulled every panel write: the edit, the reorder's order, three deletes, the undone
+  event (soft-deleted) and its card (`undoneAt`, same version on both).
+- **Idle cost:** with the panel open in front and the cursor in the window, the
+  companion drew about 119 frames a second, the same as with the chat showing. The
+  starfield was still ticking behind the opaque panel. **Fixed:** `GaiaController.skyActive`
+  (focused, and not covered by the panel) now drives the starfield and sky, with a widget
+  test. The scheduler's live callbacks then listed four `GaiaGlowRing` tickers (the
+  header's window buttons and the panel's ×) and no starfield, so the frame rate stays
+  high. Those rings animate whenever Gaia is focused with the cursor inside, on the chat
+  too; that's existing behaviour, not the panel's.
+
+**Not checked live:**
+- **The phone.** The second desktop stood in for "another device"; the Android Gaia
+  page wasn't opened.
 
 ## 11. Decisions (2026-11-20)
 

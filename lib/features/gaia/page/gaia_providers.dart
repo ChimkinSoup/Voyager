@@ -14,12 +14,16 @@ import 'package:voyager/features/gaia/adapters/claude_code/claude_code_runner.da
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_setup.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_runner.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_setup.dart';
+import 'package:voyager/features/gaia/host/gaia_actions.dart';
 import 'package:voyager/features/gaia/host/gaia_host.dart';
 import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
 import 'package:voyager/features/gaia/remote/gaia_device_keys.dart';
 import 'package:voyager/features/gaia/remote/gaia_remote.dart';
 import 'package:voyager/features/gaia/remote/gaia_remote_client.dart';
 import 'package:voyager/features/gaia/usage/gaia_usage.dart';
+
+export 'package:voyager/features/gaia/host/gaia_actions.dart'
+    show GaiaAction, gaiaControlStopped;
 
 /// Live chats, pinned first, then the most recent.
 final gaiaChatsProvider = StreamProvider<List<GaiaChat>>(
@@ -222,50 +226,16 @@ final gaiaSearchProvider = FutureProvider.autoDispose
       return ref.watch(gaiaRepositoryProvider).searchChatIds(query);
     });
 
-/// One committed proposal in the action log (§17): [card], accepted, in
-/// [message] of [chat].
-typedef GaiaAction = ({GaiaChat chat, GaiaMessage message, GaiaCardPart card});
-
-/// Whether a control card's step list ended with steps not sent, however it
-/// ended: a run that stopped, or the rest declined, cancelled or unanswered. One
-/// still open hasn't ended: its next step is waiting for its approval.
-bool gaiaControlStopped(GaiaCardPart card) =>
-    card.state != GaiaCardState.open &&
-    (card.answer?['stopped'] != null ||
-        ((card.answer?['ran'] as num?)?.toInt() ?? 0) <
-            (card.input['steps'] as List? ?? const []).length);
-
-/// The action log (§10, §15.6, §17): every accepted proposal that wrote
-/// something and every step list that sent something, in live chats, newest
-/// first. Read again on every write to the chats or
-/// messages, since an undo changes a card without touching its chat.
+/// The action log (§10, §15.6, §17), newest first. Read again on every
+/// write to the chats or messages, since an undo changes a card without
+/// touching its chat.
 final gaiaActionsProvider = StreamProvider.autoDispose<List<GaiaAction>>((
   ref,
 ) async* {
   final repository = ref.watch(gaiaRepositoryProvider);
-  Future<List<GaiaAction>> load() async {
-    final chats = {
-      for (final chat in await repository.listChats()) chat.id: chat,
-    };
-    final actions = <GaiaAction>[
-      for (final message in await repository.listMessagesWithCommits())
-        if (chats[message.chatId] != null)
-          for (final card in message.parts.whereType<GaiaCardPart>())
-            if ((card.kind == GaiaCardKind.proposal ||
-                    card.kind == GaiaCardKind.control) &&
-                card.answer?['committed'] != null &&
-                // A step list declined partway still sent what it sent.
-                (card.state == GaiaCardState.accepted ||
-                    card.kind == GaiaCardKind.control))
-              (chat: chats[message.chatId]!, message: message, card: card),
-    ];
-    return actions
-      ..sort((a, b) => b.message.createdAt.compareTo(a.message.createdAt));
-  }
-
-  yield await load();
+  yield await gaiaActions(repository);
   await for (final _ in repository.watchChanges()) {
-    yield await load();
+    yield await gaiaActions(repository);
   }
 });
 

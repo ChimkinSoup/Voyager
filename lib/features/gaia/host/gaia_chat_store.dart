@@ -4,6 +4,7 @@ import 'package:voyager/core/sync/soft_delete_policy.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
+import 'package:voyager/features/gaia/host/gaia_actions.dart';
 
 const _uuid = Uuid();
 
@@ -570,6 +571,35 @@ class GaiaChatStore {
         await _repository.upsertQueueItem(next.copyWith(consumedAt: utcNow()));
         return next;
       });
+
+  /// Waiting prompt [id] changed from the settings panel's Queue tab
+  /// (GAIA_SETTINGS_HLD.md §4), as the Gaia page changes it: [text]
+  /// rewritten, [order] moved, or [delete]d. Nothing for one that's gone,
+  /// sent or deleted meanwhile.
+  Future<void> changeQueued(
+    String id, {
+    String? text,
+    double? order,
+    bool delete = false,
+  }) => _serial(() async {
+    final item = await _repository.getQueueItem(id);
+    if (item == null || item.deletedAt != null || item.consumedAt != null) {
+      return;
+    }
+    await _repository.upsertQueueItem(
+      item.copyWith(
+        text: text ?? item.text,
+        order: order ?? item.order,
+        deletedAt: delete ? utcNow() : null,
+      ),
+    );
+  });
+
+  /// The action log (GAIA_HLD.md §17), as the Gaia page reads it.
+  Future<List<GaiaAction>> actions() => gaiaActions(_repository);
+
+  /// Message [id], live or not; null for none.
+  Future<GaiaMessage?> message(String id) => _repository.getMessage(id);
 
   /// Deleted from Gaia's sidebar: tombstoned, as on the Gaia page, so
   /// [restoreChat] can undo it.

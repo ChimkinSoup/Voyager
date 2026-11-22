@@ -62,6 +62,7 @@ import 'package:voyager/features/gaia/companion/gaia_orb.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
 import 'package:voyager/features/gaia/companion/gaia_pinned_prompt.dart';
 import 'package:voyager/features/gaia/companion/gaia_tier_picker.dart';
+import 'package:voyager/features/gaia/companion/gaia_settings_panel.dart';
 import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
 import 'package:voyager/features/gaia/companion/gaia_moon.dart';
 import 'package:voyager/features/gaia/companion/gaia_sky.dart';
@@ -182,7 +183,11 @@ class _GaiaAppState extends State<GaiaApp> {
       home: _RunToasts(
         controller: controller,
         child: ListenableBuilder(
-          listenable: Listenable.merge([controller, controller.debug]),
+          listenable: Listenable.merge([
+            controller,
+            controller.debug,
+            controller.panel,
+          ]),
           builder: (context, _) => _GaiaShell(controller: controller),
         ),
       ),
@@ -379,6 +384,9 @@ class _GaiaShell extends StatelessWidget {
       return _PickUpPill(controller: controller);
     }
     final floater = controller.layout != GaiaMode.window;
+    // In the Gaia window, over the sidebar and chat (GAIA_SETTINGS_HLD.md
+    // §2.2), which are kept as they were underneath for when it closes.
+    final panelShown = !floater && controller.panel.open;
     // Built once out here, so a scroll's rebuild of the chat body around
     // them leaves them be. Also rebuilt alone as a reply's text streams in.
     final messages = ValueListenableBuilder(
@@ -430,13 +438,16 @@ class _GaiaShell extends StatelessWidget {
               controller.dismiss();
             }
           },
-        const SingleActivator(LogicalKeyboardKey.keyN, control: true):
-            controller.newChat,
-        const SingleActivator(
-          LogicalKeyboardKey.keyN,
-          control: true,
-          shift: true,
-        ): controller.moveDraftToNewChat,
+        // The chat's, so not while it's under the panel.
+        if (!panelShown) ...{
+          const SingleActivator(LogicalKeyboardKey.keyN, control: true):
+              controller.newChat,
+          const SingleActivator(
+            LogicalKeyboardKey.keyN,
+            control: true,
+            shift: true,
+          ): controller.moveDraftToNewChat,
+        },
         const SingleActivator(LogicalKeyboardKey.keyF, control: true): () =>
             showGaiaSearch(context, controller),
         const SingleActivator(
@@ -445,11 +456,18 @@ class _GaiaShell extends StatelessWidget {
           shift: true,
         ): () =>
             showGaiaDebugMenu(context, controller),
+        if (parseGaiaCombo(
+              gaiaComboFor(GaiaKeybind.settings, controller.keybinds),
+            )
+            case final combo?)
+          combo.activator: () => unawaited(controller.togglePanel()),
       },
       // Focus leaving a text box lands here, under the bindings, so Esc
       // still reaches them with nothing focused.
       child: FocusScope(
         onKeyEvent: (_, event) {
+          // The chat's keys are the chat's, not the panel's over it.
+          if (panelShown) return KeyEventResult.ignored;
           final card = _cardKey(controller, event);
           if (card == KeyEventResult.handled) return card;
           return _typeToComposer(controller, event);
@@ -463,7 +481,7 @@ class _GaiaShell extends StatelessWidget {
                 // resizing covers stars rather than moving them.
                 Positioned.fill(
                   child: GaiaStarfield(
-                    active: controller.focused,
+                    active: controller.skyActive,
                     // Turning on as the sky did, once it has gone.
                     rotation: controller.debug.skyRotation,
                     maxStepMove: controller.debug.starStep,
@@ -478,7 +496,7 @@ class _GaiaShell extends StatelessWidget {
                       controller.debug.skyMoonHour,
                     ),
                     child: GaiaSky(
-                      active: controller.focused,
+                      active: controller.skyActive,
                       shown:
                           controller.messages.isEmpty &&
                           controller.messagesLoaded,
@@ -514,20 +532,50 @@ class _GaiaShell extends StatelessWidget {
                       left: floater ? null : controller.sidebar.edge,
                       child: floater
                           ? chat()
-                          : GaiaSidebarLayout(
-                              sidebar: controller.sidebar,
-                              // A Material, which the sidebar's buttons paint
-                              // their ink on.
-                              side: Material(
-                                color: Theme.of(
-                                  context,
-                                ).scaffoldBackgroundColor,
-                                child: _Sidebar(controller: controller),
-                              ),
-                              chat: (shown, toggle) => chat(
-                                sidebarShown: shown,
-                                toggleSidebar: toggle,
-                              ),
+                          : Stack(
+                              children: [
+                                Visibility(
+                                  visible: !panelShown,
+                                  maintainState: true,
+                                  child: ExcludeFocus(
+                                    excluding: panelShown,
+                                    child: GaiaSidebarLayout(
+                                      sidebar: controller.sidebar,
+                                      // A Material, which the sidebar's
+                                      // buttons paint their ink on.
+                                      side: Material(
+                                        color: Theme.of(
+                                          context,
+                                        ).scaffoldBackgroundColor,
+                                        child: _Sidebar(controller: controller),
+                                      ),
+                                      chat: (shown, toggle) => chat(
+                                        sidebarShown: shown,
+                                        toggleSidebar: toggle,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                if (panelShown)
+                                  Positioned.fill(
+                                    child: Column(
+                                      children: [
+                                        _Header(
+                                          controller: controller,
+                                          sidebarShown: true,
+                                          toggleSidebar: null,
+                                          panel: true,
+                                        ),
+                                        const Divider(height: 1),
+                                        Expanded(
+                                          child: GaiaSettingsPanelView(
+                                            controller: controller,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                              ],
                             ),
                     ),
                   ),
@@ -650,6 +698,11 @@ class _ClickToComposerState extends State<_ClickToComposer> {
     // after the time a second click would have come in.
     _pending = Timer(kDoubleTapTimeout, () {
       if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? true)) return;
+      // The settings panel keeps its own focus; the composer's under it.
+      if (widget.controller.panel.open &&
+          widget.controller.layout == GaiaMode.window) {
+        return;
+      }
       if (_inTextField() || _inBtwDock()) return;
       widget.controller.focusComposer();
     });
@@ -745,10 +798,15 @@ class _Header extends StatelessWidget {
     required this.controller,
     required this.sidebarShown,
     required this.toggleSidebar,
+    this.panel = false,
   });
 
   final GaiaController controller;
   final bool sidebarShown;
+
+  /// Over the settings panel (GAIA_SETTINGS_HLD.md §2.3): titled Settings,
+  /// with no chat's project, title or New chat.
+  final bool panel;
 
   /// Null in the floaters, which have no sidebar.
   final VoidCallback? toggleSidebar;
@@ -794,28 +852,34 @@ class _Header extends StatelessWidget {
             ] else
               const SizedBox(width: 16),
             Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) => Row(
-                  children: [
-                    if (project != null || controller.projects.isNotEmpty)
-                      _ProjectCrumb(
-                        controller: controller,
-                        project: project,
-                        // Narrow, as in the floaters: the icon alone.
-                        compact: constraints.maxWidth < 240,
-                      ),
-                    Flexible(
-                      child: floater
-                          ? _ChatSwitcher(controller: controller)
-                          : Text(
-                              controller.currentChat?.title ?? 'New chat',
-                              style: theme.textTheme.titleSmall,
-                              overflow: TextOverflow.ellipsis,
+              child: panel
+                  ? Text(
+                      'Settings',
+                      style: theme.textTheme.titleSmall,
+                      overflow: TextOverflow.ellipsis,
+                    )
+                  : LayoutBuilder(
+                      builder: (context, constraints) => Row(
+                        children: [
+                          if (project != null || controller.projects.isNotEmpty)
+                            _ProjectCrumb(
+                              controller: controller,
+                              project: project,
+                              // Narrow, as in the floaters: the icon alone.
+                              compact: constraints.maxWidth < 240,
                             ),
+                          Flexible(
+                            child: floater
+                                ? _ChatSwitcher(controller: controller)
+                                : Text(
+                                    controller.currentChat?.title ?? 'New chat',
+                                    style: theme.textTheme.titleSmall,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ],
-                ),
-              ),
             ),
             if (controller.connectivity case final connectivity?)
               ListenableBuilder(
@@ -858,7 +922,7 @@ class _Header extends StatelessWidget {
               const SizedBox(width: 10),
             ],
             // The sidebar's New chat, when there's no sidebar.
-            if (!sidebarShown) ...[
+            if (!sidebarShown && !panel) ...[
               GaiaButton(
                 icon: Icons.add,
                 size: 32,
@@ -867,6 +931,17 @@ class _Header extends StatelessWidget {
               const SizedBox(width: 10),
             ],
             if (floater) ...[
+              Tooltip(
+                message:
+                    'Settings in the Gaia window '
+                    '(${gaiaComboFor(GaiaKeybind.settings, controller.keybinds)})',
+                child: GaiaButton(
+                  icon: Icons.settings_outlined,
+                  size: 32,
+                  onPressed: () => unawaited(controller.openPanel()),
+                ),
+              ),
+              const SizedBox(width: 10),
               GaiaButton(
                 icon: Icons.open_in_full,
                 size: 32,
@@ -2063,16 +2138,28 @@ class _SidebarState extends State<_Sidebar> {
         ),
         Padding(
           padding: const EdgeInsets.all(12),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Tooltip(
-              message: 'Debug menu (Ctrl+Shift+D)',
-              child: GaiaButton(
-                icon: Icons.bug_report_outlined,
-                size: 32,
-                onPressed: () => showGaiaDebugMenu(context, controller),
+          child: Row(
+            children: [
+              Tooltip(
+                message: 'Debug menu (Ctrl+Shift+D)',
+                child: GaiaButton(
+                  icon: Icons.bug_report_outlined,
+                  size: 32,
+                  onPressed: () => showGaiaDebugMenu(context, controller),
+                ),
               ),
-            ),
+              const SizedBox(width: 6),
+              Tooltip(
+                message:
+                    'Settings '
+                    '(${gaiaComboFor(GaiaKeybind.settings, controller.keybinds)})',
+                child: GaiaButton(
+                  icon: Icons.settings_outlined,
+                  size: 32,
+                  onPressed: () => unawaited(controller.togglePanel()),
+                ),
+              ),
+            ],
           ),
         ),
       ],

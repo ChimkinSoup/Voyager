@@ -8,6 +8,8 @@
 # -NoMapKey launches without it (Phase 19B "no key" checks).
 # Sets VOYAGER_QA_PARKED: the window starts off-screen and never activates, so
 # it doesn't cover Juno's windows; voy.ps1's `park` sizes it before any input.
+# Turns on awake.ps1 first when Juno has been idle 5+ minutes, so the screen
+# saver can't take the desktop mid-run.
 #
 # -Profile <name> (else $env:VOYAGER_QA_PROFILE) launches a dev profile beside
 # the normal instance (DEV_PROFILE_HLD.md): the already-built debug exe, run
@@ -37,6 +39,33 @@ $definesFile = Join-Path $repo 'dart_defines.json'
 if (-not $NoMapKey -and (Test-Path -LiteralPath $definesFile)) {
   $mapKey = (Get-Content -Raw -LiteralPath $definesFile | ConvertFrom-Json).GEOAPIFY_API_KEY
   if ($mapKey -match '^[A-Za-z0-9]+$') { $defines = " --dart-define=GEOAPIFY_API_KEY=$mapKey" }
+}
+
+# A live run with Juno's blank screen saver up can't take the foreground
+# (it reads as locked). Juno away 5+ minutes, it's held off from the start;
+# at the desk the screen isn't dimmed, and voy.ps1's activate names the
+# screen saver if it comes up later. It restores itself 20 minutes after the
+# last voy.ps1/vm.ps1 call. A holder that fails to start only warns.
+if (-not ('LaunchIdle' -as [type])) {
+  Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class LaunchIdle {
+    [StructLayout(LayoutKind.Sequential)] struct LASTINPUTINFO { public uint cbSize; public uint dwTime; }
+    [DllImport("user32.dll")] static extern bool GetLastInputInfo(ref LASTINPUTINFO info);
+    public static double Minutes() {
+        var info = new LASTINPUTINFO { cbSize = 8 };
+        GetLastInputInfo(ref info);
+        return unchecked((uint)Environment.TickCount - info.dwTime) / 60000.0;
+    }
+}
+'@
+}
+$idle = [LaunchIdle]::Minutes()
+if ($idle -ge 5) {
+  try { Write-Host (& (Join-Path $PSScriptRoot 'awake.ps1') on) } catch { Write-Warning "$_" }
+} else {
+  Write-Host ('awake: not turned on (input {0:N1} min ago)' -f $idle)
 }
 
 $exe = Join-Path $repo 'build\windows\x64\runner\Debug\voyager.exe'

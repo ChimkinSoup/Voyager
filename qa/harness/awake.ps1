@@ -64,6 +64,9 @@ switch ($Cmd) {
       $s | ConvertTo-Json | Set-Content -LiteralPath $state -Encoding UTF8
       while ((Test-Path -LiteralPath $state) -and ((Get-Date) - (Get-Item -LiteralPath $state).LastWriteTime).TotalMinutes -lt $idleMinutes) {
         Start-Sleep -Seconds 5
+        # Switched off above, but an explicit SC_SCREENSAVE still starts it
+        # (checked 2026-11-22): whatever gets through is ended within 5 s.
+        Get-Process | Where-Object { $_.Name -like 'scrnsave*' } | Stop-Process -Force -ErrorAction SilentlyContinue
       }
     } finally {
       Restore $s

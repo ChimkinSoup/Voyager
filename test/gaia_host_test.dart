@@ -1722,6 +1722,80 @@ void main() {
         expect(error, isA<GaiaReadException>());
       });
     });
+
+    test("the settings panel's action log and Undo go through the pipe "
+        '(GAIA_SETTINGS_HLD.md §3.2)', () {
+      run(show: true, executor: executor(), (async, host) {
+        inbox(async);
+        connect(async);
+        final proposal = prepare(async);
+        final committed =
+            (request(async, 'commitProposal', {
+                      'cardId': 'card',
+                      'token': gaiaApprovalToken(),
+                      'fields': proposal['fields'],
+                    })!
+                    as Map)
+                .cast<String, Object?>();
+        final at = DateTime.utc(2026);
+        request(async, 'putChat', {
+          'chat': GaiaChat(
+            id: 'c1',
+            title: 'Hi',
+            createdAt: at,
+            updatedAt: at,
+            lastMessageAt: at,
+          ).toJson(),
+        });
+        request(async, 'putMessage', {
+          'message': GaiaMessage(
+            id: 'm1',
+            chatId: 'c1',
+            seq: 0,
+            role: GaiaMessageRole.assistant,
+            parts: [
+              GaiaCardPart(
+                id: 'card',
+                kind: GaiaCardKind.proposal,
+                tool: 'propose_todo',
+                proposal: GaiaProposal.fromJson(proposal),
+              ).decided(GaiaCardState.accepted, {
+                'fields': proposal['fields'],
+                'committed': committed['record'],
+              }),
+            ],
+            status: GaiaMessageStatus.complete,
+            createdAt: at,
+            updatedAt: at,
+          ).toJson(),
+        });
+
+        final rows = request(async, 'actions')! as List;
+        final row = (rows.single as Map).cast<String, Object?>();
+        expect((row['chat']! as Map)['title'], 'Hi');
+        expect((row['message']! as Map)['id'], 'm1');
+        expect(row['cardId'], 'card');
+
+        request(async, 'undoAction', {'messageId': 'm1', 'cardId': 'card'});
+        final id = (committed['record']! as Map)['id']! as String;
+        todos.getTask(id).then((task) => expect(task!.deletedAt, isNotNull));
+        async.flushMicrotasks();
+        // Twice is refused, with why.
+        expect(
+          () => request(async, 'undoAction', {
+            'messageId': 'm1',
+            'cardId': 'card',
+          }),
+          throwsA(
+            isA<GaiaPipeException>().having(
+              (e) => e.message,
+              'message',
+              'Undone already.',
+            ),
+          ),
+        );
+      });
+    });
   });
 
   group('Phase 1 protocol', () {
@@ -1905,6 +1979,53 @@ void main() {
         expect(pipe.launches, hasLength(1));
         connect(async);
         expect(companions.single.events, ['openChat c1']);
+      });
+    });
+  });
+
+  group("the settings panel's queue (GAIA_SETTINGS_HLD.md §3.2)", () {
+    List<Map<String, Object?>> queued(FakeAsync async) => [
+      for (final item in request(async, 'queue', {'all': true})! as List)
+        (item as Map).cast<String, Object?>(),
+    ];
+
+    test('edits, reorders and deletes a waiting prompt', () {
+      run(show: true, (async, _) {
+        connect(async);
+        final first =
+            (request(async, 'enqueue', {'chatId': null, 'text': 'one'})!
+                    as Map)['id']!
+                as String;
+        request(async, 'enqueue', {'chatId': null, 'text': 'two'});
+
+        request(async, 'queueEdit', {'id': first, 'text': 'one, edited'});
+        expect([for (final item in queued(async)) item['text']], [
+          'one, edited',
+          'two',
+        ]);
+
+        request(async, 'queueReorder', {'id': first, 'order': 5});
+        expect([for (final item in queued(async)) item['text']], [
+          'two',
+          'one, edited',
+        ]);
+
+        request(async, 'queueDelete', {'id': first});
+        expect([for (final item in queued(async)) item['text']], ['two']);
+      });
+    });
+
+    test('a prompt sent meanwhile is left as it was', () {
+      run(show: true, (async, _) {
+        connect(async);
+        final id =
+            (request(async, 'enqueue', {'chatId': null, 'text': 'one'})!
+                    as Map)['id']!
+                as String;
+        request(async, 'queuePop', {'chatId': null});
+        request(async, 'queueEdit', {'id': id, 'text': 'too late'});
+        request(async, 'queueDelete', {'id': id});
+        expect(queued(async), isEmpty);
       });
     });
   });

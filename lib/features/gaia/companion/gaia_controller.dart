@@ -5,6 +5,7 @@ import 'dart:math';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart' show SchedulerBinding;
 import 'package:path/path.dart' as p;
 import 'package:super_clipboard/super_clipboard.dart'
     show DataWriterItem, Formats, SystemClipboard;
@@ -24,6 +25,7 @@ import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_greetings.dart';
 import 'package:voyager/features/gaia/companion/gaia_handoff.dart';
 import 'package:voyager/features/gaia/companion/gaia_image_render.dart';
+import 'package:voyager/features/gaia/companion/gaia_settings_panel.dart';
 import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
 import 'package:voyager/features/gaia/companion/gaia_zoom.dart';
 import 'package:voyager/features/gaia/companion/gaia_tool_results.dart';
@@ -33,6 +35,7 @@ import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
 import 'package:win32/win32.dart' show AllowSetForegroundWindow;
 import 'package:voyager/features/gaia/gaia_text_settings.dart';
+import 'package:voyager/features/gaia/host/gaia_actions.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 import 'package:voyager/features/gaia/tools/gaia_proposals.dart';
 import 'package:voyager/features/gaia/usage/gaia_tokens.dart';
@@ -104,6 +107,7 @@ class GaiaController extends ChangeNotifier {
     this._exit = exit,
     GaiaDebug? debug,
     GaiaSidebar? sidebar,
+    GaiaSettingsPanel? panel,
     GaiaZoomLevel? zoom,
     GaiaCommandUses? commandUses,
     GaiaCommandHistory? history,
@@ -130,6 +134,7 @@ class GaiaController extends ChangeNotifier {
            },
        debug = debug ?? GaiaDebug(),
        sidebar = sidebar ?? GaiaSidebar(),
+       panel = panel ?? GaiaSettingsPanel(),
        zoom = zoom ?? GaiaZoomLevel(),
        commandUses = commandUses ?? GaiaCommandUses(),
        history = history ?? GaiaCommandHistory(),
@@ -147,6 +152,9 @@ class GaiaController extends ChangeNotifier {
 
   /// The Gaia window's sidebar: open or not, and its width.
   final GaiaSidebar sidebar;
+
+  /// The settings panel (GAIA_SETTINGS_HLD.md §2): open or not, and its tab.
+  final GaiaSettingsPanel panel;
 
   /// How far the chat is zoomed, with Ctrl+Plus and Ctrl+Minus.
   final GaiaZoomLevel zoom;
@@ -1306,6 +1314,20 @@ class GaiaController extends ChangeNotifier {
   /// On screen and in front, from the window's focus and blur; the
   /// starfield drifts only then.
   final focused = ValueNotifier(false);
+
+  /// [focused], less while the settings panel covers the chat in the Gaia
+  /// window: the stars and sky behind it would only paint unseen frames
+  /// (GAIA_SETTINGS_HLD.md §10.1).
+  late final ValueListenable<bool> skyActive = () {
+    final active = ValueNotifier(false);
+    void update() => active.value =
+        focused.value && !(panel.open && layout == GaiaMode.window);
+    focused.addListener(update);
+    panel.addListener(update);
+    addListener(update);
+    update();
+    return active;
+  }();
 
   /// Whether the window is shown at all, in any mode. Off, every ticker
   /// is muted: a hidden window's tree stays alive, and the buttons' glow
@@ -2675,6 +2697,11 @@ class GaiaController extends ChangeNotifier {
         unawaited(_applySettings(params));
       case 'changed':
         unawaited(_refresh().then((_) => _drainIdle()));
+        // The tab in view asks again; one out of view does when it shows
+        // (GAIA_SETTINGS_HLD.md §3.1).
+        if (panel.open && panel.tab == GaiaPanelTab.actions) {
+          unawaited(_loadActions());
+        }
       case 'chapters':
         _adoptChapters(params);
       case 'drafts':
@@ -2983,6 +3010,91 @@ class GaiaController extends ChangeNotifier {
     await _show(GaiaMode.window);
   }
 
+  /// Opens the settings panel (GAIA_SETTINGS_HLD.md §2.1) at [tab], or the
+  /// last tab shown; from a floater, in the Gaia window, since a floater is
+  /// too small for it.
+  Future<void> openPanel({GaiaPanelTab? tab}) async {
+    if (layout != GaiaMode.window) await openWindow();
+    if (tab != null) panel.setTab(tab);
+    panel.setOpen(true);
+    unawaited(_loadPanelTab());
+  }
+
+  /// Closes the settings panel: the chat that was open is back as it was,
+  /// its composer given the focus once it's built again.
+  void closePanel() {
+    if (!panel.open) return;
+    panel.setOpen(false);
+    SchedulerBinding.instance.addPostFrameCallback((_) => focusComposer());
+  }
+
+  /// Ctrl+, and the gear.
+  Future<void> togglePanel() async =>
+      panel.open && layout == GaiaMode.window ? closePanel() : openPanel();
+
+  /// The settings panel's tab strip: [tab] shown, fetched afresh.
+  void showPanelTab(GaiaPanelTab tab) {
+    panel.setTab(tab);
+    unawaited(_loadPanelTab());
+  }
+
+  /// What the panel's tab in view shows, fetched as it shows
+  /// (GAIA_SETTINGS_HLD.md §3.1). The Queue tab's is [queue], which the
+  /// `queue` event keeps fresh already.
+  Future<void> _loadPanelTab() async {
+    if (!panel.open) return;
+    switch (panel.tab) {
+      case GaiaPanelTab.actions:
+        await _loadActions();
+      case GaiaPanelTab.queue:
+        await _loadQueue();
+      default:
+    }
+  }
+
+  /// The action log (GAIA_HLD.md §17) for the panel's Actions tab, newest
+  /// first; null until it's first read.
+  List<GaiaAction>? actions;
+
+  Future<void> _loadActions() async {
+    try {
+      final listed = await _pipe.request('actions');
+      if (listed is! List) return;
+      final read = <GaiaAction>[];
+      for (final row in listed.cast<Map<Object?, Object?>>()) {
+        final message = GaiaMessage.fromJson(
+          (row['message']! as Map).cast<String, Object?>(),
+        );
+        final card = message.parts.whereType<GaiaCardPart>().firstWhereOrNull(
+          (card) => card.id == row['cardId'],
+        );
+        if (card == null) continue;
+        read.add((
+          chat: GaiaChat.fromJson(
+            (row['chat']! as Map).cast<String, Object?>(),
+          ),
+          message: message,
+          card: card,
+        ));
+      }
+      actions = read;
+      notifyListeners();
+    } on GaiaPipeException catch (error) {
+      debugPrint('[gaia] actions not read: $error');
+    }
+  }
+
+  /// The Actions tab's Undo: takes back what [action] saved, in the main
+  /// instance, which checks it can (GAIA_HLD.md §17). Throws a
+  /// [GaiaPipeException] saying why it couldn't.
+  Future<void> undoAction(GaiaAction action) async {
+    await _pipe.request('undoAction', {
+      'messageId': action.message.id,
+      'cardId': action.card.id,
+    });
+    await _loadActions();
+  }
+
   /// A notification clicked, or a chat picked on the Gaia page.
   Future<void> openChat(String chatId, {String? btwId}) async {
     await openWindow();
@@ -3019,6 +3131,9 @@ class GaiaController extends ChangeNotifier {
       _utility?.warm(recall: debug.recallPick);
     }
     onScreen.value = true;
+    // A floater is the chat again, so "open in full" comes back to it, not
+    // to the panel. A plain hide and show keeps the panel.
+    if (mode == GaiaMode.small || mode == GaiaMode.large) closePanel();
     return _window.show(
       mode,
       () {
@@ -3217,6 +3332,9 @@ class GaiaController extends ChangeNotifier {
 
   Future<void> selectChat(String chatId) async {
     revealing = null;
+    // Picked from search, a toast or the Actions tab: shown, not left under
+    // the settings panel.
+    closePanel();
     if (chatId != currentChatId) {
       pickedTier = null;
       newChatProject = null;
@@ -5227,6 +5345,48 @@ class GaiaController extends ChangeNotifier {
     if (send) return this.send(next.text);
     draft.text = draft.text.isEmpty ? next.text : '${draft.text}\n${next.text}';
     notifyListeners();
+  }
+
+  /// The settings panel's Queue tab (GAIA_SETTINGS_HLD.md §4): waiting
+  /// prompt [id] rewritten as [text]. The `queue` event brings it back.
+  Future<void> editQueued(String id, String text) =>
+      _request('queueEdit', {'id': id, 'text': text});
+
+  /// The Queue tab's delete.
+  Future<void> deleteQueued(String id) => _request('queueDelete', {'id': id});
+
+  /// The Queue tab's drag: [id] moved to [order] (`GaiaQueueItem.order`).
+  Future<void> reorderQueued(String id, double order) async {
+    final was = queue;
+    queue = [
+      for (final item in queue)
+        item.id == id ? item.copyWith(order: order) : item,
+    ]..sort((a, b) => a.order.compareTo(b.order));
+    notifyListeners();
+    try {
+      await _pipe.request('queueReorder', {'id': id, 'order': order});
+    } on GaiaPipeException catch (error) {
+      debugPrint('[gaia] queueReorder not saved: $error');
+      // Back to the order that's stored.
+      queue = was;
+      notifyListeners();
+    }
+  }
+
+  /// The Queue tab's switch: [chatId]'s drain mode on or off.
+  Future<void> setChatDrain(String chatId, bool drain) async {
+    final was = chats;
+    chats = [
+      for (final c in chats) c.id == chatId ? c.copyWith(drain: drain) : c,
+    ];
+    notifyListeners();
+    try {
+      await _pipe.request('setDrain', {'chatId': chatId, 'drain': drain});
+    } on GaiaPipeException catch (error) {
+      debugPrint('[gaia] setDrain not saved: $error');
+      chats = was;
+      notifyListeners();
+    }
   }
 
   /// `/drain` (§13): the chat in view's drain mode on or off.

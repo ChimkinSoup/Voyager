@@ -20,12 +20,14 @@ class GaiaCardTextField extends StatefulWidget {
   const GaiaCardTextField({
     super.key,
     required this.controller,
+    this.focusNode,
     this.labelText,
     this.maxLines = 1,
     this.style,
   });
 
   final TextEditingController controller;
+  final FocusNode? focusNode;
   final String? labelText;
   final int maxLines;
   final TextStyle? style;
@@ -72,6 +74,7 @@ class _GaiaCardTextFieldState extends State<GaiaCardTextField> {
     onPointerUp: _onUp,
     child: TextField(
       controller: widget.controller,
+      focusNode: widget.focusNode,
       minLines: 1,
       maxLines: widget.maxLines,
       style: widget.style,

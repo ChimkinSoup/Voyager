@@ -20,7 +20,8 @@
 #
 # Step language (one per line, or ';'-separated with `do`; '#' starts a comment):
 #   mode bg|fg                 switch input mode for the rest of the run
-#   activate                   focus Voyager (fails the run if it can't); switches to fg
+#   activate                   focus Voyager (fails the run if it can't, naming the screen
+#                              saver when that's what has the desktop); switches to fg
 #   park | unpark              bg: move the window off-screen (client 2880x1800, same coords
 #                              as maximized) / back to (0,0), never activating it
 #   key <chord>                e.g. key ctrl+slash | key esc | key ctrl+shift+tab | key f5
@@ -96,7 +97,14 @@ function Invoke-Step([string]$line) {
       if ($a[0] -ne 'bg' -and $a[0] -ne 'fg') { throw "mode must be bg or fg: $line" }
       $script:mode = $a[0]
     }
-    'activate' { $script:mode = 'fg'; if (-not [Voy]::Activate()) { throw "activate failed: $([Voy]::Status())" } }
+    'activate' {
+      $script:mode = 'fg'
+      if (-not [Voy]::Activate()) {
+        # The blank screen saver has the desktop: no foreground window, so it reads as locked.
+        if (Get-Process | Where-Object { $_.Name -like 'scrnsave*' }) { throw "activate failed: the screen saver is running, not a lock. Run 'voy.ps1 awake on' first" }
+        throw "activate failed: $([Voy]::Status())"
+      }
+    }
     'park' { [Bg]::Park() }
     'unpark' { [Bg]::Unpark() }
     'key' { if ($bg) { [Bg]::Chord($arg.Trim()) } else { [Voy]::Chord($arg.Trim()) } }

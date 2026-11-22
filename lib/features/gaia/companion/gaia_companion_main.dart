@@ -23,6 +23,7 @@ import 'package:voyager/features/gaia/usage/sources/codex_rate_limits.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_dev_pipe.dart';
 import 'package:voyager/features/gaia/companion/gaia_no_ding.dart';
+import 'package:voyager/features/gaia/companion/gaia_settings_panel.dart';
 import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
 import 'package:voyager/features/gaia/companion/gaia_tool_results.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
@@ -111,6 +112,10 @@ Future<void> gaiaCompanionMain({bool dev = false}) async {
     file: File(p.join(root.path, 'gaia', 'sidebar.json')),
   );
   await sidebar.load();
+  final panel = GaiaSettingsPanel(
+    file: File(p.join(root.path, 'gaia', 'settings_panel.json')),
+  );
+  await panel.load();
   final zoom = GaiaZoomLevel(
     file: File(p.join(root.path, 'gaia', 'zoom.json')),
   );
@@ -132,6 +137,7 @@ Future<void> gaiaCompanionMain({bool dev = false}) async {
   final controller = GaiaController(
     debug: debug,
     sidebar: sidebar,
+    panel: panel,
     zoom: zoom,
     commandUses: commandUses,
     history: history,

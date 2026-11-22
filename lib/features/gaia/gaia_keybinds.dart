@@ -3,9 +3,11 @@ import 'package:flutter/widgets.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 
 /// Gaia's rebindable keys (GAIA_HLD.md §9.1, §15.1): the composer's send,
-/// and the global hotkeys the main instance registers.
+/// the settings panel's (GAIA_SETTINGS_HLD.md §2.1), and the global hotkeys
+/// the main instance registers.
 enum GaiaKeybind {
   send('Send', 'Ctrl+Enter', global: false),
+  settings('Settings panel', 'Ctrl+,', global: false),
   small('Small floater', 'Ctrl+Alt+Space'),
   large('Large floater', 'Ctrl+Alt+Shift+Space'),
   // Unbound by default (§15.1).
@@ -94,6 +96,7 @@ class GaiaCombo {
       'Space' => 0x20,
       'Enter' => 0x0D,
       'Backspace' => 0x08,
+      ',' => 0xBC,
       _ when name.length > 1 => 0x6F + int.parse(name.substring(1)),
       // A letter or digit is its own code.
       _ => name.codeUnitAt(0),
@@ -124,6 +127,7 @@ final Map<String, (LogicalKeyboardKey, PhysicalKeyboardKey)> _keys = {
   'Space': (LogicalKeyboardKey.space, PhysicalKeyboardKey.space),
   'Enter': (LogicalKeyboardKey.enter, PhysicalKeyboardKey.enter),
   'Backspace': (LogicalKeyboardKey.backspace, PhysicalKeyboardKey.backspace),
+  ',': (LogicalKeyboardKey.comma, PhysicalKeyboardKey.comma),
   for (final (i, letter) in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').indexed)
     letter: (
       LogicalKeyboardKey(LogicalKeyboardKey.keyA.keyId + i),
