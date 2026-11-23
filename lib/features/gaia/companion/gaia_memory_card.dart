@@ -321,6 +321,148 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
   }
 }
 
+/// A rewrite of a memory the agent offered through `memory_revise`
+/// (GAIA_SETTINGS_HLD.md §7.4), in its reply, in [GaiaMemoryCard]'s look:
+/// what the memory said, struck through, over the rewrite. Open, with
+/// [onApply], the rewrite is an editor, and Apply saves what it says while
+/// [onDismiss] drops it; nothing waits on it. Otherwise it's a record of what
+/// came of it.
+class GaiaRevisionCard extends StatefulWidget {
+  const GaiaRevisionCard({
+    super.key,
+    required this.revision,
+    this.onApply,
+    this.onDismiss,
+  });
+
+  final GaiaRevisionPart revision;
+  final ValueChanged<String>? onApply;
+  final VoidCallback? onDismiss;
+
+  @override
+  State<GaiaRevisionCard> createState() => _GaiaRevisionCardState();
+}
+
+class _GaiaRevisionCardState extends State<GaiaRevisionCard> {
+  late final _text = TextEditingController(text: widget.revision.text)
+    // Apply follows whether there's text.
+    ..addListener(() => setState(() {}));
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  bool get _answerable => widget.revision.isOpen && widget.onApply != null;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final accent = theme.colorScheme.primary;
+    final revision = widget.revision;
+    final muted = theme.colorScheme.onSurfaceVariant;
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 520),
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: (_answerable ? accent : theme.colorScheme.outlineVariant)
+              .withValues(alpha: _answerable ? 0.7 : 0.4),
+        ),
+        color: accent.withValues(alpha: _answerable ? 0.08 : 0.03),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.edit_note,
+                size: 16,
+                color: gaiaAstralGoldFor(theme.brightness),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Rewrite this memory?',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (revision.why case final why?) ...[
+            const SizedBox(height: 4),
+            Text(
+              why,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.outline,
+              ),
+            ),
+          ],
+          const SizedBox(height: 8),
+          Text(
+            revision.was,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: muted,
+              decoration: TextDecoration.lineThrough,
+              decorationColor: muted,
+            ),
+          ),
+          const SizedBox(height: 6),
+          if (_answerable)
+            GaiaCardTextField(
+              controller: _text,
+              maxLines: 4,
+              style: theme.textTheme.bodyMedium,
+            )
+          else
+            Text(revision.text, style: theme.textTheme.bodyMedium),
+          const SizedBox(height: 8),
+          if (_answerable)
+            Row(
+              children: [
+                const Spacer(),
+                if (widget.onDismiss != null)
+                  GaiaButton(
+                    label: 'Dismiss',
+                    onPressed: widget.onDismiss,
+                    size: 28,
+                    color: theme.colorScheme.error,
+                  ),
+                const SizedBox(width: 8),
+                GaiaButton(
+                  label: 'Apply',
+                  onPressed: _text.text.trim().isEmpty
+                      ? null
+                      : () => widget.onApply!(_text.text.trim()),
+                  size: 28,
+                ),
+              ],
+            )
+          else
+            Text(
+              switch (revision.state) {
+                GaiaCardState.open => 'Not applied yet',
+                GaiaCardState.accepted => 'Applied',
+                _ => 'Dismissed',
+              },
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: revision.state == GaiaCardState.rejected
+                    ? kGaiaStatusRose
+                    : muted,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 /// A topic on the card: squared off with the composer's corners, its edge
 /// lit while hovered, as a still [GaiaButton]'s is: in the accent, or in
 /// rose when a click [removes] it.

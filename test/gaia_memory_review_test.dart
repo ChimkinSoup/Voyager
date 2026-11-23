@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
+import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
 import 'package:voyager/features/gaia/companion/gaia_app.dart';
+import 'package:voyager/features/gaia/companion/gaia_chat_body.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_memory_review.dart';
 import 'package:voyager/features/gaia/companion/gaia_settings_panel.dart';
@@ -78,6 +80,8 @@ void main() {
 
   /// The trash, so a revert can bring one back.
   final trash = <String, GaiaMemory>{};
+
+  late FakeClaudeRunner runner;
 
   Future<GaiaController> pump(
     WidgetTester tester, {
@@ -187,6 +191,18 @@ void main() {
             ];
           case 'editMemory':
             change(id!, (m) => m.copyWith(text: params['text']! as String));
+          case 'offerRevision':
+            final arguments = params['arguments']! as Map;
+            final was = stored(arguments['id']! as String)!;
+            return {
+              'memoryId': was.id,
+              'was': was.text,
+              'text': arguments['text'],
+            };
+          case 'reviseMemory':
+            if (params['accept'] == true) {
+              change(id!, (m) => m.copyWith(text: params['text']! as String));
+            }
           case 'revertMemories':
             for (final json in params['memories']! as List) {
               final was = gaiaMemoryFromJson(json! as Map);
@@ -215,7 +231,7 @@ void main() {
     final controller = GaiaController(
       pipe: companion,
       window: FakeGaiaWindow(),
-      runners: {kGaiaClaudeCodeAdapter: FakeClaudeRunner()},
+      runners: {kGaiaClaudeCodeAdapter: runner = FakeClaudeRunner()},
       cliVersions: {kGaiaClaudeCodeAdapter: () async => (2, 1, 310)},
       exit: (_) {},
       utility: utility,
@@ -627,6 +643,127 @@ void main() {
     expect(controller.memorySorted['u0']?.topicIds, ['t1']);
     expect(inReview(find.text('Exam on Monday')), findsOneWidget);
     // The controller's drafts timer.
+    await tester.pump(const Duration(seconds: 2));
+  });
+
+  Finder askChat() => inReview(find.byType(GaiaChatBody));
+
+  testWidgets('Ask Gaia (/) opens the memory\'s chat beside the card, the '
+      'only chat built; another card hides it and coming back shows it; Esc '
+      'in its composer closes it and gives the keys back; the chat that was '
+      'open is back after', (tester) async {
+    memories = [
+      memory('p0', 'I prefer metric units', status: GaiaMemoryStatus.proposed),
+      memory('p1', 'Fact 1', status: GaiaMemoryStatus.proposed),
+    ];
+    final controller = await pump(tester);
+    final before = controller.currentChatId;
+    await tester.tap(find.text('Review'));
+    await settle(tester);
+
+    await key(tester, LogicalKeyboardKey.slash);
+    expect(controller.asking, 'p0');
+    expect(askChat(), findsOneWidget);
+    expect(find.byType(GaiaChatBody), findsOneWidget, reason: 'only one');
+    expect(find.text('About: I prefer metric units'), findsOneWidget);
+    // Beside the card in a wide window.
+    expect(
+      tester.getTopLeft(askChat()).dx,
+      greaterThan(
+        tester.getTopRight(inReview(find.text('I prefer metric units'))).dx,
+      ),
+    );
+    // Typed into the composer, not the deck's keys.
+    await tester.enterText(find.byType(EditableText).last, 'd');
+    await settle(tester);
+    expect(stored('p0')!.status, GaiaMemoryStatus.proposed);
+
+    // Skip moves on: the chat goes, and comes back with its card.
+    await tester.tap(inReview(find.text('Skip')));
+    await settle(tester);
+    expect(controller.asking, isNull);
+    expect(askChat(), findsNothing);
+    await key(tester, LogicalKeyboardKey.arrowLeft);
+    expect(controller.asking, 'p0');
+    expect(askChat(), findsOneWidget);
+
+    controller.focusComposer();
+    await settle(tester);
+    await key(tester, LogicalKeyboardKey.escape);
+    expect(controller.asking, isNull);
+    expect(askChat(), findsNothing);
+    expect(controller.currentChatId, before);
+    expect(
+      find.byType(GaiaMemoryReviewView),
+      findsOneWidget,
+      reason: 'one Esc',
+    );
+    // The keys are the deck's again, and the chat doesn't come back with
+    // its card.
+    await key(tester, LogicalKeyboardKey.arrowRight);
+    await key(tester, LogicalKeyboardKey.arrowLeft);
+    expect(askChat(), findsNothing);
+
+    await key(tester, LogicalKeyboardKey.slash);
+    expect(askChat(), findsOneWidget);
+    controller.closePanel();
+    await settle(tester);
+    expect(controller.asking, isNull);
+    expect(controller.currentChatId, before);
+    expect(find.byType(GaiaChatBody), findsOneWidget);
+    await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets("a narrow window puts the chat under the card; a list card's "
+      'Ask Gaia opens that memory alone with its chat', (tester) async {
+    memories = [memory('a1', 'I like tea')];
+    final controller = await pump(tester);
+    tester.view.physicalSize = const Size(800, 1000);
+    await settle(tester);
+    controller.startReview(GaiaMemoryReview.memory(controller, stored('a1')!));
+    // The chat opens a frame after the review shows.
+    await settle(tester);
+    await settle(tester);
+    expect(inReview(find.text('Reviewing this memory')), findsOneWidget);
+    expect(controller.asking, 'a1');
+    expect(
+      tester.getTopLeft(askChat()).dy,
+      greaterThan(tester.getBottomLeft(inReview(find.text('I like tea'))).dy),
+    );
+    await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets('a rewrite Gaia offers in the chat, applied, changes the card '
+      'above it', (tester) async {
+    memories = [memory('a1', 'I really do like to drink tea a lot')];
+    final controller = await pump(tester);
+    controller.startReview(GaiaMemoryReview.memory(controller, stored('a1')!));
+    await settle(tester);
+    expect(controller.asking, 'a1');
+
+    runner.turns.add([const ClaudeTextStart(), const ClaudeTextDelta('Sure')]);
+    await tester.runAsync(() async {
+      unawaited(controller.send('Rewrite this so it\'s more compact'));
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+    await settle(tester);
+    expect(runner.sent.last.prompt, contains('Id: a1'));
+    await tester.runAsync(
+      () => runner.sent.last.tools!.call('memory_revise', {
+        'id': 'a1',
+        'text': 'I like tea',
+      }),
+    );
+    await settle(tester);
+    expect(find.text('Rewrite this memory?'), findsOneWidget);
+    await tester.tap(find.text('Apply'));
+    await settle(tester);
+    await settle(tester);
+    expect(stored('a1')!.text, 'I like tea');
+    expect(inReview(find.text('I like tea')), findsWidgets);
+    expect(find.text('Applied'), findsOneWidget);
+    runner.finish(controller.currentChatId!);
+    await settle(tester);
     await tester.pump(const Duration(seconds: 2));
   });
 }

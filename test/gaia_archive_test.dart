@@ -204,4 +204,33 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 2));
   });
+
+  test('a chat archived as it was made, as an Ask Gaia chat is, stays '
+      'archived through its messages until it is unarchived '
+      '(GAIA_SETTINGS_HLD.md §7.2)', () {
+    final made = _chat('about').copyWith(archivedAt: _at);
+    expect(made.archived, isTrue);
+    final answered = made.copyWith(
+      lastMessageAt: _at.add(const Duration(minutes: 5)),
+    );
+    expect(answered.archived, isTrue);
+    expect(gaiaArchived(answered, false).archived, isFalse);
+    // Archived again later, a message brings it back as any other.
+    final again = gaiaArchived(gaiaArchived(answered, false), true);
+    expect(
+      again
+          .copyWith(
+            lastMessageAt: DateTime.now().toUtc().add(
+              const Duration(minutes: 1),
+            ),
+          )
+          .archived,
+      isFalse,
+    );
+    expect(
+      GaiaChat.fromJson(answered.toJson()).archived,
+      isTrue,
+      reason: 'as it syncs',
+    );
+  });
 }

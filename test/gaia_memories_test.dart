@@ -162,6 +162,35 @@ void main() {
     );
   });
 
+  test('memory_search finds memories waiting in the inbox too, marked, and '
+      'not archived ones', () async {
+    await repository.upsertMemory(_memory('kept', 'Favourite fruit: quince'));
+    await repository.upsertMemory(
+      _memory(
+        'waiting',
+        'Favourite fruit is the MARZIPAN-9 quince',
+        status: GaiaMemoryStatus.proposed,
+      ),
+    );
+    await repository.upsertMemory(
+      _memory(
+        'old',
+        'Favourite fruit was the pear',
+        status: GaiaMemoryStatus.archived,
+      ),
+    );
+    final found = await memories.tool('c1', 'memory_search', {
+      'query': 'favourite fruit',
+    });
+    expect(found, contains('(id kept; saved'));
+    expect(found, contains('(id waiting; in the inbox, not yet approved;'));
+    expect(found, isNot(contains('pear')));
+    expect(
+      await memories.tool('c1', 'memory_search', {'query': 'tea'}),
+      'No memories match. The user has 1, and 1 waiting in the inbox.',
+    );
+  });
+
   test('memory_propose puts it in the inbox from its chat, once', () async {
     final first = await memories.tool('c1', 'memory_propose', {
       'text': ' Prefers tea ',

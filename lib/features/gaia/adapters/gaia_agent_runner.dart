@@ -168,11 +168,13 @@ class GaiaCardUpdate extends GaiaAgentEvent {
   final bool saveNow;
 }
 
-/// The agent offered a memory (§11): its card goes after the reply so far.
+/// The agent offered a memory (§11), a [GaiaMemoryPart], or a rewrite of one
+/// (GAIA_SETTINGS_HLD.md §7.4), a [GaiaRevisionPart]: its card goes after the
+/// reply so far.
 class GaiaMemoryOffered extends GaiaAgentEvent {
   const GaiaMemoryOffered(this.memory);
 
-  final GaiaMemoryPart memory;
+  final GaiaPart memory;
 }
 
 /// The account's usage, as the backend reported it mid-turn.

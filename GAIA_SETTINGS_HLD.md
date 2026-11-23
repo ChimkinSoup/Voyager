@@ -1,6 +1,6 @@
 # Gaia — Settings Panel and Memory Review (HLD)
 
-Status: **Design (2026-11-20), open questions decided (§11). Phases 1 and 2 built and checked live 2026-11-22 (§10.1, §10.2); Phase 3 built and checked live the same day (§10.3); Phase 4 built and checked live 2026-11-23 (§10.4); Phase 5 built and checked live the same day (§10.5); Phases 6-7 not built.** Moves the Gaia page's management tabs
+Status: **Design (2026-11-20), open questions decided (§11). Phases 1 and 2 built and checked live 2026-11-22 (§10.1, §10.2); Phase 3 built and checked live the same day (§10.3); Phase 4 built and checked live 2026-11-23 (§10.4); Phase 5 built and checked live the same day (§10.5); Phase 6 built and checked live 2026-11-23 (§10.6); Phase 7 not built.** Moves the Gaia page's management tabs
 (GAIA_HLD.md §17) into the companion, in Gaia's own look, so everything Gaia needs is
 reachable from the Gaia window. The Memories tab is redesigned rather than ported, and
 gains a new card-by-card review with an "Ask Gaia" chat about the memory in front of you.
@@ -859,6 +859,114 @@ with the undos. It didn't join the deck (Phase 6).
 card (qa-128 has no merge suggestion; widget- and host-tested); a proposal's chat card
 reopening on undo (the proposals reviewed live came from the curator and had no card;
 host-tested); another device and the phone.
+
+### 10.6 Phase 6 as built (2026-11-23)
+
+**Built:** `_ChatColumn` in `gaia_app.dart` (the messages over the composer), built by the
+shell for the chat and by the panel for an Ask Gaia chat, never both: while the panel shows
+one, the chat kept under the panel is an empty box. `GaiaMemoryRefPart` and
+`GaiaRevisionPart` in `gaia_models.dart`; `GaiaRevisionCard` in `gaia_memory_card.dart`;
+`memory_revise` in `gaia_mcp.dart`. On the controller: `asking`, `askAbout`, `closeAsk`,
+`draftAbout` and `decideRevision`. On the review: `asked`, `dismissAsk`, `addProposal`, and
+a one-memory deck (`GaiaMemoryReview.memory`). On the host: `GaiaMemories.reviseOffer` and
+the store's `setRevisionCard`. New requests: `offerRevision {arguments}` (a `memory_revise`
+call's `{memoryId, was, text, why}`, nothing written) and `reviseMemory {chatId, cardId,
+memoryId, text, accept}`.
+
+**Where it differs from the design above:**
+- **The chat is saved with its first message**, not when Ask Gaia opens (§7.2). Until then it's
+  an id the controller holds, so asking about a card and moving on leaves no empty chat behind.
+  It's made with that id, titled `About: <the memory's first line>` (never retitled), in no
+  project.
+- **"Archived from the start" is `archivedAt == createdAt`.** `GaiaChat.archived` keeps such a
+  chat archived through its messages until it's unarchived; any other archived chat still comes
+  back on a new message. No schema change. A build from before this one shows an answered review
+  chat in recents.
+- **Ask Gaia on a list card opens that memory as a one-card review** ("Reviewing this memory")
+  with its chat, rather than a chat under the card inside the list's scroll. It's on the card's
+  hover actions and its ⋯ menu, for proposed and remembered memories (not archived). **/** works in
+  a review only: list cards don't take the focus.
+- **No slide animation**: the chat appears under the card, or beside it past 1,000 px
+  (`kGaiaAskBesideWidth`), at 560 px wide at most.
+- **When it shows:** for the card in front, once asked, for the rest of the review. Another card
+  hides it; coming back shows it. Esc in its composer closes it, and then it stays closed for that
+  card. Another tab, closing the panel, ending the review, or a recall or inbox chip hides it; the
+  chat that was open is back each time. Back on Memories, the review shows it again.
+- **The revision card is its own widget** (`GaiaRevisionCard`), in the memory card's look, over
+  its own part with its own id, so two rewrites of one memory are two cards. `GaiaMemoryOffered`
+  carries either part. A run's later writes keep a decided card as decided, as memory cards are.
+- **Apply edits the memory** through the same `_editMemory` as the panel's edit (a proposal's
+  open card in its chat follows), and is refused while aborted. Dismiss writes nothing to the
+  memory. The review's list is read again after an Apply, so the card above changes at once.
+- **`memory_search` results now carry each memory's id**, which `memory_revise` needs for a memory
+  found by search.
+- **`memory_search` searches the inbox too.** It used to search only remembered memories, so "Is
+  this already in memories?" missed duplicates waiting in the same inbox deck (found live). A
+  proposed memory now comes back marked `in the inbox, not yet approved`, and archived ones still
+  don't. When nothing matches, the agent is told both counts ("The user has 331, and 34 waiting in
+  the inbox."). The tool's description says so. This applies in every chat, not only review
+  chats.
+- **A session joining an Ask Gaia chat is told the memory again.** That means a handoff to the
+  other vendor, or a retry after a first send that failed. The first message's
+  `<memory_under_review>` reached only the session it was sent to. Before this, a new session got
+  the memory as one `About memory …` line in the `<gaia_transcript>`, as another agent's history,
+  and Codex took "Rewrite this" to mean its own last reply (found live). Now the block follows the
+  transcript, ahead of the message, with the memory as the loaded list has it now, since a
+  rewrite may have been applied. Without the list, it uses the copy on the first message. A
+  session that already has it (a resume, or a catch-up) isn't told again.
+- **A proposal from an Ask Gaia chat** joins the end of an inbox deck. Other decks don't take it.
+- **The phone** shows the `About:` chip and the revision card read-only. It gets no Ask Gaia.
+- **Still not built: the source line's read-only split** (§6.2, left over from Phase 5). "from
+  *chat*, Nov 20" is still text.
+
+**Tests:** `gaia_memory_review_test.dart` has 3 more. **/** opens the chat beside the card as the
+only chat built, with the `About:` chip and typing going to the composer, not the deck. Skip hides
+it, ← brings it back, and Esc closes it, keeping it closed and giving the keys back. Closing the
+panel restores the chat. A narrow window puts the chat under the card, and a list card's Ask Gaia
+deck opens with its chat. A rewrite offered in the chat, applied, changes the card above.
+`gaia_controller_test.dart` has 3 more. A `memory_revise` card is applied with an edit, kept
+through the run's writes, and a second one dismissed. A wrong id and the same text are refused
+with no card. An Ask Gaia chat is unsaved until its first message, whose prompt has
+`<memory_under_review>` ahead of the question; it stays archived after the reply, keeps its
+title, gives back the earlier chat, and is the same chat when asked again. Handed over to Codex,
+the chat's memory comes after the transcript with its applied rewrite, and back on Claude it
+isn't told again. `gaia_memories_test.dart` has 1 more: `memory_search` finds an inbox memory,
+marked, and not an archived one, and gives both counts when nothing matches.
+`gaia_host_test.dart` has 1 more: `offerRevision`'s checks, and `reviseMemory` refused while
+aborted, then dismiss and apply. `gaia_memory_card_test.dart` has 3 more: the two parts' JSON, the
+preamble, kept decisions, and the revision card's Apply, Dismiss and record. `gaia_archive_test.dart`
+has 1 more: archived from the start. `gaia_tools_test.dart` lists `memory_revise`. The full
+`test/gaia_*_test.dart` run: 2,063 passed, 25 skipped, none failed.
+
+**Checked live (2026-11-23, `gaiaqa`, qa-128):** these ran before the two fixes above, through
+real CLI turns, with background input only. The three §7.1 questions were asked on Claude (Haiku)
+and on Codex (`gpt-6-luna`: this ChatGPT account refuses the profile's `gpt-6.1-sol`), each in an
+inbox review.
+- "Is this already mentioned in memories?" called `memory_search`, and its results carried ids.
+  Both agents said no while three near-copies sat in the inbox, which led to the first fix.
+- "Rewrite this so it's more compact" gave a revision card each time. Apply, with the text edited
+  on Claude and as offered on Codex, changed the card above at once, and the memory stayed
+  proposed. A second rewrite of the same memory came as a second card, and Dismiss left the
+  memory as it was. Stored parts: `accepted`, then `rejected`.
+- "Is the … version in your memories? If not, add it" gave a memory card ("Also in the memory
+  inbox"), and the deck went from 33 to 34, then 35.
+- Each chat was stored titled `About: …` with `archived_at == created_at` and no project, stayed
+  archived after its replies, and never showed in the sidebar. One opened from a list card and
+  left without a message wasn't saved.
+- The chat showed beside the card (2,880 px window). Skip hid it, ← and → brought it back, and
+  Esc closed it, keeping it closed for that card with the deck's keys back. Another tab hid it and
+  gave back the earlier chat; Memories showed it again. Closing the panel restored the chat that
+  was open, and reopening it showed the review with its chat.
+- The list card's ⋯ menu Ask Gaia opened "Reviewing this memory" (1 / 1) with its chat and chip.
+- A first Codex send that failed (the model) went out on a new thread when retried, through the
+  handoff, which led to the second fix.
+- One Esc then → seemed to drop the arrow once and never did again. Tests couldn't make the
+  focus fall anywhere but the deck either.
+- No error in the profile's error log.
+
+**Not checked live:** the two fixes (tested above), the narrow window's chat under the card, the
+list card's hover icon (the ⋯ menu was used), the phone's read-only chip and card, and another
+device.
 
 ## 11. Decisions (2026-11-20)
 

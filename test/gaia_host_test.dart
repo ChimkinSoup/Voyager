@@ -2194,16 +2194,16 @@ void main() {
         request(async, 'enqueue', {'chatId': null, 'text': 'two'});
 
         request(async, 'queueEdit', {'id': first, 'text': 'one, edited'});
-        expect([for (final item in queued(async)) item['text']], [
-          'one, edited',
-          'two',
-        ]);
+        expect(
+          [for (final item in queued(async)) item['text']],
+          ['one, edited', 'two'],
+        );
 
         request(async, 'queueReorder', {'id': first, 'order': 5});
-        expect([for (final item in queued(async)) item['text']], [
-          'two',
-          'one, edited',
-        ]);
+        expect(
+          [for (final item in queued(async)) item['text']],
+          ['two', 'one, edited'],
+        );
 
         request(async, 'queueDelete', {'id': first});
         expect([for (final item in queued(async)) item['text']], ['two']);
@@ -2476,6 +2476,116 @@ void main() {
       },
     );
 
+    test('offerRevision checks the memory and the text and writes nothing; '
+        'reviseMemory applies or dismisses the card, Apply refused while '
+        'aborted (GAIA_SETTINGS_HLD.md §7.4)', () {
+      fs.file('gaia_aborted').writeAsStringSync('2026-11-23');
+      final repository = DriftGaiaRepository(db);
+      run(show: true, memories: GaiaMemories(repository), (async, _) {
+        repository.upsertMemory(memory('m1', 'I prefer metric units'));
+        async.flushMicrotasks();
+        connect(async);
+        expect(
+          request(async, 'offerRevision', {
+            'arguments': {
+              'id': 'm1',
+              'text': ' Metric, always ',
+              'why': 'Shorter',
+            },
+          }),
+          {
+            'memoryId': 'm1',
+            'was': 'I prefer metric units',
+            'text': 'Metric, always',
+            'why': 'Shorter',
+          },
+        );
+        expect(
+          refusal(
+            () => request(async, 'offerRevision', {
+              'arguments': {'id': 'nope', 'text': 'Metric'},
+            }),
+          ),
+          contains('No memory has the id "nope"'),
+        );
+        expect(
+          refusal(
+            () => request(async, 'offerRevision', {
+              'arguments': {'id': 'm1', 'text': 'I prefer metric units'},
+            }),
+          ),
+          'The memory already says exactly that.',
+        );
+        GaiaMemory? read() {
+          GaiaMemory? found;
+          repository.getMemory('m1').then((m) => found = m);
+          async.flushMicrotasks();
+          return found;
+        }
+
+        expect(read()!.text, 'I prefer metric units', reason: 'offered only');
+
+        final at = DateTime.utc(2026, 11, 23);
+        request(async, 'putChat', {
+          'chat': GaiaChat(
+            id: 'c1',
+            title: 'About',
+            createdAt: at,
+            updatedAt: at,
+            lastMessageAt: at,
+          ).toJson(),
+        });
+        GaiaRevisionPart card(String id) => GaiaRevisionPart(
+          id: id,
+          memoryId: 'm1',
+          was: 'I prefer metric units',
+          text: 'Metric, always',
+        );
+        request(async, 'putMessage', {
+          'message': GaiaMessage(
+            id: 'r1',
+            chatId: 'c1',
+            seq: 0,
+            role: GaiaMessageRole.assistant,
+            parts: [card('a'), card('b')],
+            status: GaiaMessageStatus.complete,
+            createdAt: at,
+            updatedAt: at,
+          ).toJson(),
+        });
+        List<GaiaRevisionPart> cards() => GaiaMessage.fromJson(
+          ((request(async, 'messages', {'chatId': 'c1'})! as List).single
+                  as Map)
+              .cast(),
+        ).parts.whereType<GaiaRevisionPart>().toList();
+        Map<String, Object?> decide(String cardId, bool accept) => {
+          'chatId': 'c1',
+          'cardId': cardId,
+          'memoryId': 'm1',
+          'text': 'I always use metric units',
+          'accept': accept,
+        };
+
+        expect(
+          refusal(() => request(async, 'reviseMemory', decide('a', true))),
+          'Gaia is aborted. Rearm to save memories.',
+        );
+        expect(read()!.text, 'I prefer metric units');
+        request(async, 'reviseMemory', decide('b', false));
+        expect(read()!.text, 'I prefer metric units', reason: 'dismissed');
+        request(async, 'rearm');
+        request(async, 'reviseMemory', decide('a', true));
+        expect(read()!.text, 'I always use metric units');
+        expect(
+          [for (final card in cards()) (card.state, card.text)],
+          [
+            (GaiaCardState.accepted, 'I always use metric units'),
+            (GaiaCardState.rejected, 'I always use metric units'),
+          ],
+        );
+      });
+    });
+
     test('archive, remember again, delete and undelete, pin; a proposal '
         'remembered with no chat id, and one an active one says merged', () {
       final repository = DriftGaiaRepository(db);
@@ -2728,10 +2838,9 @@ void main() {
           ],
         });
         expect(list().topics.map((t) => t.id), unorderedEquals(['a', 'b']));
-        expect(
-          list().memories.singleWhere((m) => m.id == 'm2').topicIds,
-          ['b'],
-        );
+        expect(list().memories.singleWhere((m) => m.id == 'm2').topicIds, [
+          'b',
+        ]);
 
         // Not now, and kept apart, each undone: suggested again.
         expect(list().pins.map((p) => p.memory.id), ['m2']);

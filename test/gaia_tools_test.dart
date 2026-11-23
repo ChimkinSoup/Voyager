@@ -70,6 +70,7 @@ void main() {
         'propose_reminder',
         'memory_search',
         'memory_propose',
+        'memory_revise',
         'project_chats',
         'project_search',
         'project_read',

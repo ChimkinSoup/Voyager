@@ -1963,12 +1963,145 @@ class GaiaController extends ChangeNotifier {
   Future<void> openMemory(String id) async {
     revealMemoryId = id;
     // The list shows it, not a review in progress.
+    closeAsk();
     review = null;
     // The list last read may be from before [id] was remembered: the tab
     // waits for a fresh one to look for it in.
     memoryList = null;
     await openPanel(tab: GaiaPanelTab.memories);
   }
+
+  /// Revision card [revision] in [message] applied as [text] says, or
+  /// dismissed (GAIA_SETTINGS_HLD.md §7.4): the memory changed, and the card
+  /// saying so. False, with a toast saying why, for one refused.
+  Future<bool> decideRevision(
+    GaiaMessage message,
+    GaiaRevisionPart revision, {
+    required bool accept,
+    String? text,
+  }) async {
+    final said = (text ?? revision.text).trim();
+    try {
+      await _pipe.request('reviseMemory', {
+        'chatId': message.chatId,
+        'cardId': revision.id,
+        'memoryId': revision.memoryId,
+        'text': said,
+        'accept': accept,
+      });
+    } on GaiaPipeException catch (error) {
+      _note(
+        accept ? 'Not applied' : 'Not dismissed',
+        error.message,
+        error: true,
+      );
+      return false;
+    }
+    final shown = _shown(message);
+    if (shown != null) {
+      final decided = revision.decided(
+        accept ? GaiaCardState.accepted : GaiaCardState.rejected,
+        text: said,
+      );
+      _replace(
+        shown,
+        shown.copyWith(
+          parts: [
+            for (final p in shown.parts)
+              p is GaiaRevisionPart && p.id == revision.id ? decided : p,
+          ],
+          bumpVersion: false,
+          touch: false,
+        ),
+      );
+    }
+    // The card above an Ask Gaia chat says it at once.
+    if (accept && memoryList != null) await _loadMemories();
+    return true;
+  }
+
+  /// The memory whose Ask Gaia chat the settings panel shows
+  /// (GAIA_SETTINGS_HLD.md §7), the current chat while it does; null when
+  /// none is showing.
+  String? asking;
+
+  /// Each memory's Ask Gaia chat this run, by memory id (§7.1): one per
+  /// memory, so "this" is always the card in front.
+  final _askChats = <String, String>{};
+
+  /// What each Ask Gaia chat is about, by its chat id: its first message
+  /// carries it (§7.3).
+  final _askRefs = <String, GaiaMemoryRefPart>{};
+
+  /// The chat in view before Ask Gaia, back once it closes.
+  String? _askReturn;
+
+  /// [memory]'s Ask Gaia chat shown as the current chat, made for it if it
+  /// has none yet: not saved until its first message is sent, then archived
+  /// from the start (§7.2). The chat in view is back once it closes.
+  void askAbout(GaiaMemory memory) {
+    if (asking == memory.id) return;
+    if (asking == null) _askReturn = currentChatId;
+    final chatId = _askChats[memory.id] ??= _uuid.v4();
+    if (_chat(chatId) == null) {
+      _askRefs[chatId] = _memoryRef(memory);
+      _messages.putIfAbsent(chatId, () => []);
+    }
+    asking = memory.id;
+    _viewChat(chatId);
+    notifyListeners();
+    if (!_messages.containsKey(chatId)) unawaited(_load(chatId));
+    SchedulerBinding.instance.addPostFrameCallback((_) => focusComposer());
+  }
+
+  /// [memory] as an Ask Gaia chat's first message carries it (§7.3).
+  GaiaMemoryRefPart _memoryRef(GaiaMemory memory) {
+    final tree = GaiaTopicTree(memoryList?.topics ?? const []);
+    return GaiaMemoryRefPart(
+      memoryId: memory.id,
+      text: memory.text,
+      topics: [
+        for (final id in memory.topicIds)
+          if (tree.path(id) case final path when path.isNotEmpty)
+            path.join(' › '),
+      ],
+      status: memory.status,
+      pinned: memory.pinned,
+    );
+  }
+
+  /// What a session joining Ask Gaia chat [chatId] is told the chat is
+  /// about (§7.3), outside the transcript, where a one-line mention left the
+  /// agent unsure what "this" was: the memory as it is now when the list
+  /// has it, since a rewrite may have been applied. Null for another chat.
+  GaiaMemoryRefPart? _joiningAbout(String chatId) {
+    final ref = (_messages[chatId] ?? const <GaiaMessage>[])
+        .expand((message) => message.parts)
+        .whereType<GaiaMemoryRefPart>()
+        .firstOrNull;
+    if (ref == null) return null;
+    final memory = memoryList?.memories.firstWhereOrNull(
+      (memory) => memory.id == ref.memoryId,
+    );
+    return memory == null ? ref : _memoryRef(memory);
+  }
+
+  /// The Ask Gaia chat hidden, the chat that was in view back. [dismiss]ed
+  /// (Esc in its composer), its card in the review doesn't bring it back.
+  void closeAsk({bool dismiss = false}) {
+    final memoryId = asking;
+    if (memoryId == null) return;
+    asking = null;
+    _viewChat(_askReturn);
+    _askReturn = null;
+    if (dismiss) review?.dismissAsk(memoryId);
+    notifyListeners();
+  }
+
+  /// The memory the Ask Gaia chat in view is about, while nothing has been
+  /// sent in it: the composer's chip.
+  GaiaMemoryRefPart? get draftAbout =>
+      currentChat == null ? _askRefs[currentChatId] : null;
 
   /// Memory card [memory], dismissed from its card, open again in [message]
   /// and the memory inbox. Nothing when it's been decided otherwise since.
@@ -3020,8 +3153,10 @@ class GaiaController extends ChangeNotifier {
       ...saved,
     ]..sort(gaiaChatListed);
     final current = currentChatId;
+    // An Ask Gaia chat isn't saved until its first message is sent (§7.2).
     if (current != null &&
         !_running.contains(current) &&
+        current != _askChats[asking] &&
         !chats.any((chat) => chat.id == current)) {
       _viewChat(null);
       // What was typed in it goes to a new chat, as a failed new chat's does.
@@ -3251,6 +3386,7 @@ class GaiaController extends ChangeNotifier {
   /// its composer given the focus once it's built again.
   void closePanel() {
     if (!panel.open) return;
+    closeAsk();
     panel.setOpen(false);
     SchedulerBinding.instance.addPostFrameCallback((_) => focusComposer());
   }
@@ -3261,6 +3397,8 @@ class GaiaController extends ChangeNotifier {
 
   /// The settings panel's tab strip: [tab] shown, fetched afresh.
   void showPanelTab(GaiaPanelTab tab) {
+    // Only the review shows it; back on Memories, the review asks again.
+    if (tab != panel.tab) closeAsk();
     panel.setTab(tab);
     unawaited(_loadPanelTab());
   }
@@ -3399,6 +3537,7 @@ class GaiaController extends ChangeNotifier {
   /// its inbox, in the Gaia window.
   Future<void> openInbox() async {
     revealInbox = true;
+    closeAsk();
     review = null;
     await openPanel(tab: GaiaPanelTab.memories);
   }
@@ -3464,6 +3603,7 @@ class GaiaController extends ChangeNotifier {
 
   void endReview() {
     if (review == null) return;
+    closeAsk();
     review = null;
     notifyListeners();
   }
@@ -6447,11 +6587,20 @@ class GaiaController extends ChangeNotifier {
     }
     var chat = remote == null ? currentChat : _chat(remote.chatId);
     final isNew = chat == null;
+    // An Ask Gaia chat's first message (GAIA_SETTINGS_HLD.md §7.2): the chat
+    // is made with the id it was opened with, archived from the start, and
+    // the message carries the memory it's about.
+    final about = remote == null && resent == null && isNew
+        ? _askRefs[currentChatId]
+        : null;
     // A new chat's Auto notice, confirmed just now: setAuto carries it.
     var newAutoConsented = false;
     // Claimed now, so a second send can't start while this one's images
     // upload or its tier is picked.
-    final chatId = chat?.id ?? remote?.chatId ?? _uuid.v4();
+    final chatId =
+        chat?.id ??
+        remote?.chatId ??
+        (about == null ? _uuid.v4() : currentChatId!);
     _running.add(chatId);
     // Read once it's idle again.
     _curateSoon.remove(chatId)?.cancel();
@@ -6498,13 +6647,18 @@ class GaiaController extends ChangeNotifier {
     if (chat == null) {
       chat = GaiaChat(
         id: chatId,
-        projectId: remote == null
+        projectId: about != null
+            ? null
+            : remote == null
             ? project(newChatProject)?.id
             : remote.projectId,
-        title: _firstLineTitle(prompt, files, quotes),
+        title: about == null
+            ? _firstLineTitle(prompt, files, quotes)
+            : _clipTitle(about.label),
         createdAt: sentAt,
         updatedAt: sentAt,
         lastMessageAt: sentAt,
+        archivedAt: about == null ? null : sentAt,
         tier:
             remote?.tier ??
             (remote == null ? nextTier : defaultTier ?? lastTier),
@@ -6519,7 +6673,8 @@ class GaiaController extends ChangeNotifier {
               }
             : const {},
       );
-      if (remote == null) {
+      // Not an Ask Gaia chat's: the new chat's draft keeps them.
+      if (remote == null && about == null) {
         // The next new chat draws a line of its own.
         greeting = _heldGreetings.remove(GaiaDraft.newChatId);
         newChatProject = null;
@@ -6559,6 +6714,7 @@ class GaiaController extends ChangeNotifier {
           ),
         ...files,
         ...quotes,
+        ?about,
         ?context,
         ?control,
       ],
@@ -6606,10 +6762,15 @@ class GaiaController extends ChangeNotifier {
         if (greeting != null) {
           _heldGreetings.putIfAbsent(GaiaDraft.newChatId, () => greeting!);
         }
-        if (currentChatId == chatId) _viewChat(null);
-        // What was typed in it since goes back to a new chat with the rest.
-        if (_drafts.remove(chatId) case final typed?) {
-          _giveBack(null, typed.text.text, typed.images, typed.files);
+        if (about != null) {
+          // Still the Ask Gaia chat, unsent, to try again in.
+          _messages[chatId] = [];
+        } else {
+          if (currentChatId == chatId) _viewChat(null);
+          // What was typed in it since goes back to a new chat with the rest.
+          if (_drafts.remove(chatId) case final typed?) {
+            _giveBack(null, typed.text.text, typed.images, typed.files);
+          }
         }
       }
       if (remote != null || !giveBack) {
@@ -6635,7 +6796,12 @@ class GaiaController extends ChangeNotifier {
           ))
             quote,
       ]);
-      _giveBack(isNew ? null : chatId, text, imagesBack, files);
+      _giveBack(
+        isNew && about == null ? null : chatId,
+        text,
+        imagesBack,
+        files,
+      );
       _reportRuns();
       _settleDrain();
     }
@@ -6723,6 +6889,7 @@ class GaiaController extends ChangeNotifier {
             ...imageParts,
             ...files,
             ...quotes,
+            ?about,
             ?context,
             ?control,
           ],
@@ -6902,6 +7069,7 @@ class GaiaController extends ChangeNotifier {
       // Titled now, while the reply runs, so the sidebar, the tray and the
       // reply's toast have it; unless renamed while it was unsaved.
       if (!debug.dummyMode &&
+          about == null &&
           _titledOnSend(prompt) &&
           chat.title == _firstLineTitle(prompt, files, quotes)) {
         unawaited(_retitle(chatId, topic));
@@ -7033,6 +7201,7 @@ class GaiaController extends ChangeNotifier {
       ?context?.preamble,
       ?control?.preamble,
       for (final quote in quotes) quote.preamble,
+      ?about?.preamble,
       // Empty when only files were sent.
       if (prompt.isNotEmpty) prompt,
       if (files.isNotEmpty) gaiaFilesPreamble(files),
@@ -7149,7 +7318,11 @@ class GaiaController extends ChangeNotifier {
       };
       final paths = await Future.wait(ids.map(imageFile));
       final imagePaths = Map.fromIterables(ids, paths);
-      return '${gaiaHandoffPreamble(recent: recent, joining: session == null && fork == null, summary: summary, omitted: summary == null ? older.length : 0, labels: {for (final a in agents) a.model: a.label}, older: older, files: imagePaths)}\n$asked';
+      final joining = session == null && fork == null;
+      // An Ask Gaia chat's memory, told again to a session joining it: a
+      // handoff, or a retry after a first send that failed (§7.3).
+      final again = joining && about == null ? _joiningAbout(chatId) : null;
+      return '${gaiaHandoffPreamble(recent: recent, joining: joining, summary: summary, omitted: summary == null ? older.length : 0, labels: {for (final a in agents) a.model: a.label}, older: older, files: imagePaths)}\n${again == null ? '' : '${again.preamble}\n\n'}$asked';
     }
 
     var retried = false;
@@ -7272,6 +7445,12 @@ class GaiaController extends ChangeNotifier {
                   ),
                 ),
               );
+              // From an Ask Gaia chat during an inbox review: it joins the
+              // end of the deck (GAIA_SETTINGS_HLD.md §6.1).
+              if (_askChats.containsValue(chatId)) {
+                review?.addProposal(memoryId);
+                if (memoryList != null) unawaited(_loadMemories());
+              }
               // The agent named no topics: the utility model files it, and
               // its card shows where (GAIA_MEMORY_TOPICS_HLD.md §5).
               if (proposed['place'] == true) {
@@ -7285,6 +7464,29 @@ class GaiaController extends ChangeNotifier {
               }
             }
             return proposed['text']! as String;
+          }
+          // A card in the reply, applied or not by the user
+          // (GAIA_SETTINGS_HLD.md §7.4).
+          if (tool == 'memory_revise') {
+            final offer =
+                ((await _pipe.request('offerRevision', {
+                          'arguments': arguments,
+                        }))!
+                        as Map)
+                    .cast<String, Object?>();
+            onEvent(
+              GaiaMemoryOffered(
+                GaiaRevisionPart(
+                  id: _uuid.v4(),
+                  memoryId: offer['memoryId']! as String,
+                  was: offer['was']! as String,
+                  text: offer['text']! as String,
+                  why: offer['why'] as String?,
+                ),
+              ),
+            );
+            return 'Offered. A card in the chat shows the user the old text '
+                "and yours; the memory changes only if they apply it.";
           }
           return await _pipe.request(
                 isGaiaMemoryTool(tool)
@@ -8754,8 +8956,11 @@ class GaiaController extends ChangeNotifier {
         : files.isNotEmpty
         ? p.basename(files.first.path)
         : quotes.first.text.trim().split('\n').first;
-    return firstLine.length > 60 ? '${firstLine.substring(0, 60)}…' : firstLine;
+    return _clipTitle(firstLine);
   }
+
+  String _clipTitle(String line) =>
+      line.length > 60 ? '${line.substring(0, 60)}…' : line;
 
   /// Whether a new chat is titled from [prompt] as it's sent: not one of
   /// under three words, its image tokens aside, nor one of files or quotes

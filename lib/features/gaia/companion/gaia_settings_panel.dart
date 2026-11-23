@@ -86,9 +86,17 @@ class GaiaSettingsPanel extends ChangeNotifier {
 /// then the tab. Its keys: Esc closes it (a text box or menu with the focus
 /// keeps its own), Ctrl+1 to Ctrl+6 pick a tab.
 class GaiaSettingsPanelView extends StatelessWidget {
-  const GaiaSettingsPanelView({super.key, required this.controller});
+  const GaiaSettingsPanelView({
+    super.key,
+    required this.controller,
+    this.askChat,
+  });
 
   final GaiaController controller;
+
+  /// The Ask Gaia chat for the Memories tab's review, while it shows one
+  /// (GAIA_SETTINGS_HLD.md §7).
+  final Widget? askChat;
 
   @override
   Widget build(BuildContext context) {
@@ -130,6 +138,7 @@ class GaiaSettingsPanelView extends StatelessWidget {
                     ),
                     GaiaPanelTab.memories => GaiaMemoriesTab(
                       controller: controller,
+                      askChat: askChat,
                     ),
                   },
                 ),

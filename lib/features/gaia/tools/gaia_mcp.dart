@@ -401,8 +401,10 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
         "user names a file, folder, tool or setup you don't know, search "
         'here first, before searching the disk or the workspace: it is '
         'usually a memory, often with its path. Every '
-        'memory is searched, from any project. Each result shows the '
-        'topics it is filed under.',
+        'memory is searched, from any project, and so are those waiting in '
+        "the user's memory inbox, which say so: the user hasn't approved "
+        'them yet. Each result shows its id and the topics it is filed '
+        'under.',
     'inputSchema': {
       'type': 'object',
       'properties': {
@@ -470,6 +472,33 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
         },
       },
       'required': ['text'],
+    },
+  },
+  {
+    'name': 'memory_revise',
+    'description':
+        'Offer a rewrite of a memory the user already has: shorter, '
+        'clearer, corrected or brought up to date. Its id is in '
+        '<memory_under_review> or a memory_search result. A card shows the '
+        'user the old text and yours; the memory changes only if they apply '
+        'it.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'id': {'type': 'string', 'description': "The memory's id."},
+        'text': {
+          'type': 'string',
+          'description':
+              'The whole new text, replacing the old: complete on its own, '
+              'in the first person as the user would put it, and at most 500 '
+              'characters.',
+        },
+        'why': {
+          'type': 'string',
+          'description': 'What changed, in a few words, for the card.',
+        },
+      },
+      'required': ['id', 'text'],
     },
   },
   {

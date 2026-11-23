@@ -394,22 +394,9 @@ class _GaiaShell extends StatelessWidget {
     // In the Gaia window, over the sidebar and chat (GAIA_SETTINGS_HLD.md
     // §2.2), which are kept as they were underneath for when it closes.
     final panelShown = !floater && controller.panel.open;
-    // Built once out here, so a scroll's rebuild of the chat body around
-    // them leaves them be. Also rebuilt alone as a reply's text streams in.
-    final messages = ValueListenableBuilder(
-      valueListenable: controller.streamed,
-      builder: (context, _, _) => _Messages(
-        messages: controller.messages,
-        imageFile: controller.imageFile,
-        uploading: controller.uploadingImages,
-        tier: controller.nextTier,
-        running: controller.currentRunning,
-        onEdit: (message) => _editMessage(context, controller, message),
-        onAttach: controller.attachMessage,
-        controller: controller,
-      ),
-    );
-    final composer = _Composer(controller: controller);
+    // An Ask Gaia chat is the current chat, shown in the panel: the one
+    // under it isn't built meanwhile, so there's only ever one (§2.2).
+    final asking = panelShown && controller.asking != null;
     Widget chat({bool sidebarShown = false, VoidCallback? toggleSidebar}) =>
         Column(
           children: [
@@ -420,17 +407,9 @@ class _GaiaShell extends StatelessWidget {
             ),
             const Divider(height: 1),
             Expanded(
-              // The composer's chips float over the messages' foot.
-              child: ValueListenableBuilder(
-                valueListenable: controller.scrolledUnder,
-                builder: (context, under, _) => GaiaChatBody(
-                  messages: messages,
-                  composer: composer,
-                  halo: Theme.of(context).scaffoldBackgroundColor,
-                  haloFade: kGaiaChatFade,
-                  haloShown: under.composer,
-                ),
-              ),
+              child: asking
+                  ? const SizedBox.shrink()
+                  : _ChatColumn(controller: controller),
             ),
           ],
         );
@@ -574,6 +553,11 @@ class _GaiaShell extends StatelessWidget {
                                         Expanded(
                                           child: GaiaSettingsPanelView(
                                             controller: controller,
+                                            askChat: asking
+                                                ? _ChatColumn(
+                                                    controller: controller,
+                                                  )
+                                                : null,
                                           ),
                                         ),
                                       ],
@@ -636,6 +620,46 @@ class _GaiaShell extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// The current chat's messages over its composer: the chat in the Gaia
+/// window and the floaters, or an Ask Gaia chat in the settings panel
+/// (GAIA_SETTINGS_HLD.md §7.2). Only one is ever built.
+class _ChatColumn extends StatelessWidget {
+  const _ChatColumn({required this.controller});
+
+  final GaiaController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    // Built once out here, so a scroll's rebuild of the chat body around
+    // them leaves them be. Also rebuilt alone as a reply's text streams in.
+    final messages = ValueListenableBuilder(
+      valueListenable: controller.streamed,
+      builder: (context, _, _) => _Messages(
+        messages: controller.messages,
+        imageFile: controller.imageFile,
+        uploading: controller.uploadingImages,
+        tier: controller.nextTier,
+        running: controller.currentRunning,
+        onEdit: (message) => _editMessage(context, controller, message),
+        onAttach: controller.attachMessage,
+        controller: controller,
+      ),
+    );
+    final composer = _Composer(controller: controller);
+    // The composer's chips float over the messages' foot.
+    return ValueListenableBuilder(
+      valueListenable: controller.scrolledUnder,
+      builder: (context, under, _) => GaiaChatBody(
+        messages: messages,
+        composer: composer,
+        halo: Theme.of(context).scaffoldBackgroundColor,
+        haloFade: kGaiaChatFade,
+        haloShown: under.composer,
       ),
     );
   }
@@ -4645,6 +4669,7 @@ class _MessageView extends StatelessWidget {
       final window = message.parts.whereType<GaiaContextPart>().firstOrNull;
       final control = message.parts.whereType<GaiaElementPart>().firstOrNull;
       final quotes = message.parts.whereType<GaiaQuotePart>();
+      final about = message.parts.whereType<GaiaMemoryRefPart>().firstOrNull;
       // Images and files float on their own above the prompt's bubble; a
       // message of only those has no bubble. Just sent, its text and
       // attachments gather in out of particles.
@@ -4713,6 +4738,7 @@ class _MessageView extends StatelessWidget {
               if (window != null ||
                   control != null ||
                   quotes.isNotEmpty ||
+                  about != null ||
                   message.text.isNotEmpty)
                 _bubble(
                   gaiaPromptColor(theme),
@@ -4736,6 +4762,13 @@ class _MessageView extends StatelessWidget {
                           _ContextChip(
                             label: quote.label,
                             icon: Icons.format_quote,
+                          ),
+                          const SizedBox(height: 6),
+                        ],
+                        if (about != null) ...[
+                          _ContextChip(
+                            label: about.label,
+                            icon: Icons.bookmark_outline,
                           ),
                           const SizedBox(height: 6),
                         ],
@@ -4888,12 +4921,28 @@ class _MessageView extends StatelessWidget {
                   },
                 ),
               ),
+              GaiaRevisionPart() => GaiaRevisionCard(
+                key: ValueKey(part.id),
+                revision: part,
+                onApply: (text) => unawaited(
+                  controller.decideRevision(
+                    message,
+                    part,
+                    accept: true,
+                    text: text,
+                  ),
+                ),
+                onDismiss: () => unawaited(
+                  controller.decideRevision(message, part, accept: false),
+                ),
+              ),
               // Only the user's messages carry attachments and context.
               GaiaImagePart() ||
               GaiaFilePart() ||
               GaiaContextPart() ||
               GaiaElementPart() ||
               GaiaQuotePart() ||
+              GaiaMemoryRefPart() ||
               GaiaUnknownPart() => const SizedBox.shrink(),
             },
           // Rebuilt with the controller: a retry isn't on the message. The
@@ -5927,6 +5976,15 @@ class _ComposerState extends State<_Composer> {
                 dock.close()))) {
       return KeyEventResult.handled;
     }
+    // Esc closes an Ask Gaia chat (GAIA_SETTINGS_HLD.md §7.1), once Vim has
+    // no use for it, the review's keys back.
+    if (widget.controller.asking != null &&
+        event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.escape &&
+        VimTextScope.escapeIsSpare(node.context)) {
+      widget.controller.closeAsk(dismiss: true);
+      return KeyEventResult.handled;
+    }
     // Up and Down move along them too, unless the draft runs over lines,
     // wrapped or not, for the caret to move between.
     if (event is! KeyUpEvent &&
@@ -6603,6 +6661,19 @@ class _ComposerState extends State<_Composer> {
                                       label: control.label,
                                       icon: Icons.ads_click,
                                       onRemove: controller.dropDraftControl,
+                                    ),
+                                  ),
+                                ),
+                              // An Ask Gaia chat's memory, which its first
+                              // message carries (GAIA_SETTINGS_HLD.md §7.1).
+                              if (controller.draftAbout case final about?)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: _ContextChip(
+                                      label: about.label,
+                                      icon: Icons.bookmark_outline,
                                     ),
                                   ),
                                 ),

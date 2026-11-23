@@ -61,6 +61,35 @@ Future<void> gaiaSetMemoryCards(
   }
 }
 
+/// Revision card [cardId] in [chatId]'s messages set to [state] with [text]
+/// in [repository] (GAIA_SETTINGS_HLD.md §7.4): applied as [text] says, or
+/// dismissed.
+Future<void> gaiaSetRevisionCard(
+  GaiaRepository repository,
+  String chatId,
+  String cardId,
+  GaiaCardState state,
+  String text,
+) async {
+  bool stale(GaiaPart part) =>
+      part is GaiaRevisionPart &&
+      part.id == cardId &&
+      (part.state != state || part.text != text);
+  for (final message in await repository.listMessages(chatId)) {
+    if (message.isDeleted || !message.parts.any(stale)) continue;
+    await repository.upsertMessage(
+      message.copyWith(
+        parts: [
+          for (final part in message.parts)
+            stale(part)
+                ? (part as GaiaRevisionPart).decided(state, text: text)
+                : part,
+        ],
+      ),
+    );
+  }
+}
+
 /// Deletes project [projectId] (GAIA_PROJECTS_HLD.md §3.3). With
 /// [withChats] its chats go to the trash with it, at the same instant, so
 /// restoring it brings them back; without, they're let go, to no project.
@@ -758,7 +787,8 @@ class GaiaChatStore {
   /// erased meanwhile: the run's later writes are dropped, or they'd bring the
   /// erased text back. Its task ticks stay as stored: only [toggleCheck]
   /// changes them, from the companion or the Gaia page, as it streams too.
-  /// So do its memory cards, once stored: only [setMemoryCards] changes them.
+  /// So do its memory cards, once stored: only [setMemoryCards] changes them,
+  /// and its revision cards, which only [setRevisionCard] does.
   /// Its chapter stays as stored too: only [setChapter] changes it.
   Future<GaiaMessage?> putMessage(GaiaMessage message) => _serial(() async {
     final existing = await _repository.getMessage(message.id);
@@ -808,6 +838,16 @@ class GaiaChatStore {
     String text,
   ) => _serial(
     () => gaiaSetMemoryCards(_repository, chatId, memoryId, state, text),
+  );
+
+  /// [gaiaSetRevisionCard], one write at a time with the companion's.
+  Future<void> setRevisionCard(
+    String chatId,
+    String cardId,
+    GaiaCardState state,
+    String text,
+  ) => _serial(
+    () => gaiaSetRevisionCard(_repository, chatId, cardId, state, text),
   );
 
   /// Message [messageId]'s chapter set to [chapter], or unpinned for null

@@ -415,6 +415,38 @@ class _Main {
           decided.text,
         );
         return {'state': decided.state.name, 'text': decided.text};
+      case 'offerRevision':
+        try {
+          final offer = await memories.reviseOffer(
+            (params['arguments']! as Map).cast(),
+          );
+          return {
+            'memoryId': offer.memory.id,
+            'was': offer.memory.text,
+            'text': offer.text,
+            'why': ?offer.why,
+          };
+        } on GaiaReadException catch (error) {
+          throw GaiaPipeException(error.message);
+        }
+      case 'reviseMemory':
+        final accept = params['accept'] == true;
+        if (accept && aborted) {
+          throw GaiaPipeException('Gaia is aborted. Rearm to save memories.');
+        }
+        if (accept) {
+          await memories.edit(
+            params['memoryId']! as String,
+            text: params['text']! as String,
+          );
+        }
+        await store.setRevisionCard(
+          params['chatId']! as String,
+          params['cardId']! as String,
+          accept ? GaiaCardState.accepted : GaiaCardState.rejected,
+          params['text']! as String,
+        );
+        return null;
       case 'restoreMemory':
         final text = await memories.restore(params['memoryId']! as String);
         if (text == null) return null;
@@ -721,10 +753,9 @@ void main() {
       expect(await main.store.chats(), isEmpty);
 
       await controller.restoreChats(deleted, open: running);
-      expect(
-        [for (final chat in controller.chats) chat.id],
-        unorderedEquals(['c1', running]),
-      );
+      expect([
+        for (final chat in controller.chats) chat.id,
+      ], unorderedEquals(['c1', running]));
       expect(controller.currentChatId, running);
     });
   });
@@ -2896,6 +2927,51 @@ void main() {
       await startCompanion(otherRunners: {kGaiaCodexAdapter: codex});
     });
 
+    test('a session joining an Ask Gaia chat is told the memory again, as '
+        'it is now, outside the transcript (§7.3)', () async {
+      final saved = (await main.memories.save(
+        'I prefer metric units',
+        status: GaiaMemoryStatus.active,
+      ))!;
+      controller.askAbout(saved);
+      final askId = controller.currentChatId!;
+      runner.turns.add([const ClaudeTextStart(), const ClaudeTextDelta('No')]);
+      unawaited(controller.send('Is this already in memories?'));
+      await settle();
+      runner.finish(askId);
+      await settle();
+      // A rewrite applied since, and the list read again, as Apply does.
+      await main.repository.upsertMemory(
+        (await main.repository.getMemory(
+          saved.id,
+        ))!.copyWith(text: 'I use metric units'),
+      );
+      controller.memoryList = await main.memories.list();
+
+      controller.pickTier(GaiaTier.deep);
+      unawaited(controller.send('Rewrite this so it is shorter'));
+      await settle();
+      final prompt = codex.sent.single.prompt;
+      expect(prompt, startsWith('<gaia_transcript>'));
+      final after = prompt.substring(prompt.indexOf('</gaia_transcript>'));
+      expect(after, contains('<memory_under_review>'));
+      expect(after, contains('Id: ${saved.id}'));
+      expect(after, contains('I use metric units'));
+      expect(
+        after.indexOf('</memory_under_review>'),
+        lessThan(after.indexOf('Rewrite this so it is shorter')),
+      );
+
+      // Back on Claude, whose session has it already: not told again.
+      codex.finish(askId);
+      await settle();
+      controller.pickTier(GaiaTier.quick);
+      runner.turns.add([const ClaudeTextStart(), const ClaudeTextDelta('Ok')]);
+      unawaited(controller.send('Thanks'));
+      await settle();
+      expect(runner.sent.last.prompt, isNot(contains('<memory_under_review>')));
+    });
+
     test('a switch needs a yes only after the first reply', () async {
       expect(controller.switchNeedsConfirm(GaiaTier.deep), isFalse);
       runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
@@ -4545,6 +4621,162 @@ void main() {
         (await main.repository.getMemory(jazz.memoryId))!.isDeleted,
         isFalse,
       );
+    });
+
+    test("memory_revise's card (GAIA_SETTINGS_HLD.md §7.4): Apply edits the "
+        "memory as the card's text says, kept through the run's later "
+        "writes; Dismiss leaves it; a wrong id is the agent's error", () async {
+      final saved = (await main.memories.save(
+        'I prefer metric units',
+        status: GaiaMemoryStatus.active,
+      ))!;
+      final tools = await hanging();
+      final offered = await tools.call('memory_revise', {
+        'id': saved.id,
+        'text': 'Metric units, always',
+        'why': 'Shorter',
+      });
+      expect(offered.text, contains('card'), reason: 'answered at once');
+      await settle();
+      GaiaRevisionPart revision(GaiaMessage message, int i) =>
+          message.parts.whereType<GaiaRevisionPart>().elementAt(i);
+      final first = revision(controller.messages.last, 0);
+      expect(
+        (first.was, first.text, first.why, first.isOpen),
+        ('I prefer metric units', 'Metric units, always', 'Shorter', true),
+      );
+      expect(
+        revision((await main.messages()).last, 0).isOpen,
+        isTrue,
+        reason: 'saved at once',
+      );
+
+      expect(
+        await controller.decideRevision(
+          controller.messages.last,
+          first,
+          accept: true,
+          text: 'I always use metric units',
+        ),
+        isTrue,
+      );
+      expect(
+        (await main.repository.getMemory(saved.id))!.text,
+        'I always use metric units',
+      );
+      // The run writes the reply again: the card stays applied.
+      await tools.call('memory_revise', {'id': saved.id, 'text': 'Metric'});
+      await settle();
+      expect(
+        revision(controller.messages.last, 0).state,
+        GaiaCardState.accepted,
+      );
+      runner.finish(controller.currentChatId!);
+      await settle();
+      var reply = (await main.messages()).last;
+      expect(
+        (revision(reply, 0).state, revision(reply, 0).text),
+        (GaiaCardState.accepted, 'I always use metric units'),
+      );
+
+      final second = revision(controller.messages.last, 1);
+      expect(second.was, 'I always use metric units', reason: 'as it is now');
+      await controller.decideRevision(
+        controller.messages.last,
+        second,
+        accept: false,
+      );
+      reply = (await main.messages()).last;
+      expect(revision(reply, 1).state, GaiaCardState.rejected);
+      expect(
+        (await main.repository.getMemory(saved.id))!.text,
+        'I always use metric units',
+      );
+    });
+
+    test('memory_revise with a wrong id, or the same text, is refused to '
+        'the agent with no card', () async {
+      final saved = (await main.memories.save(
+        'I prefer metric units',
+        status: GaiaMemoryStatus.active,
+      ))!;
+      final tools = await hanging();
+      final wrong = await tools.call('memory_revise', {
+        'id': 'nope',
+        'text': 'Metric',
+      });
+      expect(wrong.text, contains('No memory has the id "nope"'));
+      final same = await tools.call('memory_revise', {
+        'id': saved.id,
+        'text': ' I prefer metric units ',
+      });
+      expect(same.text, contains('already says exactly that'));
+      await settle();
+      expect(
+        controller.messages.last.parts.whereType<GaiaRevisionPart>(),
+        isEmpty,
+      );
+    });
+
+    test('an Ask Gaia chat (GAIA_SETTINGS_HLD.md §7.2): unsaved until its '
+        'first message, which carries the memory ahead of the prompt; '
+        'archived from the start and after the reply; closing it brings '
+        'back the chat that was open', () async {
+      final saved = (await main.memories.save(
+        'I prefer metric units',
+        status: GaiaMemoryStatus.active,
+      ))!;
+      runner.turns.add([const ClaudeTextStart(), const ClaudeTextDelta('Hi')]);
+      unawaited(controller.send('Hi'));
+      await settle();
+      final before = controller.currentChatId!;
+      runner.finish(before);
+      await settle();
+
+      controller.askAbout(saved);
+      final askId = controller.currentChatId!;
+      expect(askId, isNot(before));
+      expect(controller.asking, saved.id);
+      expect(controller.draftAbout?.memoryId, saved.id);
+      expect((await main.store.chats()).map((chat) => chat.id), [before]);
+
+      runner.turns.add([const ClaudeTextStart(), const ClaudeTextDelta('No')]);
+      unawaited(controller.send('Is this already in memories?'));
+      await settle();
+      final prompt = runner.sent.last.prompt;
+      expect(prompt, contains('<memory_under_review>'));
+      expect(prompt, contains('Id: ${saved.id}'));
+      expect(prompt, contains('Status: remembered'));
+      expect(
+        prompt.indexOf('I prefer metric units'),
+        lessThan(prompt.indexOf('Is this already in memories?')),
+      );
+      GaiaChat stored() => [
+        for (final chat in controller.chats) chat,
+      ].firstWhere((chat) => chat.id == askId);
+      expect(stored().title, 'About: I prefer metric units');
+      final question = (await main.store.messages(askId)).first;
+      expect(
+        question.parts.whereType<GaiaMemoryRefPart>().single.memoryId,
+        saved.id,
+      );
+      expect(controller.draftAbout, isNull, reason: 'sent');
+
+      runner.finish(askId);
+      await settle();
+      final chat = (await main.store.chats()).firstWhere((c) => c.id == askId);
+      expect(chat.archived, isTrue, reason: 'still, after the reply');
+      expect(
+        chat.title,
+        'About: I prefer metric units',
+        reason: 'not retitled',
+      );
+
+      controller.closeAsk();
+      expect(controller.currentChatId, before);
+      expect(controller.asking, isNull);
+      controller.askAbout(saved);
+      expect(controller.currentChatId, askId, reason: 'one chat per memory');
     });
 
     test("a memory card decided in the inbox stays so through the run's "

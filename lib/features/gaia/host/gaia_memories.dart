@@ -206,17 +206,23 @@ class GaiaMemories {
             'memory_search needs a query, tags or a topic.',
           );
         }
-        // Every memory, from any project (GAIA_MEMORY_TOPICS_HLD.md §4.6).
-        final active = await _active();
+        // Every memory, from any project (GAIA_MEMORY_TOPICS_HLD.md §4.6),
+        // and those waiting in the inbox, marked: "is this already in my
+        // memories?" in a review is mostly about them
+        // (GAIA_SETTINGS_HLD.md §7.4).
+        final searched = [
+          for (final memory in await _repository.listMemories())
+            if (memory.status != GaiaMemoryStatus.archived) memory,
+        ];
         final tree = GaiaTopicTree(await _repository.listMemoryTopics());
-        var within = active;
+        var within = searched;
         if (topic.isNotEmpty) {
           final ids = {for (final id in tree.find(topic)) ...tree.subtree(id)};
           if (ids.isEmpty) {
             throw GaiaReadException('No memory topic is called "$topic".');
           }
           within = [
-            for (final memory in active)
+            for (final memory in searched)
               if (memory.topicIds.any(ids.contains)) memory,
           ];
         }
@@ -225,7 +231,16 @@ class GaiaMemories {
                   .take(_maxResults)
                   .toList()
             : gaiaSearchMemories(within, query, tags: tags);
-        return gaiaMemorySearchText(found, total: active.length, tree: tree);
+        return gaiaMemorySearchText(
+          found,
+          total: searched
+              .where((m) => m.status == GaiaMemoryStatus.active)
+              .length,
+          inbox: searched
+              .where((m) => m.status == GaiaMemoryStatus.proposed)
+              .length,
+          tree: tree,
+        );
       case 'memory_propose':
         return (await propose(chatId, arguments)).text;
       default:
@@ -318,6 +333,47 @@ class GaiaMemories {
                 "memory inbox on the Gaia page; it isn't remembered until "
                 'they do.',
     );
+  }
+
+  /// A `memory_revise` call (GAIA_SETTINGS_HLD.md §7.4): the memory it's
+  /// for, as it is, and the rewrite offered, trimmed, for its card. Nothing
+  /// is written: the user applies it, through [edit]. Throws a
+  /// [GaiaReadException] the agent is shown.
+  Future<({GaiaMemory memory, String text, String? why})> reviseOffer(
+    Map<String, Object?> arguments,
+  ) async {
+    final id = (arguments['id'] as String? ?? '').trim();
+    final memory = id.isEmpty ? null : await _repository.getMemory(id);
+    if (memory == null || memory.isDeleted) {
+      throw GaiaReadException(
+        'No memory has the id "$id". Its id is in <memory_under_review> or '
+        'a memory_search result.',
+      );
+    }
+    final text = (arguments['text'] as String? ?? '').trim();
+    if (text.isEmpty) throw GaiaReadException('A memory needs text.');
+    if (text.length > kGaiaMemoryMaxLength) {
+      throw GaiaReadException(
+        'A memory is one short fact, at most $kGaiaMemoryMaxLength '
+        'characters.',
+      );
+    }
+    if (text == memory.text) {
+      throw GaiaReadException('The memory already says exactly that.');
+    }
+    if (memory.status == GaiaMemoryStatus.archived) {
+      throw GaiaReadException(
+        'That memory is archived: unarchive it before rewriting it.',
+      );
+    }
+    // What applying it would refuse (see [edit]), refused now instead.
+    if (memory.status == GaiaMemoryStatus.active) {
+      if (await sameActive(text, except: id) case final other?) {
+        throw GaiaReadException('Already remembered: ${other.text}');
+      }
+    }
+    final why = (arguments['why'] as String? ?? '').trim();
+    return (memory: memory, text: text, why: why.isEmpty ? null : why);
   }
 
   /// The user decided proposed memory [id] from its card in a chat (§11):
@@ -1924,17 +1980,19 @@ int _score(GaiaMemory memory, Set<String> words) {
 }
 
 /// `memory_search`'s text: [found] in full, framed as reference data like
-/// the `voyager_*` reads (§5.3), out of [total] active memories, each with
-/// its topics' paths in [tree].
+/// the `voyager_*` reads (§5.3), out of [total] active memories and [inbox]
+/// waiting ones, each with its topics' paths in [tree]. One waiting in the
+/// inbox says so.
 String gaiaMemorySearchText(
   List<GaiaMemory> found, {
   required int total,
+  int inbox = 0,
   required GaiaTopicTree tree,
 }) {
   if (found.isEmpty) {
-    return total == 0
-        ? 'The user has no memories saved.'
-        : 'No memories match. The user has $total.';
+    if (total == 0 && inbox == 0) return 'The user has no memories saved.';
+    return 'No memories match. The user has $total'
+        '${inbox == 0 ? '' : ', and $inbox waiting in the inbox'}.';
   }
   final entries = [
     for (final memory in found)
@@ -1946,7 +2004,9 @@ String gaiaMemorySearchText(
           case final topics)
         [
           '- ${memory.text.trim()}',
-          '  (saved ${memory.createdAt.toLocal().toIso8601String().substring(0, 10)}'
+          '  (id ${memory.id}'
+              '${memory.status == GaiaMemoryStatus.proposed ? '; in the inbox, not yet approved' : ''}'
+              '; saved ${memory.createdAt.toLocal().toIso8601String().substring(0, 10)}'
               '${topics.isEmpty ? '' : '; topics: ${topics.join('; ')}'}'
               '${memory.tags.isEmpty ? '' : '; tags: ${memory.tags.join(', ')}'})',
         ].join('\n'),

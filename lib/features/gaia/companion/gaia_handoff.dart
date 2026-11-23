@@ -121,6 +121,9 @@ String gaiaHandoffPreamble({
     for (final part in message.parts.whereType<GaiaQuotePart>()) {
       buffer.writeln(part.transcript);
     }
+    for (final part in message.parts.whereType<GaiaMemoryRefPart>()) {
+      buffer.writeln(part.transcript);
+    }
     buffer.writeln();
   }
   buffer.writeln('</gaia_transcript>');
@@ -214,5 +217,7 @@ String gaiaTranscriptText(List<GaiaMessage> older) => [
         'Attached: ${file.reference}',
       for (final quote in message.parts.whereType<GaiaQuotePart>())
         quote.transcript,
+      for (final about in message.parts.whereType<GaiaMemoryRefPart>())
+        about.transcript,
     ].join('\n'),
 ].join('\n\n');

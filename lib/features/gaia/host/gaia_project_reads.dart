@@ -236,6 +236,8 @@ String gaiaProjectMessageText(GaiaMessage message) {
         lines.add(text.trim());
       case GaiaQuotePart():
         lines.add('(${part.transcript})');
+      case GaiaMemoryRefPart():
+        lines.add('(${part.transcript})');
       case GaiaFilePart():
         lines.add('(Attached: ${part.reference})');
       case GaiaContextPart():
@@ -249,6 +251,14 @@ String gaiaProjectMessageText(GaiaMessage message) {
           "(Memory offered: '$text', ${switch (state) {
             GaiaCardState.open => 'waiting',
             GaiaCardState.accepted => 'remembered',
+            _ => 'dismissed',
+          }})",
+        );
+      case GaiaRevisionPart(:final text, :final state):
+        lines.add(
+          "(Rewrite of a memory offered: '$text', ${switch (state) {
+            GaiaCardState.open => 'waiting',
+            GaiaCardState.accepted => 'applied',
             _ => 'dismissed',
           }})",
         );

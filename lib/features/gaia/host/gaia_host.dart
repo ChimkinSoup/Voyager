@@ -93,6 +93,8 @@ const kGaiaNotificationBtwSeparator = '#btw:';
 /// message, §4.2-§4.4), `recalled {chatId, memoryIds}` (the recall
 /// history, §3.3),
 /// `memoryTool {chatId, tool, arguments}` (a `memory_*` tool's text),
+/// `offerRevision {arguments}` (a `memory_revise` call's `{memoryId, was,
+/// text, why}`), `reviseMemory {chatId, cardId, memoryId, text, accept}`,
 /// `projectTool {chatId, tool, arguments}` (a `project_*` tool's text),
 /// `setSummary {chatId, summary, seq}`,
 /// `remember {chatId, projectId?, text, global?, pin?}` (returns `{saved,
@@ -1917,27 +1919,45 @@ class GaiaHost {
       case 'memories':
         return gaiaMemoryListToJson(await _memoriesOrThrow().list());
       case 'editMemory':
-        final memoryId = params['memoryId']! as String;
-        final text = params['text']! as String;
-        final was = await _readOrThrow(
-          () => _memoriesOrThrow().edit(
-            memoryId,
-            text: text,
-            tags: (params['tags'] as List?)?.cast<String>(),
-          ),
+        await _editMemory(
+          store,
+          params['memoryId']! as String,
+          params['text']! as String,
+          tags: (params['tags'] as List?)?.cast<String>(),
         );
-        // An open card in its chat offers it as it now says.
-        if (was != null &&
-            was.status == GaiaMemoryStatus.proposed &&
-            was.sourceChatId != null &&
-            was.text != text.trim()) {
-          await store.setMemoryCards(
-            was.sourceChatId!,
-            memoryId,
-            GaiaCardState.open,
-            text.trim(),
+        return null;
+      // Ask Gaia's rewrites (GAIA_SETTINGS_HLD.md §7.4): offered by
+      // `memory_revise`, then applied or dismissed from the card.
+      case 'offerRevision':
+        try {
+          final offer = await _memoriesOrThrow().reviseOffer(
+            _map(params['arguments']),
           );
+          return {
+            'memoryId': offer.memory.id,
+            'was': offer.memory.text,
+            'text': offer.text,
+            'why': ?offer.why,
+          };
+        } on GaiaReadException catch (error) {
+          throw GaiaPipeException(error.message);
         }
+      case 'reviseMemory':
+        final accept = params['accept'] == true;
+        // A memory changed steers every chat after it, as one remembered does.
+        if (accept && _aborted) {
+          throw GaiaPipeException('Gaia is aborted. Rearm to save memories.');
+        }
+        final text = (params['text']! as String).trim();
+        if (accept) {
+          await _editMemory(store, params['memoryId']! as String, text);
+        }
+        await store.setRevisionCard(
+          params['chatId']! as String,
+          params['cardId']! as String,
+          accept ? GaiaCardState.accepted : GaiaCardState.rejected,
+          text,
+        );
         return null;
       case 'archiveMemory':
         await _memoriesOrThrow().archive(params['memoryId']! as String);
@@ -2580,6 +2600,30 @@ class GaiaHost {
 
   GaiaMemories _memoriesOrThrow() =>
       _memories ?? (throw GaiaPipeException('Voyager data is not ready'));
+
+  /// Memory [memoryId] edited to say [text], with [tags] if given; an open
+  /// card in its chat offers it as it now says.
+  Future<void> _editMemory(
+    GaiaChatStore store,
+    String memoryId,
+    String text, {
+    List<String>? tags,
+  }) async {
+    final was = await _readOrThrow(
+      () => _memoriesOrThrow().edit(memoryId, text: text, tags: tags),
+    );
+    if (was != null &&
+        was.status == GaiaMemoryStatus.proposed &&
+        was.sourceChatId != null &&
+        was.text != text.trim()) {
+      await store.setMemoryCards(
+        was.sourceChatId!,
+        memoryId,
+        GaiaCardState.open,
+        text.trim(),
+      );
+    }
+  }
 
   /// Takes back what accepted proposal card [cardId] of [message] committed,
   /// for the action log (§17) on the Gaia page or the settings panel, and

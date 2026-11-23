@@ -45,9 +45,12 @@ class _DraggedTopic extends _Dragged {
 /// instead of a tree, the inbox, then the memories of the topic in view.
 /// Everything the Gaia page's Memories tab does, through the pipe.
 class GaiaMemoriesTab extends StatefulWidget {
-  const GaiaMemoriesTab({super.key, required this.controller});
+  const GaiaMemoriesTab({super.key, required this.controller, this.askChat});
 
   final GaiaController controller;
+
+  /// The review's Ask Gaia chat, while it shows one (GAIA_SETTINGS_HLD.md §7).
+  final Widget? askChat;
 
   @override
   State<GaiaMemoriesTab> createState() => _GaiaMemoriesTabState();
@@ -253,7 +256,11 @@ class _GaiaMemoriesTabState extends State<GaiaMemoriesTab> {
       );
     }
     if (_controller.review case final review?) {
-      return GaiaMemoryReviewView(controller: _controller, review: review);
+      return GaiaMemoryReviewView(
+        controller: _controller,
+        review: review,
+        chat: widget.askChat,
+      );
     }
     _takeReveal(list);
     final tree = GaiaTopicTree(list.topics);
@@ -1591,6 +1598,12 @@ class _MemoryCardState extends State<_MemoryCard> {
     });
   }
 
+  /// Ask Gaia (GAIA_SETTINGS_HLD.md §7.1): this memory as a one-card review,
+  /// its chat open.
+  void _askGaia() => widget.controller.startReview(
+    GaiaMemoryReview.memory(widget.controller, _memory),
+  );
+
   List<GaiaMenuItem> _menu() {
     final memory = _memory;
     final chatId = memory.sourceChatId;
@@ -1608,6 +1621,12 @@ class _MemoryCardState extends State<_MemoryCard> {
         icon: Icons.edit_outlined,
         onPressed: _startEdit,
       ),
+      if (memory.status != GaiaMemoryStatus.archived)
+        GaiaMenuItem(
+          label: 'Ask Gaia',
+          icon: Icons.forum_outlined,
+          onPressed: _askGaia,
+        ),
       if (proposed)
         GaiaMenuItem(
           label: 'Remember and pin',
@@ -1955,6 +1974,13 @@ class _MemoryCardState extends State<_MemoryCard> {
                           'pinned': !memory.pinned,
                         }, failed: 'Not pinned'),
                       ),
+                    ),
+                  if (memory.status != GaiaMemoryStatus.archived)
+                    GaiaActionIcon(
+                      label: 'Ask Gaia',
+                      icon: Icons.forum_outlined,
+                      compact: true,
+                      onPressed: _askGaia,
                     ),
                   GaiaActionIcon(
                     label: primaryLabel,

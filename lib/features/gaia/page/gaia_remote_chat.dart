@@ -770,6 +770,15 @@ class GaiaTranscriptMessage extends ConsumerWidget {
                 ),
                 const SizedBox(height: 4),
               ],
+              for (final about
+                  in message.parts.whereType<GaiaMemoryRefPart>()) ...[
+                Text(
+                  about.label,
+                  style: muted,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+              ],
               SelectableText(message.text),
               // By path: the file is on the device it came from.
               for (final file in message.parts.whereType<GaiaFilePart>())
@@ -847,12 +856,15 @@ class GaiaTranscriptMessage extends ConsumerWidget {
               ),
               GaiaCardPart() => GaiaCardView(card: part),
               GaiaMemoryPart() => GaiaMemoryCard(memory: part),
+              // Applied or dismissed on the desktop.
+              GaiaRevisionPart() => GaiaRevisionCard(revision: part),
               // Only the user's messages carry attachments and context.
               GaiaImagePart() ||
               GaiaFilePart() ||
               GaiaContextPart() ||
               GaiaElementPart() ||
               GaiaQuotePart() ||
+              GaiaMemoryRefPart() ||
               GaiaUnknownPart() => const SizedBox.shrink(),
             },
           if (message.status != GaiaMessageStatus.complete)
