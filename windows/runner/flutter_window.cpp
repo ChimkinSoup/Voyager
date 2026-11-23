@@ -433,6 +433,11 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
         return 0;
       }
       break;
+    case WM_MENUCHAR:
+      // Alt+<letter> that no Flutter shortcut takes looks for a menu
+      // mnemonic; with no menu to match, Windows plays the default beep.
+      // MNC_CLOSE ends that lookup silently.
+      return MAKELRESULT(0, MNC_CLOSE);
   }
 
   return Win32Window::MessageHandler(hwnd, message, wparam, lparam);

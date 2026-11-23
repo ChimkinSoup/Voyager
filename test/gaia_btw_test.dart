@@ -612,7 +612,7 @@ void main() {
         final answered = controller.btwsFor(chatId).single;
         expect(toasts.single.btwId, answered.id);
         expect(toasts.single.toast.chatId, chatId);
-        expect(toasts.single.toast.title, 'Side question answered');
+        expect(toasts.single.toast.title, 'Side question · Hi');
         expect(toasts.single.toast.body, endsWith('why?'));
         expect(toasts.single.toast.error, isFalse);
 
@@ -624,7 +624,7 @@ void main() {
         controller.send('/btw and?');
         async.elapse(const Duration(seconds: 1));
         expect(toasts, hasLength(2));
-        expect(toasts.last.toast.title, 'Side question failed');
+        expect(toasts.last.toast.title, 'Side question failed · Hi');
         expect(toasts.last.toast.error, isTrue);
 
         // Stopped: none.
@@ -642,7 +642,7 @@ void main() {
         async.elapse(const Duration(seconds: 1));
         expect(toasts, hasLength(2));
         final away = controller.btwsFor(chatId).last;
-        expect(notified.last, (chatId, 'Side question answered', away.id));
+        expect(notified.last, (chatId, 'Side question · Hi', away.id));
 
         // In front, shown in the panel as it's answered: none.
         window.behind = false;

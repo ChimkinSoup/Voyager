@@ -10,6 +10,44 @@ This plan doesn't repeat the desktop functional checks one by one. The pages are
 
 ---
 
+## DEVICE: Juno's OnePlus 12R over USB (decided 2026-11-22)
+
+The audit runs on **Juno's own phone**, not the emulator. The emulator heated the laptop and used 5.4 GB of RAM. Wherever this plan, `MOBILE_SYNC_TEST_PLAN.md` or PROGRESS.md still says "emulator", read "the phone", with the differences below. M0 was first run on the emulator and must be **redone on the phone** (see its Status line).
+
+- **The phone:** OnePlus 12R, OxygenOS, Android 16. It is connected by USB with USB debugging on, and Juno doesn't use it during testing. The USB mode is **"Charging this device"**, which worked for adb with another app. If adb, an install or input misbehaves, ask Juno to switch it to **"File transfer"** rather than working around it. M0 records:
+  - the serial from `adb devices` (scripts target it with `-s` / `flutter run -d <serial>`);
+  - the real `wm size` / `wm density`, which replace the emulator's 1080×2400 figures below;
+  - its dp width, i.e. which shell it gets;
+  - its cutout.
+- **Voyager on the phone is disposable.** Juno doesn't use Voyager on the phone, so wiping or uninstalling an existing install is fine (Juno, 2026-11-22). If a differently signed copy is installed, `flutter run` uninstalls it on its own. The guard still applies: never send input while the app holds a non-QA account. If `phone.ps1 check` refuses, first back up `files/` through `run-as` if it works (as M0 did for qa-128), then `pm clear` or uninstall. There's no need to ask Juno first.
+- **Global settings:** Juno is fine with phases changing the phone's settings: font scale, display size, rotation, timezone, clock, airplane mode, dark mode, permissions, Doze, "Don't keep activities". **Restore Juno's own values, not the plan's standard ones.** M0 records Juno's values in PROGRESS.md §1b. Session start sets the standard configuration, and session end puts Juno's values back. If a session dies mid-phase, the next session start fixes things.
+- **Do Not Disturb during every session**, like `voy.ps1 awake on/off` on desktop. Heads-up notifications from other apps cover the top of the screen, swallow taps and land in screenshots.
+  - Session start records the current mode (`settings get global zen_mode`), then turns DND on (`cmd notification set_dnd on`).
+  - Session end restores the recorded mode (`set_dnd off` if it was 0).
+  - Checks that expect a **Voyager** notification to pop up turn DND off for that check and back on afterwards: M4 reminders, M18 series reminders, M19 Gaia push, sync plan MS-8.
+  - Juno doesn't mind other apps' notifications showing in the shade or in shots. Never open, tap or dismiss them.
+- **Screen lock: defer, don't ask.** M0 checks whether a lock is set (`locksettings get-disabled`, or the lock screen showing after `input keyevent 26` twice). **Never type a PIN.** While a lock is set:
+  - keep the screen on all session with `svc power stayon usb` (session end: `svc power stayon false`), so the lock never engages mid-session;
+  - don't run any check that turns the screen off, reboots, or needs the lock screen. That covers `input keyevent 26` screen off/on, `adb reboot` (after a reboot Android wants the PIN before the app's storage unlocks), lock-screen notification visibility, and anything else that ends at the lock screen;
+  - mark such an item `[~] deferred (lock)` in the checklist and add it to PROGRESS.md §6b "Deferred until the screen lock is off" with the phase, then carry on;
+  - every phase report tells Juno how many items are on that list. Juno offered to turn the lock off for a session: at M25, or earlier if Juno asks, one session runs the whole list. Before it starts, remind Juno to turn the lock back on afterwards.
+- **There are no emulator-only commands** (`adb emu …`):
+  - **incoming call** (`gsm call`): add it to §6b's list as "needs Juno to call the phone";
+  - **location** (`geo fix`): the real GPS reports where Juno actually is. Test the permission flow (ask, deny, "don't ask again", grant) and that the map centres on *something*. Don't write coordinates or place names into BUGS.md, PROGRESS.md or logs, and delete any screenshot that shows Juno's real position once you've looked at it;
+  - **slow network** (`network speed` / `network delay`): use Wi-Fi/data/airplane toggles for "flaky". Slow-link checks go to §6b as "manual: slow network";
+  - **camera:** the real cameras. Captures photograph whatever the phone faces; they live in the QA account's vault and `pm clear` wipes them. The real-optics items (M18) are **in scope now**;
+  - **hardware-keyboard spot check:** there's no host keyboard. Send key events with `input keyevent` and `input keycombination` (e.g. Ctrl+Enter, Esc); M0 checks that they work;
+  - **display cutout:** the phone's real one; no developer-option simulation.
+- **Nothing to boot or shut down.** Session start waits for `adb devices` to show the phone as `device`. If it shows `unauthorized`, ask Juno to accept the USB-debugging prompt. If it's missing, ask Juno to check the cable or the USB mode. There's no `adb emu kill`; the phone stays on.
+- **OxygenOS quirks:**
+  - if `input`, `pm grant` or `appops` fails with a `SecurityException`, Developer options may need "Disable permission monitoring" (or a similar OEM switch): ask Juno, don't hunt for it yourself;
+  - OxygenOS kills background apps more aggressively than stock Android. For reminders, sync and Gaia push that's real behaviour: record it, and judge whether it's a Voyager bug or a platform limit (the app could ask for an exemption, for example);
+  - keyboard: record which one is the default in M0 (`settings get secure default_input_method`). The plan assumes Gboard.
+- **Battery:** Juno turns on the phone's battery protection. Nothing to do here.
+- **The emulator stays installed but unused**, unless Juno asks for it.
+
+---
+
 ## HOW TO RUN A PHASE SESSION
 
 You start with no context. Read `qa/PROGRESS.md` (environment, harness, accounts, quirks, manual-only list), this file, and the last ~20 entries of `qa/BUGS.md`. Read `qa/TEST_PLAN.md` for the desktop phase each mobile phase points to: its flows, test data and bugs tell you what's already known.
@@ -23,21 +61,21 @@ Every desktop rule still applies (`TEST_PLAN.md` "RULES" and the account safety 
 - **`adb install -r` keeps the old sign-in.** After any reinstall, run `phone.ps1 check` before the first tap.
 - **`pm clear com.example.voyager`** is the phone's baseline reset (wipe + sign out). Use it only after `phone.ps1 check` passes and the outbox is drained (`pending_uploads_table` = 0 in the pulled DB). Like `reset.ps1`'s sync gate, it must not throw away unsynced QA data you still need.
 - **No real Google sign-in.** Continue with Google is visible on Android (`login_page.dart:138`). It stays MANUAL-ONLY, as on desktop.
-- **Don't change the emulator's global state and leave it.** Font scale, display size, rotation lock, airplane mode, Doze, permissions, timezone, dark mode and developer options are all set by `adb`. Every phase that changes one restores it at the end, and the session log records the restore (the M0 toolbox lists the undo for each).
-- **Juno keeps the laptop.** The emulator runs in the background (headless or minimised). Nothing in this plan needs the Windows foreground except the desktop half of the sync plan, which has its own rules.
+- **Don't change the phone's global state and leave it.** Font scale, display size, rotation lock, airplane mode, Doze, permissions, timezone, dark mode and developer options are all set by `adb`. Every phase that changes one restores **Juno's own value** at the end (PROGRESS.md §1b), and the session log records the restore (the M0 toolbox lists the undo for each).
+- **Juno keeps the laptop.** The phone sits beside it on USB; nothing runs on the laptop's screen. Nothing in this plan needs the Windows foreground except the desktop half of the sync plan, which has its own rules.
 
 ### SESSION WORKFLOW
 
 1. Read the files above.
 2. Pick the first Not Started phase (unless Juno names one) and set it to In Progress.
-3. **Phone SESSION START** (M0 builds it): boot the emulator if it isn't running → `phone.ps1 check` → install or reuse the debug build → sign in (fresh account with sign-up, or reuse one) → `phone.ps1 check` again, which must report the QA UID → check the standard configuration below.
+3. **Phone SESSION START** (M0 builds it): the phone shows as `device` in `adb devices` → Do Not Disturb on, screen kept on → `phone.ps1 check` → install or reuse the debug build → sign in (fresh account with sign-up, or reuse one) → `phone.ps1 check` again, which must report the QA UID → check the standard configuration below.
 4. Work through the phase's checklist and all five dimensions. Tick items as you go, and log bugs as you find them, not at the end.
 5. Before finishing: set the phase to Done (or leave it In Progress with exactly where you stopped), update PROGRESS.md (phase log, accounts, test data, quirks, handoff), and tell Juno the next phase and the bug count by severity.
-6. **Phone SESSION END**: wait for the outbox to drain → sign out in the app (Settings → Account) → `pm clear` → `phone.ps1 check` says `signed out` → restore every global emulator setting the phase changed. Leave the emulator running or shut it down (`adb emu kill`), whichever Juno prefers (record it in PROGRESS.md §5).
+6. **Phone SESSION END**: wait for the outbox to drain → sign out in the app (Settings → Account) → `pm clear` → `phone.ps1 check` says `signed out` → restore Juno's value for every global setting the phase changed → restore Do Not Disturb and `stayon`. Report the count on PROGRESS.md §6b's deferred list.
 
 ### Standard test configuration (phone)
 
-- **Device:** AVD `Medium_Phone_API_37.0` (memory `android-emulator-location`). Record its real size and density in M0 with `adb shell wm size` / `wm density`. The expectation is 1080×2400 at 420 dpi, about 411×914 dp, which is the **compact** shell (below 600 dp, `window_size_class.dart`).
+- **Device:** Juno's OnePlus 12R (see DEVICE above). Record its real size and density in M0 with `adb shell wm size` / `wm density`. It should be the **compact** shell (below 600 dp, `window_size_class.dart`). The emulator figures this plan was written with were 1080×2400 at 420 dpi (411×914 dp); where a phase quotes them, use the phone's.
 - **Orientation:** portrait, auto-rotate off (`settings put system accelerometer_rotation 0`), unless the phase tests rotation.
 - **App theme:** Dark + Scatter (the app defaults; the same SQL check as desktop: `theme_mode='dark'`, `geometric_wave_scatter_mode=1`, `geometric_wave_enabled=0`, `geometric_texture_scale=15.0`). Each phase spot-checks Light once. M21 is the full Light pass.
 - **System:** gesture navigation, font scale 1.0, default display size, system dark mode **on** (so the system bars match). English (US) locale. Gboard as the keyboard.
@@ -45,13 +83,13 @@ Every desktop rule still applies (`TEST_PLAN.md` "RULES" and the account safety 
 
 ### Practical notes
 
-- **Coordinates are physical pixels** (1080×2400 on the standard AVD), the same as `phone.ps1 shot` PNGs. Prefer `phone.ps1 ui` for text targets. Flutter exposes little to UI Automator, so check M0's result before relying on it; the VM-service `find` (desktop `vm.ps1`) is the better locator once M0 connects it to the phone.
+- **Coordinates are physical pixels** (the phone's `wm size`, from PROGRESS.md §1b), the same as `phone.ps1 shot` PNGs. Prefer `phone.ps1 ui` for text targets. Flutter exposes little to UI Automator, so check M0's result before relying on it; the VM-service `find` (desktop `vm.ps1`) is the better locator once M0 connects it to the phone.
 - **Look at a screenshot after every meaningful action.** The background animates, so two shots of the same state differ there.
 - **Data checks are read-only.** Pull the DB **with its WAL**: `adb exec-out run-as com.example.voyager cat files/voyager.sqlite > …`, the same for `voyager.sqlite-wal` and `-shm`, into a scratch folder, then open it read-only in Python. A pull without the WAL misses recent writes. M0 wraps this in a script.
 - **Errors:** check the `flutter run` / attach output and `adb logcat` (filter `flutter`, `AndroidRuntime`, `FATAL`) for `EXCEPTION CAUGHT`, `RenderFlex overflowed`, `Another exception`, ANRs and native crashes after each flow. A FlutterError is a bug even if the UI looks fine. The app's error log lives in the app's documents directory on Android (`app_data_directory.dart`); M0 records its path.
 - **"Survives restart"** on the phone means `am force-stop` → relaunch, then re-check the UI and the DB. **"Survives process death"** is different and matters more on Android: Home → `am kill com.example.voyager` (it kills only a backgrounded app) → reopen from Recents. **"Cold re-login"** = sign out → `pm clear` → sign in again → wait for the startup pull.
 - **HLD docs** are listed per phase. A mismatch between the HLD and the app is worth logging. Many HLDs have an Android paragraph; read it.
-- **Bug severity:** as on desktop (Blocker, Major, Minor, Cosmetic). Tag mobile bugs `[M<phase>]` in the title, e.g. `### BUG-384 [M5] …`. **Next bug ID: BUG-384.** **Next free account: qa-129** (PROGRESS.md §2's "Next unused number: 123" line is stale; the table runs to qa-128).
+- **Bug severity:** as on desktop (Blocker, Major, Minor, Cosmetic). Tag mobile bugs `[M<phase>]` in the title, e.g. `### BUG-384 [M5] …`. **Next bug ID: BUG-385.** **Next free account: qa-130** (PROGRESS.md §2's "Next unused number: 123" line is stale; the table runs to qa-128).
 
 ### The five dimensions (mobile)
 
@@ -65,7 +103,7 @@ Every phase ticks this sweep, or notes "n/a + why":
   - **tablet:** `wm size 1600x2560` + `wm density 320` (800 dp, expanded shell in portrait);
   - **font scale:** 1.3 and 2.0 (`settings put system font_scale …`);
   - **soft keyboard open:** every form with the keyboard up. Nothing the user needs may be hidden under it (`adjustResize`), and the focused field must scroll into view;
-  - **system insets:** the status bar, the gesture bar and the display cutout (emulator: Developer options → Display cutout).
+  - **system insets:** the status bar, the gesture bar and the display cutout (the phone's real one).
 
   Also check truncation of long titles and the empty states. Watch for `RenderFlex overflowed`. Undo each `wm`/font change afterwards (`wm size reset`, `wm density reset`, `font_scale 1.0`).
 - **D4 Touch, Back and soft keyboard** (replaces desktop "keyboard-only"):
@@ -75,12 +113,12 @@ Every phase ticks this sweep, or notes "n/a + why":
   - scroll, fling, swipe, drag-reorder and pinch where the page has them;
   - **Back** (gesture and `phone.ps1 key 4`) at every depth: it closes the top sheet, dialog, menu or sub-view first, never loses a draft silently, and only leaves the app from the home section (`_handleSystemBack`, `app_shell.dart`);
   - soft keyboard: the IME action (Next / Done / Send) does something sensible, tapping outside dismisses the keyboard where expected, and Enter in a multi-line field inserts a newline;
-  - **hardware-keyboard spot check** once per phase: the emulator's host keyboard sends real key events. Vim (Settings → Vim keybindings), Ctrl+Enter submit (`ctrl_enter_to_submit_scope.dart` treats Ctrl the same on Android) and Esc should behave as on desktop. The shell shortcuts (Ctrl+Tab, Ctrl+/) are **off** on Android by design (`shell_keyboard_shortcuts.dart:13`), so confirm they do nothing harmful.
+  - **hardware-keyboard spot check** once per phase: send real key events with `input keyevent` / `input keycombination` (there's no host keyboard on the phone). Vim (Settings → Vim keybindings), Ctrl+Enter submit (`ctrl_enter_to_submit_scope.dart` treats Ctrl the same on Android) and Esc should behave as on desktop. The shell shortcuts (Ctrl+Tab, Ctrl+/) are **off** on Android by design (`shell_keyboard_shortcuts.dart:13`), so confirm they do nothing harmful.
 - **D5 Failure cases and lifecycle:**
   - invalid input (empty, whitespace-only, negative/huge numbers, bad dates);
   - very long input (5,000+ chars, a 300-char word, emoji/CJK/RTL). `adb shell input text` can't type spaces or most symbols, so put text on the clipboard (VM eval of `Clipboard.setData`, from M0) and paste with long-press → Paste;
   - rapid repeated taps (double-tap Save, 20 fast toggles);
-  - **interruptions, the phone's own list:** Home mid-edit, switching to another app and back, process death while backgrounded, force-stop mid-edit, rotation mid-edit, a notification shade pull, an incoming "call" (`adb emu gsm call 5551234`, then `gsm cancel`), screen off/on (`input keyevent 26`), Doze (`dumpsys deviceidle force-idle`);
+  - **interruptions, the phone's own list:** Home mid-edit, switching to another app and back, process death while backgrounded, force-stop mid-edit, rotation mid-edit, a notification shade pull, an incoming call (no `adb emu` on the phone: goes on PROGRESS.md §6b's deferred list), screen off/on (`input keyevent 26`; **deferred while a screen lock is set**), Doze (`dumpsys deviceidle force-idle`);
   - **real offline:** airplane mode (`cmd connectivity airplane-mode enable`), or Wi-Fi and data off (`svc wifi disable; svc data disable`). Unlike the desktop's Dev → Force offline, this cuts weather and sign-in too;
   - permission denied (notifications, location, camera);
   - empty/no-data states.
@@ -167,9 +205,10 @@ Add these to PROGRESS.md §6 in M0. Every desktop MANUAL-ONLY row still applies.
 |---|---|
 | Continue with Google on the phone | Real Google OAuth |
 | Forgot password with an e-mail filled in | Sends a real e-mail |
-| Links that open the browser or another app (`launchUrl`) | Opens real apps and accounts on the emulator's Google profile; checking the link exists is fine |
+| Links that open the browser or another app (`launchUrl`) | Opens real apps and Juno's real accounts on the phone; checking the link exists is fine |
+| Juno's other apps and data on the phone: notifications, other apps, files outside Voyager's sandbox and `/sdcard/Pictures` test images | Juno's personal phone. Never open, tap or dismiss other apps' notifications. Push test images only into a `Pictures/VoyagerQA/` folder, and delete it at phase end |
 | Gaia prompts that reach a real model, and remote `sleep` / `shutdown` that would act on Juno's laptop | Real cost; real power actions. Use the dummy replies (`/msg1`, `/card1`, …) and a desktop beacon in a QA profile. Cancel any power countdown, as the Gaia passes did |
-| The real-device pass (§ at the end) | Needs Juno's phone |
+| The real-device pass (§ at the end): what's left of it | Needs Juno's hands (a call, travel, voice) |
 
 ---
 
@@ -177,7 +216,7 @@ Add these to PROGRESS.md §6 in M0. Every desktop MANUAL-ONLY row still applies.
 
 | # | Phase | Desktop reference | Status |
 |---|---|---|---|
-| M0 | Setup: emulator, harness, background operation | Phase 0 | Not Started |
+| M0 | Setup: phone, harness, background operation (redo on the OnePlus 12R) | Phase 0 | Done |
 | M1 | Install, first run, auth & account lifecycle | P1 | Not Started |
 | M2 | Phone shell, navigation, Back, rotation & sheets | P2 | Not Started |
 | M3 | Text input on the phone: soft keyboard, autocorrect, snippets, formatting, images | P3, P4 | Not Started |
@@ -209,23 +248,44 @@ Keep this table and each phase's **Status** line in sync. M1–M3 come first bec
 
 ---
 
-## Phase M0 — Setup: emulator, harness, background operation
-- **Status:** Not Started
+## Phase M0 — Setup: phone, harness, background operation
+- **Status:** Done (redo on Juno's OnePlus 12R, 2026-11-22, qa-129). Each item's phone result is marked "Phone:"; the first run's results stay after it as "Emulator:" (reference only). Deferred to PROGRESS.md §6b: reboot and screen off/on (pattern lock), incoming call. adb permission changes work since Juno turned on OxygenOS's "Disable permission monitoring" (20:50). Bugs: BUG-385 (Major), BUG-386 (Minor); BUG-384 reproduced.
+- **Redo notes:**
+  - **What carries over:** the harness scripts and how they work (vm.dart reads the app's files over adb, `find` beats UI Automator, `type`/`clip`, the guard, login retries), the BUG-384 finding, and account qa-129 (already in `phone_accounts.txt`; reuse it or sign up qa-130). Re-check each item on the phone anyway. Paths and journal mode can differ by Android version.
+  - **First, without touching anything:**
+    - `adb devices` → the serial (`unauthorized` → ask Juno to accept the prompt);
+    - model, `ro.build.version.release`, the OxygenOS build;
+    - `wm size` / `wm density` → dp width;
+    - `pm list packages com.example.voyager` (if it's installed: `dumpsys package com.example.voyager` for the version and install time);
+    - the lock state (`locksettings get-disabled`);
+    - the default keyboard;
+    - **Juno's current values for every setting the toolbox changes**: font scale, display size/density, rotation (`accelerometer_rotation`, `user_rotation`), `cmd uimode night`, airplane/Wi-Fi/data, `auto_time`, `auto_time_zone`, the timezone, `always_finish_activities`, `stay_on_while_plugged_in`, `zen_mode`, the navigation mode, the locale.
+
+    Write them all into PROGRESS.md §1b, replacing the emulator facts (keep the emulator's `-gpu host` crash note under an "Emulator (not used)" line).
+  - **Then convert the harness** (`qa/` only):
+    - `phone_launch.ps1`: the hardcoded `emulator-5554` becomes the phone's serial, kept in one place;
+    - adb calls: add `-s <serial>` wherever a second device (the emulator) could ever be attached;
+    - `phone_session_start.ps1`: no emulator boot; wait for the phone as `device`; DND on after recording `zen_mode`; `svc power stayon usb`;
+    - `phone_session_end.ps1`: restore DND and `stayon`; drop `-Shutdown` / `adb emu kill`;
+    - `phone_standard.ps1`: split into "standard for testing" (session start) and "restore Juno's values" (session end), since the two differ on a real phone;
+    - the toolbox's `adb emu` rows become the substitutes in the DEVICE section;
+    - test images go to `/sdcard/Pictures/VoyagerQA/`.
+  - **Add PROGRESS.md §6b "Deferred until the screen lock is off"** (phase, item, why). Seed it with the toolbox's reboot and screen off/on rows if a lock is set, and the incoming call.
 - **Goal:** everything the later phases assume, verified once and written into PROGRESS.md (a new "§1b Phone environment" section and a phone column in the account table).
 - **Checklist:**
-  - [ ] **Headless boot:** `emulator -avd Medium_Phone_API_37.0 -no-window -no-audio -no-boot-anim` (full path in memory `android-emulator-location`), then `adb wait-for-device` and poll `getprop sys.boot_completed`. Record the boot time and the host RAM/CPU it takes. Check that a window-less emulator still renders (`phone.ps1 shot` gives a real frame) and that hardware acceleration is on (`emulator -accel-check`).
-  - [ ] **Juno keeps the laptop:** with the emulator headless and a phase-like workload running (install, launch, 50 taps, screenshots), confirm the Windows foreground never changes and nothing steals focus. Note how the system feels under load, and whether `voy.ps1 awake on` (or `awake.ps1`) is needed to stop the laptop sleeping mid-run (the emulator pauses when the host sleeps). Also set `svc power stayon true` so the phone's own screen doesn't time out.
-  - [ ] **Image type:** Google Play or Google APIs? (`getprop ro.build.flavor`, `adb root`.) Record whether `adb root` works. Without root, setting the clock and timezone needs another route: try `settings put global auto_time 0` and `auto_time_zone 0`, then `cmd alarm set-time` / `service call alarm` / `setprop persist.sys.timezone`, and record what works. M4, M7, M8 and M22 need a timezone change, and ideally a clock change.
-  - [ ] **Build and install:** `flutter build apk --debug` and `adb install -r`, or `flutter run -d emulator-5554` in the background. Record the time a warm build takes. Juno's own `flutter run` on Windows must be left alone (PROGRESS.md quirks): building an APK doesn't touch the Windows debug exe, but check for clashes in `build/`.
-  - [ ] **VM service on the phone:** a `phone_launch.ps1` (new, in `qa/harness/`) that runs `flutter run -d emulator-5554 --debug` (or `flutter attach`) in the background, writes the VM URI to `qa/logs/vm_uri_phone.txt` and the log to `qa/logs/run-phone-<timestamp>.log`. Then make `vm.ps1` and `evalc.ps1` accept `-Profile phone` (or a `-VmUri`), so `whoami`, `find`, `shot`, `eval` and seeding through the app's repositories work on the phone as on desktop. Verify: `vm.ps1 -Profile phone whoami` reports the QA account.
-  - [ ] **Locating targets:** compare `phone.ps1 ui` (UI Automator) with the VM-service `find` on three pages. Record which works. If `find` works, add `phone.ps1 tapf <text>` (find + tap through the guard).
-  - [ ] **Typing:** `phone.ps1 text` can't send spaces (it joins arguments) or most symbols. Add a guarded `phone.ps1 type "<text with spaces>"` (escape spaces as `%s` for `input text`) and a clipboard setter by VM eval. Confirm both into a journal body.
-  - [ ] **DB pull:** `phone_db.ps1` (new) copies `voyager.sqlite` with its `-wal`/`-shm` through `run-as` into `qa/logs/phone_db/` and prints a read-only `sqlite3` URI. Verify that a row typed 1 s ago shows up.
-  - [ ] **Paths:** record the phone's data directory, media directory, backups directory (AUTO_BACKUP_HLD §8.1 says `files/backups`), drafts/prefs files, session checkpoints, Firestore cache and the app error log, as in PROGRESS.md §1 Storage.
-  - [ ] **Logs:** `adb logcat -c` at session start, then a background `adb logcat -v time` to `qa/logs/logcat-<timestamp>.txt`. Grep patterns for FlutterErrors, `FATAL EXCEPTION`, `ANR in com.example.voyager`.
-  - [ ] **Sign-in for QA:** a guarded `phone_login.ps1 -Email … [-SignUp]` (types into the login page through `phone.ps1`, refusing a non-QA e-mail), then adds the account's UID to `phone_accounts.txt` and runs `phone.ps1 check`.
-  - [ ] **Session start/end scripts:** `phone_session_start.ps1` and `phone_session_end.ps1`, matching the desktop ones: check, pull and assert outbox 0 before any `pm clear`, print `SIGNED-OUT` at the end.
-  - [ ] **Device-state toolbox:** verify each command once and record it, with its undo, in PROGRESS.md §1b:
+  - [x] **Headless boot** (on the phone: **Connection** instead. `adb devices` shows the phone as `device` in the "Charging this device" USB mode, `phone.ps1 shot` gives a real frame, and the laptop's RAM/CPU with no emulator is recorded): `emulator -avd Medium_Phone_API_37.0 -no-window -no-audio -no-boot-anim` (full path in memory `android-emulator-location`), then `adb wait-for-device` and poll `getprop sys.boot_completed`. Record the boot time and the host RAM/CPU it takes. Check that a window-less emulator still renders (`phone.ps1 shot` gives a real frame) and that hardware acceleration is on (`emulator -accel-check`). → Phone: serial `f324d872` shows as `device` in "Charging this device"; `phone.ps1 shot` gives real 1264×2780 frames. Laptop with no emulator: 9.1 GB of 31.1 GB RAM free, CPU 1%. → Emulator: Boot 24–33 s; 5.4 GB RAM, ~10% CPU idle; WHPX on; window-less frames are real. **Boot with `-gpu host`**: the default software rendering crashed qemu 4 times.
+  - [x] **Juno keeps the laptop:** with the emulator headless and a phase-like workload running (install, launch, 50 taps, screenshots), confirm the Windows foreground never changes and nothing steals focus. Note how the system feels under load, and whether `voy.ps1 awake on` (or `awake.ps1`) is needed to stop the laptop sleeping mid-run (the emulator pauses when the host sleeps). Also set `svc power stayon true` so the phone's own screen doesn't time out. → Phone: 50 taps + 10 shots in 47 s, free RAM 6.4 GB, CPU 1%. The foreground changed once, logged by process: Juno switching from the IDE to FreeTube, not the harness. Session start sets `stayon usb` (Juno's own Stay awake is already on). → Emulator: 50 taps + 10 shots, foreground never changed. On AC no sleep; on battery (3 min sleep) use `voy.ps1 awake on`. `stayon` set.
+  - [x] **Image type:** Google Play or Google APIs? (`getprop ro.build.flavor`, `adb root`.) Record whether `adb root` works. Without root, setting the clock and timezone needs another route: try `settings put global auto_time 0` and `auto_time_zone 0`, then `cmd alarm set-time` / `service call alarm` / `setprop persist.sys.timezone`, and record what works. M4, M7, M8 and M22 need a timezone change, and ideally a clock change. → Phone: `user` build, no `adb root`, Play services 26.45 + Play Store. Timezone (`cmd alarm set-timezone`) and clock (`cmd alarm set-time <ms>` with `auto_time 0`) work without root, as on the emulator; session end restores Juno's timezone from `qa/logs/phone_juno_state.txt`. → Emulator: Google Play, `user` build, no `adb root`. Timezone: `cmd alarm set-timezone`; clock: `cmd alarm set-time <ms>` with `auto_time 0` (ms computed on the host). Both work without root.
+  - [x] **Build and install:** `flutter build apk --debug` and `adb install -r`, or `flutter run -d emulator-5554` in the background. Record the time a warm build takes. Juno's own `flutter run` on Windows must be left alone (PROGRESS.md quirks): building an APK doesn't touch the Windows debug exe, but check for clashes in `build/`. → Phone: Gradle 83 s + install 9.5 s; session start 134 s including that first build. No clash with Juno's `flutter run -d windows`. → Emulator: Warm APK build 88 s, install 3 s, no clash with Juno's `flutter run -d windows`. It builds Juno's working tree: use `-Attach` when that doesn't compile.
+  - [x] **VM service on the phone:** a `phone_launch.ps1` (new, in `qa/harness/`) that runs `flutter run -d emulator-5554 --debug` (or `flutter attach`) in the background, writes the VM URI to `qa/logs/vm_uri_phone.txt` and the log to `qa/logs/run-phone-<timestamp>.log`. Then make `vm.ps1` and `evalc.ps1` accept `-Profile phone` (or a `-VmUri`), so `whoami`, `find`, `shot`, `eval` and seeding through the app's repositories work on the phone as on desktop. Verify: `vm.ps1 -Profile phone whoami` reports the QA account. → Phone: `phone_launch.ps1` targets the serial in `phone_serial.txt`; `vm.ps1 -Profile phone whoami` reported qa-129. `-Attach` after process death: 6 s. → Emulator: `phone_launch.ps1` (+ `-Attach`); `vm.ps1`/`evalc.ps1 -Profile phone` with no new flag (vm.dart reads and writes the app's files over adb). `whoami` reported the QA account.
+  - [x] **Locating targets:** compare `phone.ps1 ui` (UI Automator) with the VM-service `find` on three pages. Record which works. If `find` works, add `phone.ps1 tapf <text>` (find + tap through the guard). → Phone: on Journal `find` listed 16 targets in 0.9 s (tooltips included), UI Automator 6 in 2.5 s; To-Do and the More sheet the same. `find`/`tapf` stay the locator. UI Automator is still needed for system dialogs (it read the notification permission prompt; `find` only sees Flutter). → Emulator: `find` beats UI Automator (tooltips, keys; 0.4 s vs 3 s). `phone.ps1 tapf` added.
+  - [x] **Typing:** `phone.ps1 text` can't send spaces (it joins arguments) or most symbols. Add a guarded `phone.ps1 type "<text with spaces>"` (escape spaces as `%s` for `input text`) and a clipboard setter by VM eval. Confirm both into a journal body. → Phone: `type` landed all 51 characters (spaces and symbols) in a journal title; `clip` pasted emoji, Chinese/Japanese and Hebrew into the body. **Phone Link copies the phone's clipboard to Juno's Windows clipboard**, so `clip` overwrites it (warning in `phone.ps1` help). → Emulator: `phone.ps1 type` and `clip` added; both confirmed into a journal body (paste through Gboard's clipboard chip).
+  - [x] **DB pull:** `phone_db.ps1` (new) copies `voyager.sqlite` with its `-wal`/`-shm` through `run-as` into `qa/logs/phone_db/` and prints a read-only `sqlite3` URI. Verify that a row typed 1 s ago shows up. → Phone: pull 1.3 s, still `journal_mode=delete`; the row typed just before was in the copy. → Emulator: `phone_db.ps1`. No WAL on Android (`journal_mode=delete`). A row typed 1 s before was in the pull.
+  - [x] **Paths:** record the phone's data directory, media directory, backups directory (AUTO_BACKUP_HLD §8.1 says `files/backups`), drafts/prefs files, session checkpoints, Firestore cache and the app error log, as in PROGRESS.md §1 Storage. → Phone: same paths as the emulator (PROGRESS.md §1b Storage), re-checked. → Emulator: PROGRESS.md §1b Storage on the phone.
+  - [x] **Logs:** `adb logcat -c` at session start, then a background `adb logcat -v time` to `qa/logs/logcat-<timestamp>.txt`. Grep patterns for FlutterErrors, `FATAL EXCEPTION`, `ANR in com.example.voyager`. → Phone: **FlutterErrors don't reach logcat on this phone**: they are only in the run log and `app_flutter/voyager_errors.log`, where BUG-385/386 showed up. The full logcat ran ~2 MB a minute, so the recorder is now `*:E flutter:V`. → Emulator: In `phone_session_start.ps1`; patterns matched real errors (BUG-384 came from the app error log).
+  - [x] **Sign-in for QA:** a guarded `phone_login.ps1 -Email … [-SignUp]` (types into the login page through `phone.ps1`, refusing a non-QA e-mail), then adds the account's UID to `phone_accounts.txt` and runs `phone.ps1 check`. → Phone: `phone_login.ps1` signed qa-129 in (twice, the second at 20:43). → Emulator: `phone_login.ps1` (qa-129 signed up, then signed in through it).
+  - [x] **Session start/end scripts:** `phone_session_start.ps1` and `phone_session_end.ps1`, matching the desktop ones: check, pull and assert outbox 0 before any `pm clear`, print `SIGNED-OUT` at the end. → Phone: both end to end twice: start 134 s with the first build, end 8 s with outbox 0. **OxygenOS refused `pm clear`** then, so session end uninstalled (it works since Juno's switch, 20:56); `SIGNED-OUT`, and Juno's DND (0), Stay awake (15) and timezone were back both times. → Emulator: Both run end to end several times (start 51 s, end 8 s).
+  - [x] **Device-state toolbox:** verify each command once and record it, with its undo, in PROGRESS.md §1b: → Phone: run once each: rotation (landscape is 794 dp, so the expanded shell with the rail), size/density/font, dark mode, airplane and Wi-Fi/data (network back ~2 s after), Doze, App Standby (backgrounded), kill, force-stop, "Don't keep activities", notification and alarm reads, test images, timezone, clock, DND, `stayon`. **Permissions:** OxygenOS refused `pm grant/revoke`, `appops set` and `pm clear` until Juno turned on "Disable permission monitoring" at 20:50 (2026-11-22); since then `pm grant/revoke` (POST_NOTIFICATIONS, CAMERA, ACCESS_FINE/COARSE_LOCATION), `appops set SCHEDULE_EXACT_ALARM deny|allow`, `appops reset` and `pm clear` all work, read back by `dumpsys package` / `appops get`. Two catches: a revoke kills the app (as on any Android; `phone.ps1 launch` + `phone_launch.ps1 -Attach` after), and `appops set` on CAMERA / COARSE_LOCATION returns ok but stays `allow` (tied to the runtime permission): use `pm revoke` for those. The app's own system prompt also works (UI Automator reads it, `phone.ps1` allows the tap). Reboot and screen off/on are in §6b (pattern lock); location and camera are the real ones (M14, M18). → Emulator: Every row run once; commands, undo and caveats in PROGRESS.md §1b (App Standby needs the app backgrounded; `geo fix` unconfirmed until an app asks for location, M14).
     - rotation: `settings put system accelerometer_rotation 0` + `user_rotation 1` (undo `user_rotation 0`);
     - size, density and font scale (`wm size` / `wm density` / `font_scale`, undo `reset` / `1.0`);
     - system dark mode: `cmd uimode night yes|no`;
@@ -237,15 +297,17 @@ Keep this table and each phase's **Status** line in sync. M1–M3 come first bec
     - notifications: `dumpsys notification --noredact` (read-only check of what's posted), `cmd notification` to expand the shade;
     - alarms: `dumpsys alarm` filtered on the package (see what's scheduled);
     - permissions: `pm grant|revoke com.example.voyager android.permission.POST_NOTIFICATIONS`, `appops set com.example.voyager SCHEDULE_EXACT_ALARM allow|deny`, the same for CAMERA and location;
-    - location: `adb emu geo fix <lon> <lat>`;
-    - camera: the emulator's virtual scene camera (front and back);
-    - test images: `adb push qa/data/img01.png /sdcard/Pictures/`, then a media scan broadcast so the picker sees them;
-    - reboot: `adb reboot` + boot wait;
-    - a phone call: `adb emu gsm call` / `gsm cancel`.
-  - [ ] **FCM:** confirm the image has Google Play services, so Gaia's push (M19) can arrive. The 2026-10-31 Gaia passes got an FCM token on this AVD (qa-124 notes).
-  - [ ] **Desktop beside the phone:** confirm a desktop QA profile (`-Profile qa`) can run at the same time as the emulator without starving it. The sync plan needs both.
-  - [ ] Write the §0.4 rows into PROGRESS.md §6, and replace its "Android / compact layout: Out of scope" row with a pointer to this plan.
-- **Skipped/blocked:** —
+    - location: (emulator: `adb emu geo fix <lon> <lat>`) phone: the real GPS; see DEVICE for what not to record;
+    - camera: the phone's real front and back cameras;
+    - test images: `adb push qa/data/img01.png /sdcard/Pictures/VoyagerQA/`, then a media scan broadcast so the picker sees them;
+    - reboot: `adb reboot` + boot wait (deferred while a screen lock is set);
+    - a phone call: (emulator: `adb emu gsm call` / `gsm cancel`) phone: none, goes on §6b's list;
+    - Do Not Disturb: `cmd notification set_dnd on|off` (+ `settings get global zen_mode` to record Juno's);
+    - screen kept on: `svc power stayon usb|false`.
+  - [x] **FCM:** confirm the image has Google Play services, so Gaia's push (M19) can arrive. The 2026-10-31 Gaia passes got an FCM token on this AVD (qa-124 notes). → Phone: the app got a 142-character FCM token. → Emulator: Play services present; the app got an FCM token.
+  - [x] **Desktop beside the phone:** confirm a desktop QA profile (`-Profile qa`) can run at the same time as the emulator without starving it. The sync plan needs both. → Phone: not re-run: the phone uses no laptop RAM or CPU, and RAM was the only limit found on the emulator. → Emulator: Profile `qa` ran beside it fine; RAM is the limit (stop the Gradle daemon, shut the emulator down between sessions).
+  - [x] Write the §0.4 rows into PROGRESS.md §6, and replace its "Android / compact layout: Out of scope" row with a pointer to this plan. → Emulator: Done.
+- **Skipped/blocked:** reboot and screen off/on (lock), incoming call: in PROGRESS.md §6b. "Desktop beside the phone" not re-run (no laptop load).
 
 ---
 
@@ -347,6 +409,7 @@ Keep this table and each phase's **Status** line in sync. M1–M3 come first bec
     - after an **app update** (`adb install -r`, MY_PACKAGE_REPLACED);
     - in **Doze** (`force-idle`; allow-while-idle);
     - screen off.
+  - [ ] **A rule made on another device rings with the phone's app closed** (Juno, 2026-11-22: not ringing is a bug). Checked properly with two devices in `MOBILE_SYNC_TEST_PLAN.md` MS-8.1, MS-8.5 and MS-8.7. Here, for one device: create a rule from the desktop through any QA profile on the same account while the phone's app is killed, and see whether it rings.
   - [ ] **Tap a notification:** cold start (app killed) → the app opens on that reminder's sticky/entity (`launchSourceKey`); warm (app backgrounded) → same (`taps` stream). For an entity bell: the to-do opens in To-Do with its panel; the event in Calendar.
   - [ ] **Acknowledge / Snooze / Tomorrow** from the in-app sticky: the OS notification is **withdrawn** on Android (`dismiss` cancels; on Windows it was a no-op). Snooze 10 min fires again at +10:00 with the app killed in between.
   - [ ] Once / Daily / Weekly rules: CRUD on the phone at 360 dp, the time chip picker by touch, device chips (this phone is listed), validation messages. Editing a rule re-schedules the alarm (`dumpsys alarm` shows the new time); deleting it cancels the alarm. A past once-rule (desktop BUG-039).
@@ -681,13 +744,14 @@ Every page phase also checks these, so they're not repeated below:
   - [ ] Re-check every Blocker/Major mobile bug for duplicates, including duplicates of **desktop** bugs (same root behaviour seen on both platforms: note it on both entries, don't delete; BUGS.md is append-only).
   - [ ] Confirm every phase M0–M24 and FV-M is Done or has documented skips.
   - [ ] Write a mobile summary at the top of BUGS.md (or a second summary block under the desktop one): counts by severity, by phase, the list of Blockers, which bugs are Android-only vs shared code.
-  - [ ] Update PROGRESS.md; final phone SESSION END; restore the emulator's global settings.
+  - [ ] Run PROGRESS.md §6b's "Deferred until the screen lock is off" list in one session with Juno's lock off (ask Juno first, and remind them to turn it back on afterwards). List anything still manual in the summary.
+  - [ ] Update PROGRESS.md; final phone SESSION END; restore Juno's global settings on the phone.
 
 ---
 
 ## Real-device pass (MANUAL, with Juno's phone)
 
-What the emulator can't show. Juno runs these, or a session runs them with Juno driving. Use a QA account, never Juno's real one on a test build.
+Written when the phases ran on the emulator. **Since 2026-11-22 the phases run on the real phone**, so each phase covers these items where it can: camera optics in M18, OxygenOS battery management in M4/M22, performance and heat in M23, real touch and notifications in their phases. What still needs Juno's hands goes on PROGRESS.md §6b's list: an incoming call, moving between networks (Wi-Fi to cellular, a tunnel, a captive portal), voice typing, Google sign-in, and lock-screen notification text. Use a QA account, never Juno's real one on a test build.
 
 - Camera optics: front-camera mirroring on real hardware, the still vs preview aspect, low light, the ghost overlay outdoors (PHOTO_SERIES_HLD §16, §17).
 - OEM battery management (Samsung, Xiaomi, OnePlus): do scheduled reminders still fire with the app closed for a day? Does background sync stop sooner than on stock Android?

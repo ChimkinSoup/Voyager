@@ -3,11 +3,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_app_server.dart';
-import 'package:voyager/features/gaia/companion/gaia_app.dart';
 import 'package:voyager/features/gaia/remote/gaia_token_counter.dart';
 import 'package:voyager/features/gaia/usage/gaia_tokens.dart';
 
@@ -166,68 +164,5 @@ void main() {
 
     counter.setUser(null);
     expect(counter.totals.value, isNull);
-  });
-
-  testWidgets('/usage groups the count by account, tier and model, and the '
-      'utility model by job', (tester) async {
-    GaiaTokenRow row(String account, String source, String model, int input) =>
-        GaiaTokenRow(
-          account: account,
-          source: source,
-          model: model,
-          count: GaiaTokenCount(input: input),
-        );
-    final rows = [
-      row('claude_code', 'deep', 'claude-opus-5-5', 3000),
-      row('claude_code', 'quick', 'claude-haiku-5-5', 100),
-      row('claude_code', 'utility:chat title', 'claude-haiku-5-5', 20),
-      row('claude_code', 'utility:image caption', 'claude-haiku-5-5', 50),
-      row('codex/work', 'standard', 'gpt-6.1-sol', 900),
-    ];
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Builder(
-            builder: (context) => ListView(
-              children: gaiaTokenLines(
-                context,
-                rows,
-                (key) => key == 'claude_code' ? 'Claude · Default' : key,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-    List<String> texts() => [
-      for (final text in tester.widgetList<Text>(find.byType(Text)))
-        if (!text.data!.contains(' in · ')) text.data!,
-    ];
-    expect(texts(), [
-      'All',
-      '4.07K',
-      'Claude · Default',
-      '3.17K',
-      'Quick',
-      '100',
-      'claude-haiku-5-5',
-      '100',
-      'Deep',
-      '3K',
-      'claude-opus-5-5',
-      '3K',
-      'Utility',
-      '70',
-      'Image caption',
-      '50',
-      'Chat title',
-      '20',
-      'codex/work',
-      '900',
-      'Standard',
-      '900',
-      'gpt-6.1-sol',
-      '900',
-    ]);
   });
 }

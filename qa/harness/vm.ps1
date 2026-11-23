@@ -11,6 +11,13 @@ $rest = @($args)
 $name = ''
 if ($rest.Count -ge 2 -and $rest[0] -eq '-Profile') { $name = $rest[1]; $rest = @($rest | Select-Object -Skip 2) }
 $name = Resolve-QaProfile $name
+# 'phone' is Juno's phone (phone_launch.ps1): refuse unless its app is signed
+# out or holds a qa account, as phone.ps1 does for input. vm.exe's adb calls
+# go to the serial in phone_serial.txt.
+if ($name -eq 'phone') {
+  $env:ANDROID_SERIAL = (Get-Content -LiteralPath (Join-Path $PSScriptRoot 'phone_serial.txt') -TotalCount 1).Trim()
+  try { $null = & (Join-Path $PSScriptRoot 'phone.ps1') check } catch { "$_"; exit 3 }
+}
 # Resets awake.ps1's 20-minute timer.
 $awake = Join-Path (Split-Path -Parent $PSScriptRoot) 'logs\awake.json'
 if (Test-Path -LiteralPath $awake) { (Get-Item -LiteralPath $awake).LastWriteTime = Get-Date }

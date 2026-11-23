@@ -38,7 +38,6 @@ import 'package:voyager/features/gaia/companion/gaia_commands.dart';
 import 'package:voyager/features/gaia/companion/gaia_composer_text.dart';
 import 'package:voyager/features/dev/dev_fps_counter_tile.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
-import 'package:voyager/features/gaia/usage/gaia_tokens.dart';
 import 'package:voyager/features/gaia/usage/gaia_usage.dart';
 import 'package:voyager/features/gaia/usage/gaia_usage_bar.dart';
 import 'package:voyager/features/gaia/usage/gaia_usage_limits.dart';
@@ -57,6 +56,7 @@ import 'package:voyager/features/gaia/companion/gaia_memory_card.dart';
 import 'package:voyager/features/gaia/companion/gaia_notch.dart';
 import 'package:voyager/features/gaia/companion/gaia_scroll_fade.dart';
 import 'package:voyager/features/gaia/companion/gaia_search.dart';
+import 'package:voyager/features/gaia/companion/gaia_stats.dart';
 import 'package:voyager/features/gaia/companion/gaia_offline_icon.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
@@ -178,8 +178,13 @@ class _GaiaAppState extends State<GaiaApp> {
       navigatorObservers: [_popups],
       // Above the Navigator, so dialogs and menus zoom with the chat, and
       // the keys work while one has focus.
-      builder: (context, child) =>
-          GaiaZoom(level: controller.zoom, child: child!),
+      builder: (context, child) => GaiaZoom(
+        level: controller.zoom,
+        // The image viewer pinches its picture; dialogs and menus
+        // close before anyone thinks to.
+        pinchable: () => _popups.isEmpty,
+        child: child!,
+      ),
       home: _RunToasts(
         controller: controller,
         child: ListenableBuilder(
@@ -236,6 +241,8 @@ const _chipShape = RoundedRectangleBorder(
 /// The routes pushed over the chat's: dialogs and menus.
 class _Popups extends NavigatorObserver {
   final _routes = <Route<dynamic>>[];
+
+  bool get isEmpty => _routes.isEmpty;
 
   @override
   void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
@@ -519,8 +526,14 @@ class _GaiaShell extends StatelessWidget {
                       exitTime: controller.debug.skyExitTime,
                       exitTest: controller.debug.skyExitTest,
                       burstTest: controller.debug.skyBurstTest,
+                      satelliteTest: controller.debug.skySatelliteTest,
                       top: kGaiaHeaderHeight + 1,
                       left: floater ? null : controller.sidebar.edge,
+                      // Nothing counts in dummy mode, which the sky tour
+                      // turns on too (GAIA_STATS_HLD.md §3.1).
+                      onSighting: controller.debug.dummyMode
+                          ? null
+                          : controller.noteSighting,
                       child: floater
                           ? chat()
                           : Stack(
@@ -1985,37 +1998,29 @@ class _SidebarState extends State<_Sidebar> {
           height: 52,
           child: Row(
             children: [
-              Expanded(
-                child: DragToMoveArea(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // The app's name as its mark: bigger and bolder.
-                          Text(
-                            'Gaia',
-                            style: theme.textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          if (_placedMoon(
-                                controller,
-                                GaiaMoonPlace.sidebar,
-                                size: 18,
-                              )
-                              case final moon?) ...[
-                            const SizedBox(width: 10),
-                            moon,
-                          ],
-                        ],
+              DragToMoveArea(
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 16, right: 4),
+                  child: Center(
+                    // The app's name as its mark: bigger and bolder.
+                    child: Text(
+                      'Gaia',
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
                 ),
               ),
+              // Out of the drag area, as the search is below, and opening
+              // the stats (GAIA_STATS_HLD.md §2).
+              if (_placedMoon(controller, GaiaMoonPlace.sidebar, size: 18)
+                  case final moon?)
+                _MoonButton(
+                  onPressed: () => showGaiaStats(context, controller),
+                  child: moon,
+                ),
+              const Expanded(child: DragToMoveArea(child: SizedBox.expand())),
               // Not in the drag area, whose double click would hold back its
               // clicks till it's sure there's no second.
               Padding(
@@ -3573,6 +3578,49 @@ class _Enter extends StatelessWidget {
       );
     },
   );
+}
+
+/// The sidebar's moon, clickable: an accent glow behind it on hover.
+class _MoonButton extends StatefulWidget {
+  const _MoonButton({required this.onPressed, required this.child});
+
+  final VoidCallback onPressed;
+  final Widget child;
+
+  @override
+  State<_MoonButton> createState() => _MoonButtonState();
+}
+
+class _MoonButtonState extends State<_MoonButton> {
+  var _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = Theme.of(context).colorScheme.primary;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onPressed,
+        child: AnimatedContainer(
+          duration: GaiaMotion.quick,
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: RadialGradient(
+              colors: [
+                accent.withValues(alpha: _hovered ? 0.35 : 0),
+                accent.withValues(alpha: 0),
+              ],
+            ),
+          ),
+          child: widget.child,
+        ),
+      ),
+    );
+  }
 }
 
 /// The moon for [place], if it's placed there and on.
@@ -5265,8 +5313,10 @@ class _ComposerState extends State<_Composer> {
   late final _focus = FocusNode(onKeyEvent: _paletteKey);
   late final StreamSubscription<void> _summoned;
   late final StreamSubscription<void> _usageOpened;
+  late final StreamSubscription<void> _statsOpened;
   final _vanish = GlobalKey<GaiaVanishState>();
   final _imagesVanish = GlobalKey<GaiaVanishState>();
+  final _contextVanish = GlobalKey<GaiaVanishState>();
 
   /// The side questions over the field, which Up and Down move along.
   final _btwDock = GlobalKey<GaiaBtwDockState>();
@@ -5312,6 +5362,9 @@ class _ComposerState extends State<_Composer> {
     _summoned = widget.controller.summoned.listen((_) => _focus.requestFocus());
     _usageOpened = widget.controller.usageOpens.listen((_) {
       if (mounted) unawaited(_showGaiaUsage(context, widget.controller));
+    });
+    _statsOpened = widget.controller.statsOpens.listen((_) {
+      if (mounted) unawaited(showGaiaStats(context, widget.controller));
     });
     widget.controller.focused.addListener(_onWindowFocus);
     _composers[widget.controller] = this;
@@ -5619,7 +5672,14 @@ class _ComposerState extends State<_Composer> {
         keyboard.isAltPressed ||
         keyboard.isShiftPressed ||
         keyboard.isMetaPressed) {
-      return KeyEventResult.ignored;
+      // Shift+Tab stays in the composer too.
+      return event.logicalKey == LogicalKeyboardKey.tab &&
+              keyboard.isShiftPressed &&
+              !keyboard.isControlPressed &&
+              !keyboard.isAltPressed &&
+              !keyboard.isMetaPressed
+          ? KeyEventResult.handled
+          : KeyEventResult.ignored;
     }
     final palette = _palette;
     switch (event.logicalKey) {
@@ -5682,17 +5742,27 @@ class _ComposerState extends State<_Composer> {
       _step(by);
       return KeyEventResult.handled;
     }
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    // A held Tab's repeats too, or focus traversal takes them.
+    if (event is! KeyDownEvent &&
+        !(event is KeyRepeatEvent &&
+            event.logicalKey == LogicalKeyboardKey.tab)) {
+      return KeyEventResult.ignored;
+    }
     final keyboard = HardwareKeyboard.instance;
     if (keyboard.isControlPressed ||
         keyboard.isAltPressed ||
         keyboard.isMetaPressed) {
       return KeyEventResult.ignored;
     }
+    // Tab never leaves the composer: off a list line it does nothing.
+    if (event.logicalKey == LogicalKeyboardKey.tab) {
+      if (VimTextScope.snippetWantsTab(node.context)) {
+        return KeyEventResult.ignored;
+      }
+      handleListTab(controller: _text, outdent: keyboard.isShiftPressed);
+      return KeyEventResult.handled;
+    }
     final handled = switch (event.logicalKey) {
-      LogicalKeyboardKey.tab =>
-        !VimTextScope.snippetWantsTab(node.context) &&
-            handleListTab(controller: _text, outdent: keyboard.isShiftPressed),
       LogicalKeyboardKey.backspace => handleListBackspace(controller: _text),
       _ => false,
     };
@@ -5820,6 +5890,7 @@ class _ComposerState extends State<_Composer> {
     _text.removeListener(_onDraft);
     unawaited(_summoned.cancel());
     unawaited(_usageOpened.cancel());
+    unawaited(_statsOpened.cancel());
     widget.controller.focused.removeListener(_onWindowFocus);
     if (_composers[widget.controller] == this) {
       _composers[widget.controller] = null;
@@ -6048,8 +6119,16 @@ class _ComposerState extends State<_Composer> {
     if (!controller.readyToSend()) return;
     // After: it may take tokens out.
     final text = _text.text;
+    // A CLI command leaves the window in the draft for the next message.
+    final native =
+        natives != null &&
+        gaiaNativeIn(text, [
+              for (final item in _paletteItems(natives)) ?item.native,
+            ]) !=
+            null;
     GaiaVanishState.vanishTogether([
       if (attached) _imagesVanish.currentState!,
+      if (controller.hasDraftContext && !native) _contextVanish.currentState!,
       _vanish.currentState!,
     ]);
     _text.clear();
@@ -6287,46 +6366,59 @@ class _ComposerState extends State<_Composer> {
                               ),
                             ),
                           ),
-                        if (controller.windowContext case final window?)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: _ContextChip(
-                                label: window.label,
-                                onRemove: controller.dropWindowContext,
-                              ),
-                            ),
-                          ),
-                        if (controller.draftControl case final control?)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: _ContextChip(
-                                label: control.label,
-                                icon: Icons.ads_click,
-                                onRemove: controller.dropDraftControl,
-                              ),
-                            ),
-                          ),
-                        if (controller.draftQuotes.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: Wrap(
-                              spacing: 6,
-                              runSpacing: 6,
-                              children: [
-                                for (final quote in controller.draftQuotes)
-                                  _ContextChip(
-                                    label: quote.label,
-                                    icon: Icons.format_quote,
-                                    onRemove: () =>
-                                        controller.removeDraftQuote(quote),
+                        // Sent, the window, control and quotes dissolve with
+                        // the text too, as the message's bubble fades them in.
+                        GaiaVanish(
+                          key: _contextVanish,
+                          refilled: controller.hasDraftContext,
+                          builder: (context, _) => Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              if (controller.windowContext case final window?)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: _ContextChip(
+                                      label: window.label,
+                                      onRemove: controller.dropWindowContext,
+                                    ),
                                   ),
-                              ],
-                            ),
+                                ),
+                              if (controller.draftControl case final control?)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: _ContextChip(
+                                      label: control.label,
+                                      icon: Icons.ads_click,
+                                      onRemove: controller.dropDraftControl,
+                                    ),
+                                  ),
+                                ),
+                              if (controller.draftQuotes.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: Wrap(
+                                    spacing: 6,
+                                    runSpacing: 6,
+                                    children: [
+                                      for (final quote
+                                          in controller.draftQuotes)
+                                        _ContextChip(
+                                          label: quote.label,
+                                          icon: Icons.format_quote,
+                                          onRemove: () => controller
+                                              .removeDraftQuote(quote),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                            ],
                           ),
+                        ),
                         // Sent, the images and files dissolve like the text, and
                         // their row closes behind them.
                         GaiaVanish(
@@ -7660,7 +7752,7 @@ Future<void> _showGaiaUsage(BuildContext context, GaiaController controller) {
     context: context,
     // Rebuilt as usage reads land, which may be after it opens.
     builder: (context) => ListenableBuilder(
-      listenable: Listenable.merge([controller, controller.tokens]),
+      listenable: controller,
       builder: (context, _) {
         final adapter = controller.agentFor(controller.nextTier)?.adapter;
         final accounts = adapter == null
@@ -7694,21 +7786,6 @@ Future<void> _showGaiaUsage(BuildContext context, GaiaController controller) {
             ),
           ],
         );
-        final tokens = controller.tokens.value;
-        String accountLabel(String key) {
-          for (final adapter in [kGaiaClaudeCodeAdapter, kGaiaCodexAdapter]) {
-            for (final account in controller.accountsFor(adapter)) {
-              if (account.key == key) {
-                return '${adapter == kGaiaCodexAdapter ? 'Codex' : 'Claude'}'
-                    ' · ${account.label}';
-              }
-            }
-          }
-          // Removed, or only on another desktop.
-          return '${key.split('/').first == kGaiaCodexAdapter ? 'Codex' : 'Claude'}'
-              ' · other account';
-        }
-
         return Dialog(
           child: SizedBox(
             width: 480,
@@ -7747,18 +7824,6 @@ Future<void> _showGaiaUsage(BuildContext context, GaiaController controller) {
                     else
                       Text('Not read yet', style: muted),
                   ],
-                  const SizedBox(height: 28),
-                  Text(
-                    'Lifetime tokens',
-                    style: theme.textTheme.labelLarge?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  if (tokens == null)
-                    Text('Not read yet', style: muted)
-                  else
-                    ...gaiaTokenLines(context, tokens, accountLabel),
                 ],
               ),
             ),
@@ -7767,122 +7832,6 @@ Future<void> _showGaiaUsage(BuildContext context, GaiaController controller) {
       },
     ),
   );
-}
-
-/// `/usage`'s lifetime tokens: the total, then each account's when there are
-/// several, each by tier with its models, then the utility model by job.
-/// Biggest first.
-@visibleForTesting
-List<Widget> gaiaTokenLines(
-  BuildContext context,
-  List<GaiaTokenRow> rows,
-  String Function(String key) accountLabel,
-) {
-  final theme = Theme.of(context);
-  final muted = theme.colorScheme.onSurfaceVariant;
-  String compact(int n) => NumberFormat.compact().format(n);
-  GaiaTokenCount sum(Iterable<GaiaTokenRow> rows) =>
-      rows.fold(const GaiaTokenCount(), (sum, row) => sum + row.count);
-  String detail(GaiaTokenCount used) =>
-      '${compact(used.input)} in · ${compact(used.output)} out · '
-      '${compact(used.cacheRead)} cache read · '
-      '${compact(used.cacheWrite)} cache write';
-  List<(String, List<GaiaTokenRow>)> by(
-    Iterable<GaiaTokenRow> rows,
-    String Function(GaiaTokenRow row) key,
-  ) {
-    final groups = <String, List<GaiaTokenRow>>{};
-    for (final row in rows) {
-      groups.putIfAbsent(key(row), () => []).add(row);
-    }
-    return [for (final MapEntry(:key, :value) in groups.entries) (key, value)]
-      ..sort((a, b) => sum(b.$2).total.compareTo(sum(a.$2).total));
-  }
-
-  // Its in, out and cache split under it, or in its tooltip.
-  Widget line(
-    String name,
-    GaiaTokenCount used, {
-    int depth = 0,
-    bool bold = false,
-    bool split = false,
-  }) {
-    final style =
-        (depth == 0 ? theme.textTheme.bodyLarge : theme.textTheme.bodyMedium)
-            ?.copyWith(
-              fontWeight: bold ? FontWeight.w600 : null,
-              color: depth > 1 ? muted : null,
-            );
-    final row = Row(
-      children: [
-        Expanded(child: Text(name, style: style)),
-        Text(compact(used.total), style: style),
-      ],
-    );
-    return Padding(
-      padding: EdgeInsets.only(left: 16.0 * depth, top: depth == 0 ? 14 : 6),
-      child: split
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                row,
-                const SizedBox(height: 2),
-                Text(
-                  detail(used),
-                  style: theme.textTheme.bodySmall?.copyWith(color: muted),
-                ),
-              ],
-            )
-          : Tooltip(message: detail(used), child: row),
-    );
-  }
-
-  List<Widget> sources(List<GaiaTokenRow> rows, int depth) {
-    List<Widget> group(
-      String name,
-      List<GaiaTokenRow> rows,
-      String Function(GaiaTokenRow row) part,
-    ) => [
-      if (rows.isNotEmpty) ...[
-        line(name, sum(rows), depth: depth, split: true),
-        for (final (key, rows) in by(rows, part))
-          line(key, sum(rows), depth: depth + 1),
-      ],
-    ];
-    final utility = [
-      for (final row in rows)
-        if (row.source.startsWith(kGaiaTokensUtility)) row,
-    ];
-    return [
-      for (final tier in GaiaTier.values)
-        ...group(tier.label, [
-          for (final row in rows)
-            if (row.source == tier.name) row,
-        ], (row) => row.model),
-      ...group('Utility', utility, (row) {
-        final job = row.source.substring(kGaiaTokensUtility.length);
-        return job.isEmpty ? job : job[0].toUpperCase() + job.substring(1);
-      }),
-      ...group('Other', [
-        for (final row in rows)
-          if (!GaiaTier.values.any((tier) => tier.name == row.source) &&
-              !row.source.startsWith(kGaiaTokensUtility))
-            row,
-      ], (row) => row.model),
-    ];
-  }
-
-  final accounts = by(rows, (row) => row.account);
-  return [
-    line('All', sum(rows), bold: true, split: true),
-    if (accounts.length < 2)
-      ...sources(rows, 0)
-    else
-      for (final (account, rows) in accounts) ...[
-        line(accountLabel(account), sum(rows), bold: true, split: true),
-        ...sources(rows, 1),
-      ],
-  ];
 }
 
 /// Auto, once the user has read its notice on this device (§4).

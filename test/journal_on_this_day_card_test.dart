@@ -239,34 +239,18 @@ void main() {
     expect(_card, findsOneWidget);
   });
 
-  testWidgets('✕ hides every match until the app restarts, and the next day '
-      'shows its own', (tester) async {
-    final h = await _setUp(tester);
+  testWidgets('✕ tucks the card, and the strip brings it back', (tester) async {
+    await _setUp(tester);
     await _waitForEntrance(tester);
 
-    await tester.tap(find.byTooltip('Dismiss'));
+    await tester.tap(find.byTooltip('Tuck away'));
     await tester.pumpAndSettle();
+    expect(_card, findsOneWidget);
+    expect(_isOut(tester), isFalse);
 
-    expect(_card, findsNothing);
-    expect(find.text('Memory 1'), findsNothing);
-    // Nothing persisted: no dismissal rows, so nothing syncs either.
-    expect(await DriftNotificationRepository(h.db).listDismissals(), isEmpty);
-
-    // Leaving the page and coming back in the same run keeps it closed.
-    await _pump(tester, h, today: _today, overlayKey: const ValueKey('again'));
-    await _waitForEntrance(tester);
-    expect(_card, findsNothing);
-
-    // A restart the same day brings it back, and it slides out again.
-    final restarted = _Harness(h.db, _newContainer(h.db));
-    addTearDown(restarted.fieldFocus.dispose);
-    await _pump(tester, restarted, today: _today);
-    await _waitForEntrance(tester);
+    await _tapEdge(tester);
+    await tester.pumpAndSettle();
     expect(_isOut(tester), isTrue);
-
-    await _pump(tester, h, today: DateTime(2026, 9, 25));
-    await _waitForEntrance(tester);
-    expect(find.text('A day later'), findsOneWidget);
   });
 
   testWidgets('tapping the memory hands the entry to the page and collapses '
@@ -405,7 +389,7 @@ void main() {
   });
 
   testWidgets('✕ under the mouse leaves no hover nudge behind', (tester) async {
-    final h = await _setUp(tester);
+    await _setUp(tester);
     final tucked = tester.getRect(_card);
     await _waitForEntrance(tester);
 
@@ -413,14 +397,12 @@ void main() {
     addTearDown(mouse.removePointer);
     await mouse.addPointer(location: tester.getCenter(_card));
     await tester.pump();
-    await mouse.moveTo(tester.getCenter(find.byTooltip('Dismiss')));
-    await mouse.down(tester.getCenter(find.byTooltip('Dismiss')));
+    await mouse.moveTo(tester.getCenter(find.byTooltip('Tuck away')));
+    await mouse.down(tester.getCenter(find.byTooltip('Tuck away')));
     await mouse.up();
     await tester.pumpAndSettle();
-    expect(_card, findsNothing);
     await mouse.moveTo(const Offset(100, 700));
-
-    await _pump(tester, h, today: DateTime(2026, 9, 25));
+    await tester.pumpAndSettle();
     expect(tester.getRect(_card), tucked);
   });
 }

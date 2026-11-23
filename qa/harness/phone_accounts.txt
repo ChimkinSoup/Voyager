@@ -2,3 +2,4 @@
 # with. Never a real account. Add a qa account's UID from its desktop profile:
 # settings_table.local_owner_uid in <profile>\voyager.sqlite.
 iqdUEDgy1bOtlcW7wEFxpEfh6ih1  # voyager-qa-128@example.com (gaiaqa)
+fSiJzg0VfaXblFWl5CQgqIrRf7O2  # voyager-qa-129@example.com (M0)

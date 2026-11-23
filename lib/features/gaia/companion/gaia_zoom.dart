@@ -17,6 +17,10 @@ const _steps = [0.5, 0.67, 0.75, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5];
 const _shownFor = Duration(milliseconds: 1500);
 const _hoveredFor = Duration(seconds: 3);
 
+/// How far a pinch spreads, or closes by its inverse, for one step. Enough
+/// that the stray scale of a two-finger scroll never gets there.
+const _pinchStep = 1.15;
+
 /// Gaia's zoom level: local to this desktop and never synced, like
 /// `GaiaSidebar`, kept in a JSON [file]. Null in tests, which keep nothing.
 class GaiaZoomLevel extends ValueNotifier<double> {
@@ -67,11 +71,21 @@ class GaiaZoomLevel extends ValueNotifier<double> {
 /// Scales [child] by [level], so more or less of the chat fits, with
 /// Ctrl+Plus and Ctrl+Minus or Ctrl+scroll, and back to 100% with Ctrl+0. Each press shows
 /// the level and a Reset for a
-/// moment; hovered, they stay until the cursor leaves.
+/// moment; hovered, they stay until the cursor leaves. A trackpad pinch
+/// steps too, one level per [_pinchStep] of spread.
 class GaiaZoom extends StatefulWidget {
-  const GaiaZoom({super.key, required this.level, required this.child});
+  const GaiaZoom({
+    super.key,
+    required this.level,
+    this.pinchable,
+    required this.child,
+  });
 
   final GaiaZoomLevel level;
+
+  /// Whether a pinch zooms now; false while something above, like the image
+  /// viewer, pinches for itself. Always, when null.
+  final bool Function()? pinchable;
   final Widget child;
 
   @override
@@ -130,13 +144,15 @@ class _GaiaZoomState extends State<GaiaZoom> {
         const SingleActivator(LogicalKeyboardKey.numpad0, control: true):
             _reset,
       },
-      child: _CtrlScroll(
+      child: _ZoomGestures(
         // Wheel up zooms in, as in a browser.
         onScroll: (event) => switch (event.scrollDelta.dy) {
           < 0 => zoomIn(),
           > 0 => zoomOut(),
           _ => null,
         },
+        pinchable: widget.pinchable ?? () => true,
+        onPinch: (by) => by > 0 ? zoomIn() : zoomOut(),
         child: ValueListenableBuilder(
           valueListenable: widget.level,
           builder: (context, zoom, child) => Stack(
@@ -250,25 +266,42 @@ class _GaiaZoomState extends State<GaiaZoom> {
   }
 }
 
-/// Hands Ctrl+scroll to [onScroll] instead of the scroll views inside.
-class _CtrlScroll extends SingleChildRenderObjectWidget {
-  const _CtrlScroll({required this.onScroll, super.child});
+/// Hands Ctrl+scroll to [onScroll] instead of the scroll views inside, and
+/// each [_pinchStep] of a trackpad pinch to [onPinch]: 1 spread, -1 closed.
+class _ZoomGestures extends SingleChildRenderObjectWidget {
+  const _ZoomGestures({
+    required this.onScroll,
+    required this.pinchable,
+    required this.onPinch,
+    super.child,
+  });
 
   final void Function(PointerScrollEvent event) onScroll;
+  final bool Function() pinchable;
+  final void Function(int by) onPinch;
 
   @override
-  _RenderCtrlScroll createRenderObject(BuildContext context) =>
-      _RenderCtrlScroll(onScroll);
+  _RenderZoomGestures createRenderObject(BuildContext context) =>
+      _RenderZoomGestures(onScroll, pinchable, onPinch);
 
   @override
-  void updateRenderObject(BuildContext context, _RenderCtrlScroll render) =>
-      render.onScroll = onScroll;
+  void updateRenderObject(BuildContext context, _RenderZoomGestures render) =>
+      render
+        ..onScroll = onScroll
+        ..pinchable = pinchable
+        ..onPinch = onPinch;
 }
 
-class _RenderCtrlScroll extends RenderProxyBox {
-  _RenderCtrlScroll(this.onScroll);
+class _RenderZoomGestures extends RenderProxyBox {
+  _RenderZoomGestures(this.onScroll, this.pinchable, this.onPinch);
 
   void Function(PointerScrollEvent event) onScroll;
+  bool Function() pinchable;
+  void Function(int by) onPinch;
+
+  /// The pinch's scale at its last step, by pointer; none for one that
+  /// started where it can't zoom.
+  final _pinched = <int, double>{};
 
   /// In the hit test ahead of the children, so it sees a scroll first and
   /// claims it before any scroll view inside can: the first to claim one
@@ -283,6 +316,31 @@ class _RenderCtrlScroll extends RenderProxyBox {
 
   @override
   void handleEvent(PointerEvent event, BoxHitTestEntry entry) {
+    // The scroll views take the same events' pan; a pinch keeps no more
+    // than a stray scroll, so they are left to it.
+    switch (event) {
+      case PointerPanZoomStartEvent() when pinchable():
+        _pinched[event.pointer] = 1;
+        return;
+      case PointerPanZoomUpdateEvent():
+        final last = _pinched[event.pointer];
+        if (last == null) return;
+        var at = last;
+        // A fast pinch can pass more than one step between updates.
+        while (event.scale >= at * _pinchStep) {
+          at *= _pinchStep;
+          onPinch(1);
+        }
+        while (event.scale <= at / _pinchStep) {
+          at /= _pinchStep;
+          onPinch(-1);
+        }
+        _pinched[event.pointer] = at;
+        return;
+      case PointerPanZoomEndEvent():
+        _pinched.remove(event.pointer);
+        return;
+    }
     if (event is! PointerScrollEvent) return;
     if (!HardwareKeyboard.instance.isControlPressed) return;
     GestureBinding.instance.pointerSignalResolver.register(

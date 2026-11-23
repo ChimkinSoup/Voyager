@@ -54,6 +54,10 @@ enum GaiaBuiltin {
   /// for a terminal (GAIA_NATIVE_COMMANDS.md §5).
   usage('usage', 'Show plan usage for the next message\'s accounts'),
 
+  /// The lifetime stats, as the sidebar's moon opens them
+  /// (GAIA_STATS_HLD.md §2).
+  stats('stats', 'Show lifetime stats'),
+
   /// The hand (GAIA_AUTONOMY_HLD.md §4), anywhere in the draft like a tier
   /// command: see [gaiaInlineBuiltins]. Least first, so `/con` picks Off.
   controlOff(

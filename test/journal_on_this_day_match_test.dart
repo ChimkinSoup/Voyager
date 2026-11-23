@@ -300,11 +300,4 @@ void main() {
     expect(days(DateTime(2026, 10, 20), 5), isEmpty);
     expect(days(DateTime(2026, 10, 20), 0), ['2025-10-20']);
   });
-
-  test('dismissal keys are per entry and dated', () {
-    expect(
-      onThisDayDismissalKey('abc', DateTime(2026, 9, 4)),
-      'abc|2026-09-04',
-    );
-  });
 }

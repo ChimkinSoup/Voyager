@@ -166,6 +166,10 @@ abstract final class FirestoreCollections {
   /// increments straight through Firestore. Not in [records]: a running
   /// count, not records to back up.
   static const gaiaTokens = 'gaia_tokens';
+
+  /// Gaia's lifetime stats, one document added to with increments, as
+  /// [gaiaTokens] (GAIA_STATS_HLD.md §4.2). Not in [records] either.
+  static const gaiaStats = 'gaia_stats';
   static const syncOperations = 'sync_operations';
 
   /// One record per document `permanentlyDeleteFromRemote` purged, written

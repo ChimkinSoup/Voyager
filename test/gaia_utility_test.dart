@@ -292,6 +292,13 @@ void main() {
       expect(await u.title('x', 'y'), 'quick');
     });
 
+    test('a title from the first message alone has no reply in it', () async {
+      final u = utility((_) => 'Sync retry fix');
+      expect(await u.title('Fix the sync retry loop'), 'Sync retry fix');
+      expect(runner.jobs.single, contains('the message in'));
+      expect(runner.inputs.single, 'User: Fix the sync retry loop');
+    });
+
     test('a failed call is a null, never an error', () async {
       final u = utility((_) => throw GaiaRunException('Not logged in'));
       expect(await u.route('x'), isNull);

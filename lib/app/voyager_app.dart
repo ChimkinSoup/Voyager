@@ -48,6 +48,7 @@ import 'package:voyager/features/gaia/remote/gaia_beacon_service.dart';
 import 'package:voyager/features/gaia/remote/gaia_device_keys.dart';
 import 'package:voyager/features/gaia/remote/gaia_power.dart';
 import 'package:voyager/features/gaia/remote/gaia_push.dart';
+import 'package:voyager/features/gaia/remote/gaia_stats_counter.dart';
 import 'package:voyager/features/gaia/remote/gaia_token_counter.dart';
 import 'package:voyager/features/gaia/page/gaia_providers.dart';
 import 'package:voyager/features/gaia/page/gaia_remote_chat.dart';
@@ -261,8 +262,15 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
       (_, uid) => tokens.setUser(uid),
       fireImmediately: true,
     );
+    final stats = GaiaStatsCounter(ref.read(firestoreProvider));
+    ref.listenManual(
+      authNotifierProvider.select((auth) => auth.userId),
+      (_, uid) => stats.setUser(uid),
+      fireImmediately: true,
+    );
     GaiaHost.instance.attach(
       tokens: tokens,
+      stats: stats,
       voyagerHotkeys: () => switch (ref.read(settingsProvider).valueOrNull) {
         final voyager? => {
           'Quick journal entry': voyager.journalHotkey,

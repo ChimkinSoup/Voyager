@@ -41,6 +41,7 @@ void main() {
       exitTime: 1,
       exitTest: warpTest,
       satellite: satellite,
+      rareSatellites: false,
       child: child,
     ),
   );
@@ -474,6 +475,7 @@ void main() {
             exit: GaiaSkyExit.fade,
             exitTime: 1,
             satellite: satellite,
+            rareSatellites: false,
             child: const SizedBox.expand(),
           ),
       ],
@@ -650,10 +652,140 @@ void main() {
     active.value = false;
   });
 
+  group('sightings (GAIA_STATS_HLD.md §3)', () {
+    late List<GaiaSighting> sightings;
+
+    setUp(() {
+      sightings = [];
+      active = ValueNotifier(true);
+      addTearDown(active.dispose);
+    });
+
+    // At 1.5 s between events, the first meteor comes at 0.4 s and the
+    // first satellite at 1 s.
+    Widget counted({
+      bool rolls = true,
+      double eventInterval = 1.5,
+      double aurora = 0,
+      bool rareAurora = false,
+      GaiaRareAurora? rareColours,
+      GaiaSatellite satellite = GaiaSatellite.dot,
+      int satelliteTest = 0,
+      int burstTest = 0,
+    }) => GaiaSky(
+      active: active,
+      shown: true,
+      sent: false,
+      rotation: 0,
+      stars: 0,
+      twinkle: 0,
+      sparkles: 0,
+      traceSpeed: 80,
+      figures: false,
+      eventInterval: eventInterval,
+      aurora: aurora,
+      rareAurora: rareAurora,
+      rareColours: rareColours,
+      exit: GaiaSkyExit.fade,
+      exitTime: 1,
+      satellite: satellite,
+      satelliteTest: satelliteTest,
+      burstTest: burstTest,
+      onSighting: sightings.add,
+      random: _Rigged(rare: rolls),
+      child: const SizedBox.expand(),
+    );
+
+    Iterable<GaiaSatellite> satellites() =>
+        sightings.map((s) => s.satellite).nonNulls;
+    Iterable<GaiaRareAurora> auroras() =>
+        sightings.map((s) => s.aurora).nonNulls;
+    int meteors() =>
+        sightings.where((s) => s.satellite == null && s.aurora == null).length;
+
+    testWidgets('a rolled rare satellite counts once, after 3 s in view', (
+      tester,
+    ) async {
+      await tester.pumpWidget(counted());
+      // Sent at 1 s from just off the left edge, in view half a second on.
+      await frames(tester, 4.2);
+      expect(satellites(), isEmpty);
+      await frames(tester, 0.6);
+      expect(satellites(), [GaiaSatellite.iss]);
+      // The next comes at about 4.8 s, so not counted till 8.3 s or so.
+      await frames(tester, 3);
+      expect(satellites(), [GaiaSatellite.iss]);
+      active.value = false;
+    });
+
+    testWidgets("a rare look chosen in the debug menu doesn't count", (
+      tester,
+    ) async {
+      await tester.pumpWidget(counted(satellite: GaiaSatellite.iss));
+      await frames(tester, 6);
+      expect(satellites(), isEmpty);
+      active.value = false;
+    });
+
+    testWidgets("a test satellite doesn't count, rare or not", (tester) async {
+      await tester.pumpWidget(counted(eventInterval: 1e6));
+      await frames(tester, 0.1);
+      await tester.pumpWidget(counted(eventInterval: 1e6, satelliteTest: 1));
+      await frames(tester, 6);
+      expect(satellites(), isEmpty);
+      active.value = false;
+    });
+
+    testWidgets('a rolled rare aurora counts once a sky', (tester) async {
+      await tester.pumpWidget(counted(aurora: 0.35));
+      await frames(tester, 2);
+      expect(auroras(), [GaiaRareAurora.crimson]);
+      active.value = false;
+    });
+
+    testWidgets("the debug menu's rare aurora doesn't count", (tester) async {
+      await tester.pumpWidget(
+        counted(aurora: 0.35, rareAurora: true, rolls: false),
+      );
+      await frames(tester, 1);
+      expect(auroras(), isEmpty);
+      // Rolled, but in the colours the debug menu set.
+      await tester.pumpWidget(Container());
+      await tester.pumpWidget(
+        counted(aurora: 0.35, rareColours: GaiaRareAurora.gold),
+      );
+      await frames(tester, 1);
+      expect(auroras(), isEmpty);
+      active.value = false;
+    });
+
+    testWidgets("each meteor counts, a test burst's don't", (tester) async {
+      await tester.pumpWidget(counted(eventInterval: 1.5));
+      await frames(tester, 0.1);
+      await tester.pumpWidget(counted(eventInterval: 1.5, burstTest: 1));
+      await frames(tester, 0.2);
+      expect(meteors(), 0);
+      // The first of the sky's own, at 0.4 s.
+      await frames(tester, 0.2);
+      expect(meteors(), 1);
+      active.value = false;
+    });
+  });
+
   test("the rare aurora's colours share all its skies", () {
     final shares = GaiaRareAurora.values.map((c) => c.share);
     expect(shares.reduce((a, b) => a + b), closeTo(1, 1e-9));
     expect(GaiaRareAurora.gold.share, lessThan(GaiaRareAurora.crimson.share));
+  });
+
+  test('the rare satellites share all the rare ones, the ISS least', () {
+    final shares = GaiaSatellite.values.map((s) => s.share);
+    expect(shares.reduce((a, b) => a + b), closeTo(1, 1e-9));
+    for (final look in GaiaSatellite.values) {
+      if (look.share > 0 && look != GaiaSatellite.iss) {
+        expect(GaiaSatellite.iss.share, lessThan(look.share));
+      }
+    }
   });
 
   group('meteor showers', () {
@@ -685,6 +817,23 @@ void main() {
       expect(gaiaMeteorShower(DateTime(2026, 6, 15)), isNull);
     });
   });
+}
+
+/// Rolls the same every time: every rare roll comes up if [rare], none if
+/// not, and every share's roll picks the first, the ISS and crimson.
+class _Rigged implements Random {
+  _Rigged({required this.rare});
+
+  final bool rare;
+
+  @override
+  int nextInt(int max) => rare || max == 1 ? 0 : 1;
+
+  @override
+  double nextDouble() => 0.01;
+
+  @override
+  bool nextBool() => true;
 }
 
 class _CountingPainter extends CustomPainter {

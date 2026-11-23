@@ -2,14 +2,16 @@
 
 Written 2026-11-22, on `349e49df` plus the uncommitted Gaia settings work. Read after `qa/MOBILE_TEST_PLAN.md` (whose rules, harness and phone safety apply here) and `qa/MULTI_DEVICE_SYNC_TEST_PLAN.md` (the desktop two-profile run, MD-0 … MD-18, 2026-10-12 to 2026-10-20). Run it after mobile Phase M22.
 
+**Device (2026-11-22): P is Juno's OnePlus 12R over USB, not the emulator.** Read `MOBILE_TEST_PLAN.md`'s DEVICE section first. It covers the USB mode ("Charging this device"; ask Juno to switch to "File transfer" if adb misbehaves), Do Not Disturb on for the session and restored after, screen-lock-dependent checks deferred to PROGRESS.md §6b, restoring **Juno's** settings at the end, and no `adb emu` commands. Wherever this plan says "emulator", read "the phone".
+
 ## Why this run exists, and why it's smaller than the desktop one
 
 The sync engine is shared Dart, with no platform branches in `lib/core/sync`, and MD-0 … MD-18 already took its logic apart. Running all of that again would mostly find the same bugs. This plan tests what is **different** when one of the devices is a phone:
 
 1. **Different SDKs underneath.** On Windows, Firestore runs on the C++ SDK and media goes through `FirebaseRestMediaStorage` (`providers.dart:281`). On Android, both run on the native Android SDKs, and weather goes through the `cloud_functions` plugin. Offline caching, listener re-attachment, write queuing, transactions offline and upload retries can all behave differently below the same Dart.
 2. **Android's lifecycle.** The desktop app never stops running. A phone app is paused, frozen in Doze, killed in the background, and resumed hours later. MD-9 (offline) and MD-10 (startup pull) assumed a process that stays alive.
-3. **Real per-device network loss.** On one PC the only per-instance offline switch was Dev → Force offline (MD §1.4). The emulator has its own network, so the phone can go truly offline (airplane mode) while the desktop stays online, and the reverse.
-4. **A second clock and timezone**, if M0 finds a way to set them on the emulator. Cross-timezone cases were unit-test only (FV-5, MD §1.4).
+3. **Real per-device network loss.** On one PC the only per-instance offline switch was Dev → Force offline (MD §1.4). The phone has its own network, so it can go truly offline (airplane mode) while the desktop stays online, and the reverse.
+4. **A second clock and timezone**, if M0 finds a way to set them on the phone (on the emulator, `cmd alarm set-timezone` / `set-time` worked without root). Cross-timezone cases were unit-test only (FV-5, MD §1.4).
 5. **Platform-specific records:** Android device registration, Android-scheduled reminder alarms, phone-captured Photos, the phone as a Gaia remote client.
 6. **Changes since MD-18:** sync performance work (`c26c586f`), the Firebase SDK update (`f0892ff4`), default journal/list/calendar switching (`79f5c468`), timezone handling (`42b6efda`), the startup-pull toast wording (`d4c21377`), and the whole of Gaia's synced data (9 `gaia_*` collections now in `FirestoreCollections.records`, plus Gaia's remote-control collections outside it).
 7. **Re-checking the MD bugs** from the phone side: the fixes were verified desktop ↔ desktop (§6).
@@ -51,7 +53,7 @@ The rules from `TEST_PLAN.md`, `MULTI_DEVICE_SYNC_TEST_PLAN.md` §1 and `MOBILE_
 | Device | How | Role |
 |---|---|---|
 | **D** (desktop) | dev profile `qa` (`-Profile qa`), debug build of the working tree | Windows: C++ Firestore SDK, REST media |
-| **P** (phone) | the emulator `Medium_Phone_API_37.0`, debug APK of the **same commit** | Android: native Firestore and Storage SDKs |
+| **P** (phone) | Juno's OnePlus 12R (Android 16) over USB, debug APK of the **same commit** | Android: native Firestore and Storage SDKs |
 | **B** (optional) | dev profile `qb` | A second desktop, for MS-18 only |
 | Juno's install | the normal instance | **Never touched**, as in MD §1.1 |
 
@@ -63,7 +65,7 @@ Both D and P must run the same commit. Record `git log -1 --oneline` and `git st
 2. **P:** the phone SESSION START from `MOBILE_TEST_PLAN.md` M0, on the **same** account. Add the account's UID to `qa/harness/phone_accounts.txt` first. `phone.ps1 check` must print that UID.
 3. **Every call names its device:** `-Profile qa` for D, `phone.ps1` / `-Profile phone` (M0's VM-service wrapper) for P. Never a bare `stop.ps1`.
 4. Turn on **Dev → Verbose sync** on both (device-local).
-5. Restore the standard phone configuration (portrait, airplane off, font scale 1.0) at the start and the end.
+5. Set the standard phone configuration (portrait, airplane off, font scale 1.0, Do Not Disturb on) at the start. At the end, restore Juno's own values (PROGRESS.md §1b).
 
 ### 1.3 Oracles
 
@@ -81,16 +83,16 @@ As MD §1.3, adapted for the phone:
 ### 1.4 What this rig newly allows
 
 - **Real offline on one device only:** airplane mode on P while D stays online, and D's Force offline while P stays online. MD-9's cases with a real outage, and with sign-in and weather cut too.
-- **A slow or flaky link on one device:** `adb emu network speed edge`, `network delay gprs`, or a toggle loop.
+- **A flaky link on one device:** a Wi-Fi/data/airplane toggle loop. A *slow* link (`adb emu network speed`) was emulator-only; on the phone it goes on PROGRESS.md §6b's list.
 - **A second timezone, maybe a second clock:** only if M0 found a way (root image or settings route). If not, these stay unit-test only, as MD §1.4 said; state that in the results.
 - **A device that gets frozen and killed by the OS,** and alarms that fire without the app running.
 
 ### 1.5 What it still can't do (state in results, don't work around)
 
-- Two **phones**: one emulator only (a second AVD could run, but the laptop's RAM is the limit; optional).
-- Real-hardware lifecycle (OEM battery killers); the real-device pass in `MOBILE_TEST_PLAN.md` covers it.
+- Two **phones**: one phone only (the emulator could be a second one, but it costs 5.4 GB of RAM and heats the laptop; only if Juno asks).
+- Real-hardware lifecycle: covered now, since P is a real OnePlus. Record what OxygenOS's background killing does to sync, and judge whether it's a Voyager bug or a platform limit.
 - Exact-millisecond collisions and time-based expiry: as MD §1.4 (craft stamps with `evalc`, age rows with the app stopped, and label them simulated).
-- Clicking a Windows toast (MANUAL-ONLY, as before). Tapping a phone notification **is** allowed (it's inside the emulator, through `phone.ps1`).
+- Clicking a Windows toast (MANUAL-ONLY, as before). Tapping a phone notification **is** allowed (Voyager's own notifications, through `phone.ps1`; never another app's).
 
 ---
 
@@ -196,7 +198,7 @@ Record O8 for every step. "Lands" = the change reaches Firestore; "shows" = P's 
 - [ ] **7.2** The same on the **same** records (MD-9.2; compare with BUG-241's status).
 - [ ] **7.3** P offline while D edits a record 10 times, then P edits it offline and reconnects (**BUG-256**): P's edit isn't lost and versions are monotonic on both.
 - [ ] **7.4** P offline while D creates, edits and deletes X; P reconnects: P never shows X, or shows it tombstoned (MD-9.3).
-- [ ] **7.5** P offline for 2 hours with edits on both sides across many collections (Juno keeps working; the emulator runs headless): reconnect, converge, nothing lost. Then the reverse with D's Force offline for 2 hours and P online.
+- [ ] **7.5** P offline for 2 hours with edits on both sides across many collections (Juno keeps working; the phone sits on USB): reconnect, converge, nothing lost. Then the reverse with D's Force offline for 2 hours and P online.
 - [ ] **7.6** P on a flaky link (`network speed edge`, `network delay gprs`, or airplane toggled every 5 s) during a 300-write drain from P: no loss, no duplicates on D.
 - [ ] **7.7** Wi-Fi → mobile data switch on P mid-drain (`svc wifi disable` with data on, then back).
 - [ ] **7.8** Airplane mode toggled 10× on P while D writes continuously (MD-9.4): P's live sync recovers and has no stuck ids.
@@ -206,13 +208,13 @@ Record O8 for every step. "Lands" = the change reaches Firestore; "shows" = P's 
 ### MS-8 Reminders, devices and notifications across platforms
 On D the app raises due alerts itself while running; on P, Android alarms fire with the app closed (`reminder_os_notifier.dart`). Delivery states sync per device.
 
-- [ ] **8.1** A scheduled rule created on D, targeting **both** devices, while P's app is **closed**: is P's alarm scheduled before P's app next opens? (It can't be, without a push; record it. This is a product question for Juno: a rule made on the desktop doesn't ring on a phone that hasn't opened the app since. Log it if the HLD promises otherwise.) Then open P once and close it: the alarm is scheduled (`dumpsys alarm`), and fires.
+- [ ] **8.1** A scheduled rule created on D, targeting **both** devices, while P's app is **closed** (backgrounded, then killed with `am kill`; not force-stopped, since Android drops a force-stopped app's alarms by design). **Expected (Juno, 2026-11-22): it rings on P at its time without P's app being opened.** If it doesn't ring, that's a bug (Major: a reminder silently missed). Check `dumpsys alarm` / `dumpsys notification` on P before and after the fire time. The code as of this plan schedules alarms only from inside the running app, so expect this to fail; log it with the evidence. Then open P once and close it: the alarm is scheduled and fires (the fallback that works today).
 - [ ] **8.2** The rule fires on both. Acknowledge on D → P's sticky clears live (if open), and P's OS notification is withdrawn? (P is closed: does anything withdraw it?) Acknowledge on P → D's sticky clears.
 - [ ] **8.3** Snooze on P → D shows the snooze; the snoozed alert fires on P at +10 with P killed in between. Does D re-alert too, per the HLD's per-device rules?
 - [ ] **8.4** Device chips: a rule for **P only** doesn't alert D, and a rule for D only doesn't schedule on P. Rename P on D's Devices list → P shows the new name.
-- [ ] **8.5** Rule edited on D (time moved) while P is closed: on P's next open the alarm moves. Rule deleted on D: P's alarm is cancelled on next open; and if P never opens, the stale alarm fires. Record what the notification says, and whether tapping it opens a deleted rule gracefully.
+- [ ] **8.5** Same expectation as 8.1 for changes: a rule **edited** on D (time moved) while P is closed rings on P at the **new** time, not the old one; a rule **deleted or turned off** on D doesn't ring on P. Either failing with P closed is a bug (part of 8.1's bug, or its own entry if the cause differs). Also record what happens on P's next open, and whether tapping a stale notification for a deleted rule opens gracefully.
 - [ ] **8.6** Timezone (if settable): P in another zone. A daily rule at 9:00 fires at 9:00 local on each device (or at the same instant, per the HLD; record which and compare with SCHEDULED_REMINDERS_HLD).
-- [ ] **8.7** Entity bells: a to-do bell set on P, the due time changed on D, the task completed on D: P's alarm follows on next open, and a completed task's notification doesn't fire (or is withdrawn).
+- [ ] **8.7** Entity bells, with the same expectation as 8.1 while P is closed: a bell added on D to a task or event rings on P; the due time changed on D rings at the new time; a task completed or an event deleted on D doesn't ring on P.
 - [ ] **8.8** Inbox dismissals, hidden/restore and pinned notes across devices (MD-8's inbox rows, from the phone's inbox).
 - [ ] **8.9** Secure Notes: unlock on P doesn't unlock D; a note edited on D shows on P after P unlocks; a conflicting edit (both edit the same pinned note) → the conflict detection SECURE_NOTES_HLD Phase 1 describes.
 
@@ -288,7 +290,7 @@ This is the **data sync** of Gaia's records (`gaia_chats`, `gaia_messages`, `gai
 ## 4. Out of scope (state in the results)
 
 - Two physical phones; iOS (not a target platform, `platform_info.dart` folds it into "other").
-- OEM battery killers and real hardware lifecycle (`MOBILE_TEST_PLAN.md` real-device pass).
+- OEM battery killers on phones other than Juno's OnePlus.
 - Real model turns and remote power actions in Gaia (M19's rules).
 - Anything MANUAL-ONLY in PROGRESS.md §6 or `MOBILE_TEST_PLAN.md` §0.4.
 
@@ -300,7 +302,7 @@ This is the **data sync** of Gaia's records (`gaia_chats`, `gaia_messages`, `gai
   - `wait_row_phone.ps1`: O7 on the phone by VM eval;
   - a phone side for `together.ps1` (MS-3.3): release a `phone.ps1` input run and a `voy.ps1` run at the same instant. The `adb` round trip is slower than posted Windows input, so record the release skew it achieves.
 - **Order:** MS-0, MS-1, MS-2 first (they shake out the rig and give the latency baseline). Then MS-3, MS-6, MS-7 (the most likely new bugs). Then the rest in any order.
-- **Per session:** as MD §5. Both devices up and checked, Verbose sync on both, record commits and IDs, log bugs as found, and SESSION END on both: D with `session_end.ps1 -Profile qa` → `SIGNED-OUT`; P with the phone SESSION END → `phone.ps1 check` says `signed out`, and the emulator's global settings restored.
+- **Per session:** as MD §5. Both devices up and checked, Verbose sync on both, record commits and IDs, log bugs as found, and SESSION END on both: D with `session_end.ps1 -Profile qa` → `SIGNED-OUT`; P with the phone SESSION END → `phone.ps1 check` says `signed out`, Juno's settings, Do Not Disturb and `stayon` restored.
 
 ---
 

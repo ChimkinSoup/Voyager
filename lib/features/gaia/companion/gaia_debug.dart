@@ -169,6 +169,10 @@ class GaiaDebug extends ChangeNotifier {
   /// shower's meteors across. Not kept.
   var skyBurstTest = 0;
 
+  /// Bumped by the sky panel's Send satellite, which sends the chosen
+  /// satellite across. Not kept.
+  var skySatelliteTest = 0;
+
   /// The step the sky panel's tour is at ([GaiaController.playSkyTour]),
   /// or null when none is running. Not kept.
   String? skyTour;
@@ -388,6 +392,11 @@ class GaiaDebug extends ChangeNotifier {
 
   void testSkyBurst() {
     skyBurstTest++;
+    notifyListeners();
+  }
+
+  void testSkySatellite() {
+    skySatelliteTest++;
     notifyListeners();
   }
 

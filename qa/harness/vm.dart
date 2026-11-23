@@ -26,15 +26,44 @@
 // that library's imports. Wrap state changes in `Future(() => ...)` so they
 // don't land mid-build. `shot` renders the Flutter layer tree, so it works
 // even when the window is covered or the session is locked.
+// Profile `phone` is the phone (phone_launch.ps1): find and shot files are
+// written in the app's cache dir there and read back with adb run-as.
+// vm.ps1 sets ANDROID_SERIAL, so adb targets the phone in phone_serial.txt.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:image/image.dart' as img;
 
 late WebSocket _ws;
 var _nextId = 0;
 final _pending = <String, Completer<Map<String, dynamic>>>{};
+
+final _phone = Platform.environment['VOYAGER_QA_PROFILE'] == 'phone';
+final _adb = '${Platform.environment['LOCALAPPDATA']}\\Android\\Sdk\\platform-tools\\adb.exe';
+const _package = 'com.example.voyager';
+
+/// Where the app writes a result file for us to read.
+String _appPath(String name) => _phone
+    ? '/data/user/0/$_package/cache/$name'
+    : '${Directory.systemTemp.path}${Platform.pathSeparator}$name';
+
+/// The file's bytes, or null if the app hasn't written it.
+List<int>? _readApp(String path) {
+  if (!_phone) return File(path).existsSync() ? File(path).readAsBytesSync() : null;
+  // exec-out exits 0 even when cat fails; shell passes the exit code on.
+  if (Process.runSync(_adb, ['shell', 'run-as $_package test -f $path']).exitCode != 0) return null;
+  return Process.runSync(_adb, ['exec-out', 'run-as', _package, 'cat', path], stdoutEncoding: null).stdout as List<int>;
+}
+
+void _deleteApp(String path) {
+  if (!_phone) {
+    if (File(path).existsSync()) File(path).deleteSync();
+    return;
+  }
+  Process.runSync(_adb, ['shell', 'run-as $_package rm -f $path']);
+}
 
 Future<Map<String, dynamic>> call(String method, [Map<String, dynamic>? params]) {
   final id = '${_nextId++}';
@@ -127,9 +156,9 @@ class _Hit {
 }
 
 Future<List<_Hit>> _dump() async {
-  final path = '${Directory.systemTemp.path}${Platform.pathSeparator}voyager_qa_find.tsv';
+  final path = _appPath('voyager_qa_find.tsv');
   await evalIn('core/media/widgets/media_lightbox.dart', _dumpExpr(path.replaceAll(r'\', r'\\')));
-  return File(path).readAsLinesSync().where((l) => l.isNotEmpty).map(_Hit.new).toList();
+  return const LineSplitter().convert(utf8.decode(_readApp(path)!)).where((l) => l.isNotEmpty).map(_Hit.new).toList();
 }
 
 /// (kind, value) from `tip:x` / `key:x` / plain text, whitespace collapsed like the labels.
@@ -177,9 +206,9 @@ Future<void> main(List<String> args) async {
         // 3 = signed into something other than a QA account: stop testing.
         if (email != 'SIGNED-OUT' && !RegExp(r'^voyager-qa-\d+@example\.com$').hasMatch(email)) exitCode = 3;
       case 'shot':
-        final raw = '${Directory.systemTemp.path}${Platform.pathSeparator}voyager_qa_shot.rgba';
+        final raw = _appPath('voyager_qa_shot.rgba');
         final rawPath = raw.replaceAll(r'\', r'\\');
-        if (File('$raw.meta').existsSync()) File('$raw.meta').deleteSync();
+        _deleteApp('$raw.meta');
         // Captured after the next frame: grabbing mid-paint throws 'picture != null'
         // on pages that repaint every frame (2026-10-11).
         await evalIn('core/media/widgets/media_lightbox.dart', '''(() {
@@ -194,13 +223,14 @@ Future<void> main(List<String> args) async {
           WidgetsBinding.instance.scheduleFrame();
           return 0;
         })()''');
-        final meta = File('$raw.meta');
-        for (var i = 0; i < 100 && !meta.existsSync(); i++) {
+        var meta = _readApp('$raw.meta');
+        for (var i = 0; i < 100 && meta == null; i++) {
           await Future<void>.delayed(const Duration(milliseconds: 100));
+          meta = _readApp('$raw.meta');
         }
-        if (!meta.existsSync()) throw 'frame capture timed out';
-        final wh = meta.readAsStringSync().split('x').map(int.parse).toList();
-        final image = img.Image.fromBytes(width: wh[0], height: wh[1], bytes: File(raw).readAsBytesSync().buffer, numChannels: 4, order: img.ChannelOrder.rgba);
+        if (meta == null) throw 'frame capture timed out';
+        final wh = utf8.decode(meta).split('x').map(int.parse).toList();
+        final image = img.Image.fromBytes(width: wh[0], height: wh[1], bytes: Uint8List.fromList(_readApp(raw)!).buffer, numChannels: 4, order: img.ChannelOrder.rgba);
         File(args[1]).writeAsBytesSync(img.encodePng(image));
         print('shot: ${args[1]} (${wh[0]}x${wh[1]})');
       case 'find':

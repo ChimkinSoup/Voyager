@@ -179,6 +179,92 @@ void main() {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
   });
 
+  testWidgets('a trackpad pinch steps the zoom, a two-finger scroll does not', (
+    tester,
+  ) async {
+    level = GaiaZoomLevel();
+    final list = ScrollController();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GaiaZoom(
+          level: level,
+          child: ListView(
+            controller: list,
+            children: [for (var i = 0; i < 100; i++) Text('$i')],
+          ),
+        ),
+      ),
+    );
+    final trackpad = TestPointer(1, PointerDeviceKind.trackpad);
+    const at = Offset(100, 300);
+    Future<void> send(PointerEvent event) async {
+      await tester.sendEventToBinding(event);
+      await tester.pump();
+    }
+
+    // A scroll's scale wanders a little; it scrolls and never zooms.
+    await send(trackpad.panZoomStart(at));
+    await send(
+      trackpad.panZoomUpdate(at, pan: const Offset(0, -50), scale: 1.05),
+    );
+    await send(
+      trackpad.panZoomUpdate(at, pan: const Offset(0, -100), scale: 0.95),
+    );
+    await send(trackpad.panZoomEnd());
+    expect(list.offset, greaterThan(0));
+    expect(level.value, 1);
+
+    // Spread: one step under 1.15, two past 1.15², and a fast jump at once.
+    await send(trackpad.panZoomStart(at));
+    await send(trackpad.panZoomUpdate(at, scale: 1.1));
+    expect(level.value, 1);
+    await send(trackpad.panZoomUpdate(at, scale: 1.2));
+    expect(level.value, 1.1);
+    expect(find.text('110%'), findsOneWidget);
+    await send(trackpad.panZoomUpdate(at, scale: 1.35));
+    expect(level.value, 1.25);
+    // Closing back past where it stepped steps back down.
+    await send(trackpad.panZoomUpdate(at, scale: 1.05));
+    expect(level.value, 1.1);
+    await send(trackpad.panZoomEnd());
+
+    // Each pinch counts from its own start.
+    await send(trackpad.panZoomStart(at));
+    await send(trackpad.panZoomUpdate(at, scale: 0.6));
+    expect(level.value, 0.8);
+    await send(trackpad.panZoomEnd());
+  });
+
+  testWidgets('no pinch zoom while something above pinches for itself', (
+    tester,
+  ) async {
+    level = GaiaZoomLevel();
+    var pinchable = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: GaiaZoom(
+          level: level,
+          pinchable: () => pinchable,
+          child: const SizedBox.expand(),
+        ),
+      ),
+    );
+    final trackpad = TestPointer(1, PointerDeviceKind.trackpad);
+    const at = Offset(100, 300);
+    Future<void> pinch() async {
+      await tester.sendEventToBinding(trackpad.panZoomStart(at));
+      await tester.sendEventToBinding(trackpad.panZoomUpdate(at, scale: 1.2));
+      await tester.sendEventToBinding(trackpad.panZoomEnd());
+      await tester.pump();
+    }
+
+    await pinch();
+    expect(level.value, 1);
+    pinchable = true;
+    await pinch();
+    expect(level.value, 1.1);
+  });
+
   testWidgets('zoomed out, the far corner still takes clicks', (tester) async {
     level = GaiaZoomLevel();
     var taps = 0;

@@ -63,7 +63,9 @@ enum GaiaAuroraExit {
   dusk,
 }
 
-/// How a satellite crossing the sky looks.
+/// How a satellite crossing the sky looks. The craft from [iss] on are
+/// rare: one satellite in [kGaiaRareSatellite] is one of them instead,
+/// each with its [share] of the rare ones.
 enum GaiaSatellite {
   /// A steady point.
   dot,
@@ -82,7 +84,30 @@ enum GaiaSatellite {
 
   /// A train of points, one after another along the same path.
   train,
+
+  /// A space station: a long truss across its path, four pairs of amber
+  /// wings along it, and modules down the middle. The rarest.
+  iss(0.05),
+
+  /// As [panels], but much larger: long segmented wings, slowly turning.
+  array(0.3),
+
+  /// A space telescope: a silver tube with its door ajar and a wing either
+  /// side, rocking gently.
+  hubble(0.25),
+
+  /// A communications satellite: long wings, a dish, and lights blinking
+  /// at its wingtips.
+  dish(0.4);
+
+  const GaiaSatellite([this.share = 0]);
+
+  /// Its share of the rare satellites; 0, not one of them.
+  final double share;
 }
+
+/// One satellite in this many is a rare one.
+const kGaiaRareSatellite = 12;
 
 /// The rare aurora's colours, each with its share of the rare skies.
 enum GaiaRareAurora {
@@ -95,6 +120,14 @@ enum GaiaRareAurora {
 
   final double share;
 }
+
+/// Something seen on the sky that the lifetime stats count
+/// (GAIA_STATS_HLD.md §3): a rare satellite, the rare aurora by its colours,
+/// or, with neither, a meteor.
+typedef GaiaSighting = ({GaiaSatellite? satellite, GaiaRareAurora? aurora});
+
+/// Seconds a rare satellite is in view, while seen, before it counts.
+const kGaiaSightingSeconds = 3.0;
 
 /// A meteor shower on the sky: as the real calendar has one tonight, or
 /// held at a strength.
@@ -217,13 +250,17 @@ class GaiaSky extends StatefulWidget {
     this.moonModel = GaiaMoonModel.cratered,
     this.moonPlace = GaiaMoonPlace.sidebar,
     this.satellite = GaiaSatellite.dot,
+    this.rareSatellites = true,
     required this.exit,
     this.plainBlink = false,
     required this.exitTime,
     this.exitTest = 0,
     this.burstTest = 0,
+    this.satelliteTest = 0,
     this.top = 0,
     this.left,
+    this.onSighting,
+    @visibleForTesting this.random,
     required this.child,
   });
 
@@ -298,6 +335,10 @@ class GaiaSky extends StatefulWidget {
   /// are up.
   final GaiaSatellite satellite;
 
+  /// One satellite in [kGaiaRareSatellite] is a rare one in place of
+  /// [satellite], unless that's a rare one itself.
+  final bool rareSatellites;
+
   final GaiaSkyExit exit;
 
   /// Blinking out, each star simply fades, without a last glint, and the
@@ -313,11 +354,21 @@ class GaiaSky extends StatefulWidget {
   /// A change sends a burst of a shower's meteors across at once.
   final int burstTest;
 
+  /// A change sends a [satellite] across at once, however many are up.
+  final int satelliteTest;
+
   /// As [GaiaStarfield]'s: the sky keeps below this.
   final double top;
 
   /// As [GaiaStarfield]'s: an opaque sidebar's edge, which it stops at.
   final ValueListenable<double>? left;
+
+  /// Told of each natural sighting while [active], with the sky up
+  /// (GAIA_STATS_HLD.md §3); null, nothing is counted.
+  final void Function(GaiaSighting sighting)? onSighting;
+
+  /// The sky's rolls; null, a [Random] of its own.
+  final Random? random;
 
   final Widget child;
 
@@ -357,6 +408,10 @@ const _sparkleArea = 1199.0 * 807;
 const _trainCars = 7;
 const _trainGap = 14.0;
 
+/// How much larger than drawn the detailed craft are: the ISS, array,
+/// telescope and dish.
+const _craftScale = 1.5;
+
 /// Seconds the sky's turning takes to ease up, or to coast down, by about
 /// two thirds: as a heavy wheel's would, never starting or stopping dead.
 const _coast = 0.5;
@@ -374,7 +429,7 @@ const _leanRest = 0.01;
 
 class _GaiaSkyState extends State<GaiaSky> with SingleTickerProviderStateMixin {
   late final Ticker _ticker = createTicker(_tick);
-  final _sky = _Sky(Random());
+  late final _sky = _Sky(widget.random ?? Random());
 
   /// The frame of the last step, so the next knows how long it's been,
   /// frames or not between them; null when stopped.
@@ -406,6 +461,9 @@ class _GaiaSkyState extends State<GaiaSky> with SingleTickerProviderStateMixin {
     _apply();
     if (oldWidget.satellite != widget.satellite) _sky.sendSatellite();
     if (oldWidget.burstTest != widget.burstTest) _sky.sendShowerBurst();
+    if (oldWidget.satelliteTest != widget.satelliteTest) {
+      _sky.sendSatellite(anyway: true);
+    }
     final test = oldWidget.exitTest != widget.exitTest && widget.shown;
     if ((oldWidget.shown && !widget.shown) || test) {
       if (_sky.exiting != null) {
@@ -472,10 +530,12 @@ class _GaiaSkyState extends State<GaiaSky> with SingleTickerProviderStateMixin {
       ..eventInterval = widget.eventInterval
       ..aurora = widget.aurora
       ..satellite = widget.satellite
+      ..rareSatellites = widget.rareSatellites
       ..auroraExit = widget.auroraExit
       ..auroraDrift = widget.auroraDrift
       ..forceRare = widget.rareAurora
       ..rareColours = widget.rareColours
+      ..onSighting = widget.onSighting
       ..shower = switch (widget.shower) {
         GaiaSkyShower.calendar =>
           gaiaMeteorShower(DateTime.now())?.strength ?? 0,
@@ -507,6 +567,7 @@ class _GaiaSkyState extends State<GaiaSky> with SingleTickerProviderStateMixin {
   }
 
   void _sync() {
+    _sky.seeing = widget.active.value;
     final run =
         !_reduced && (_sky.leaving || (widget.shown && widget.active.value));
     if (!run) {
@@ -1415,6 +1476,7 @@ class _Streak {
     this.satellite,
     this.tail = 0,
     this.flareAt,
+    this.countable = false,
   });
 
   Offset at;
@@ -1429,6 +1491,13 @@ class _Streak {
 
   /// When a satellite catches the sun and flares, if it does.
   final double? flareAt;
+
+  /// A rare satellite rolled as the sky goes, not sent from the debug menu,
+  /// and not yet counted.
+  bool countable;
+
+  /// Seconds it has been in view while seen (§3.1 of GAIA_STATS_HLD.md).
+  var seen = 0.0;
 
   var age = 0.0;
 }
@@ -1546,6 +1615,7 @@ class _Sky extends ChangeNotifier {
   ui.Picture? moonPicture;
   Object? moonDrawnBy;
   var satellite = GaiaSatellite.dot;
+  var rareSatellites = true;
   var auroraExit = GaiaAuroraExit.rise;
   var exit = GaiaSkyExit.warp;
   var plainBlink = false;
@@ -1593,6 +1663,23 @@ class _Sky extends ChangeNotifier {
 
   /// The aurora is the rare one.
   bool get rare => forceRare || _rare;
+
+  /// Told of each natural sighting while it counts; null, nothing counts.
+  void Function(GaiaSighting sighting)? onSighting;
+
+  /// The window's on screen and in front: what's on the sky is seen.
+  var seeing = false;
+
+  /// Sightings count (GAIA_STATS_HLD.md §3.1): told of them, seen, and the
+  /// sky up and not leaving.
+  bool get _counting =>
+      onSighting != null && seeing && shown && exiting == null;
+
+  /// This sky's rare aurora has been counted.
+  var _auroraCounted = false;
+
+  /// The debug menu's test bursts' meteors still to come, which don't count.
+  var _testMeteors = 0;
 
   /// Where each of the aurora's curtains is in its waxing and waning, in
   /// radians, and how far all have come by [auroraDrift].
@@ -1741,6 +1828,8 @@ class _Sky extends ChangeNotifier {
   void begin() {
     _rare = _random.nextInt(kGaiaRareAurora) == 0;
     _rolledColours = _pickColours();
+    _auroraCounted = false;
+    _testMeteors = 0;
     for (var i = 0; i < _auroraPhase.length; i++) {
       _auroraPhase[i] = _random.nextDouble() * 2 * pi;
     }
@@ -1818,8 +1907,26 @@ class _Sky extends ChangeNotifier {
       _stepDrawing(dt);
       _stepStreaks(dt);
       _stepSparkles(dt);
+      _countAurora();
     }
     notifyListeners();
+  }
+
+  /// Counts this sky's rare aurora the first moment it's seen, if it rolled
+  /// it and with its rolled colours, not the debug menu's.
+  void _countAurora() {
+    if (_auroraCounted || !_rare || rareColours != null || aurora <= 0) {
+      return;
+    }
+    if (!_counting) return;
+    _auroraCounted = true;
+    onSighting!((satellite: null, aurora: _rolledColours));
+  }
+
+  /// Counts a meteor just sent across, not from a test burst.
+  void _countMeteor() {
+    if (!_counting) return;
+    onSighting!((satellite: null, aurora: null));
   }
 
   /// Still, as it is when not ticking: there, or gone.
@@ -1910,9 +2017,15 @@ class _Sky extends ChangeNotifier {
   }
 
   void _stepStreaks(double dt) {
+    final view = Rect.fromLTRB(from, 0, size.width, size.height);
     for (final s in streaks) {
       s.age += dt;
       s.at += s.velocity * dt;
+      if (!s.countable || !_counting || !view.contains(s.at)) continue;
+      s.seen += dt;
+      if (s.seen < kGaiaSightingSeconds) continue;
+      s.countable = false;
+      onSighting!((satellite: s.satellite, aurora: null));
     }
     streaks.removeWhere((s) => s.age >= s.life);
     if (exiting != null || !shown) return;
@@ -1923,6 +2036,7 @@ class _Sky extends ChangeNotifier {
       // Within a third either side of the average.
       _nextEvent = eventInterval / 0.7 * (2 / 3 + _random.nextDouble() * 2 / 3);
       streaks.add(_meteor());
+      _countMeteor();
     }
     _nextSatellite -= dt;
     // At most three up at once: a satellite due waits for one to leave.
@@ -1936,6 +2050,11 @@ class _Sky extends ChangeNotifier {
       if (_burst[i] > 0) continue;
       _burst.removeAt(i);
       streaks.add(_showerMeteor());
+      if (_testMeteors > 0) {
+        _testMeteors--;
+      } else {
+        _countMeteor();
+      }
     }
     // In bursts, spaced at random, so they don't come in step.
     // Fewer of them seen by moonlight.
@@ -1950,7 +2069,9 @@ class _Sky extends ChangeNotifier {
   /// A burst of the shower's meteors now, if the sky is up.
   void sendShowerBurst() {
     if (size.isEmpty || exiting != null || !shown) return;
+    final before = _burst.length;
     _startBurst();
+    _testMeteors += _burst.length - before;
   }
 
   /// Meteors within a few seconds, the first at once: four or five in a
@@ -2010,13 +2131,33 @@ class _Sky extends ChangeNotifier {
     );
   }
 
-  /// A satellite now, if the sky is up.
-  void sendSatellite() {
-    if (size.isEmpty || exiting != null || !shown || !_satelliteRoom) return;
-    streaks.add(_satellite());
+  /// A satellite now, if the sky is up: if fewer than three are, unless
+  /// [anyway].
+  void sendSatellite({bool anyway = false}) {
+    if (size.isEmpty || exiting != null || !shown) return;
+    if (!anyway && !_satelliteRoom) return;
+    streaks.add(_satellite(test: true));
   }
 
-  _Streak _satellite() {
+  /// A rare satellite, rolled by their shares.
+  GaiaSatellite _pickRare() {
+    var roll = _random.nextDouble();
+    for (final look in GaiaSatellite.values) {
+      roll -= look.share;
+      if (roll < 0) return look;
+    }
+    return GaiaSatellite.values.last;
+  }
+
+  /// A satellite setting out; one the debug menu sent if [test], which
+  /// isn't counted even if it rolls a rare one.
+  _Streak _satellite({bool test = false}) {
+    // One of the rare ones now and then, unless one was chosen.
+    final rolledRare =
+        rareSatellites &&
+        this.satellite.share == 0 &&
+        _random.nextInt(kGaiaRareSatellite) == 0;
+    final satellite = rolledRare ? _pickRare() : this.satellite;
     final rightwards = _random.nextBool();
     final y0 = size.height * (0.08 + 0.5 * _random.nextDouble());
     final y1 = y0 + size.height * (_random.nextDouble() - 0.5) * 0.5;
@@ -2042,6 +2183,7 @@ class _Sky extends ChangeNotifier {
       flareAt: satellite == GaiaSatellite.trail || _random.nextDouble() < 0.35
           ? life * (0.3 + 0.4 * _random.nextDouble())
           : null,
+      countable: rolledRare && !test,
     );
   }
 }
@@ -2113,7 +2255,7 @@ const List<_Band> _bands = [
 const kGaiaRareAurora = 50;
 
 /// The rare aurora's curtains, as [_bands]': main, high, low.
-List<Color> _rareColors(GaiaRareAurora colours) => switch (colours) {
+List<Color> gaiaRareAuroraColors(GaiaRareAurora colours) => switch (colours) {
   // The deep red of a great storm, high, over rose, a pink fringe below.
   GaiaRareAurora.crimson => const [
     Color(0xFFFF6B8B),
@@ -2329,10 +2471,7 @@ class _SkyPainter extends CustomPainter {
     // theirs there don't pop back.
     final clear = Paint()
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 18);
-    for (final (rect, alpha) in [
-      ...kept,
-      ...sky.cleared,
-    ]) {
+    for (final (rect, alpha) in [...kept, ...sky.cleared]) {
       clear.color = background.withValues(
         alpha:
             background.a *
@@ -2360,13 +2499,21 @@ class _SkyPainter extends CustomPainter {
     final by = ((phase * 500).round(), sky.moonModel, moonLook);
     if (by != sky.moonDrawnBy) {
       sky.moonPicture?.dispose();
-      sky.moonPicture = gaiaMoonPicture(phase, sky.moonModel, moonLook, _moonSize);
+      sky.moonPicture = gaiaMoonPicture(
+        phase,
+        sky.moonModel,
+        moonLook,
+        _moonSize,
+      );
       sky.moonDrawnBy = by;
     }
     final at = Offset(size.width - 56 - _moonSize, 36);
     final box = at & const Size.square(_moonSize);
     canvas
-      ..saveLayer(box.inflate(2), Paint()..color = Color.fromRGBO(0, 0, 0, fade))
+      ..saveLayer(
+        box.inflate(2),
+        Paint()..color = Color.fromRGBO(0, 0, 0, fade),
+      )
       ..drawOval(box.deflate(0.5), Paint()..color = background)
       ..translate(at.dx, at.dy)
       ..drawPicture(sky.moonPicture!)
@@ -2574,7 +2721,7 @@ class _SkyPainter extends CustomPainter {
         GaiaAuroraExit.arc ||
         GaiaAuroraExit.dusk => (full * (1 - 0.85 * q), h * band.y),
       };
-      final hue = sky.rare ? _rareColors(sky.colours)[i] : band.color;
+      final hue = sky.rare ? gaiaRareAuroraColors(sky.colours)[i] : band.color;
       final color = switch (exit) {
         GaiaAuroraExit.ebb ||
         GaiaAuroraExit.dusk => Color.lerp(hue, const Color(0xFF8A3C78), q)!,
@@ -3028,6 +3175,19 @@ class _SkyPainter extends CustomPainter {
               ),
           );
         }
+      case GaiaSatellite.iss ||
+          GaiaSatellite.array ||
+          GaiaSatellite.hubble ||
+          GaiaSatellite.dish:
+        paintGaiaSatellite(
+          canvas,
+          s.satellite!,
+          s.at,
+          direction,
+          flare: flare,
+          time: s.age,
+          fade: fade,
+        );
     }
   }
 
@@ -3040,6 +3200,425 @@ class _SkyPainter extends CustomPainter {
       oldDelegate.clears != clears ||
       oldDelegate.lean != lean ||
       oldDelegate.moonLook != moonLook;
+}
+
+/// A rare satellite, [look], at [at] heading along [direction], a unit
+/// vector, [time] seconds into its crossing: the sky's craft, and the stats'
+/// tiles' (GAIA_STATS_HLD.md §5.3). [flare] washes it to white and [fade]
+/// dims it. [flat] leaves out its glow and lights, for a silhouette.
+void paintGaiaSatellite(
+  Canvas canvas,
+  GaiaSatellite look,
+  Offset at,
+  Offset direction, {
+  double flare = 0,
+  double time = 0,
+  double fade = 1,
+  double scale = _craftScale,
+  bool flat = false,
+}) {
+  final paint = Paint();
+  Color white(double alpha) => Colors.white.withValues(alpha: alpha * fade);
+  // A colour washing to white as it flares.
+  Color tinted(Color color, double alpha) =>
+      Color.lerp(color, Colors.white, flare)!.withValues(alpha: alpha * fade);
+  // A soft glow about the craft, swelling as it flares.
+  void glow(double radius, double alpha) {
+    if (flat) return;
+    final r = radius + 4 * flare;
+    canvas.drawCircle(
+      Offset.zero,
+      r,
+      paint
+        ..shader = ui.Gradient.radial(Offset.zero, r, [
+          white(alpha + 0.15 * flare),
+          white(0),
+        ]),
+    );
+    paint.shader = null;
+  }
+
+  // A light blinking every [period] seconds, [offset] into it.
+  void blink(Offset at, Color color, double period, {double offset = 0}) {
+    if (flat || (time + offset) % period >= 0.12) return;
+    canvas
+      ..drawCircle(
+        at,
+        2.2,
+        paint
+          ..shader = ui.Gradient.radial(at, 2.2, [
+            color.withValues(alpha: 0.45 * fade),
+            color.withValues(alpha: 0),
+          ]),
+      )
+      ..drawCircle(
+        at,
+        0.55,
+        paint
+          ..shader = null
+          ..color = color.withValues(alpha: fade),
+      );
+  }
+
+  // A wing of cells, [columns] by [rows], with darker seams between,
+  // brightened by [sheen] as it catches the light.
+  void wing(Rect rect, Color color, int columns, int rows, {double sheen = 0}) {
+    final lit = Color.lerp(color, Colors.white, max(flare, 0.6 * sheen))!;
+    canvas.drawRect(rect, paint..color = lit.withValues(alpha: 0.85 * fade));
+    paint
+      ..strokeWidth = 0.25
+      ..color = Color.lerp(
+        lit,
+        Colors.black,
+        0.45,
+      )!.withValues(alpha: 0.8 * fade);
+    for (var i = 1; i < columns; i++) {
+      final x = rect.left + rect.width * i / columns;
+      canvas.drawLine(Offset(x, rect.top), Offset(x, rect.bottom), paint);
+    }
+    for (var j = 1; j < rows; j++) {
+      final y = rect.top + rect.height * j / rows;
+      canvas.drawLine(Offset(rect.left, y), Offset(rect.right, y), paint);
+    }
+  }
+
+  switch (look) {
+    case GaiaSatellite.iss:
+      // Holding its attitude, truss across its path, as the real one does.
+      canvas
+        ..save()
+        ..translate(at.dx, at.dy)
+        ..rotate(direction.direction)
+        ..scale(scale);
+      glow(16, 0.14);
+      // The truss, a lattice of girders.
+      paint
+        ..strokeWidth = 0.3
+        ..color = white(0.55);
+      for (final x in [-0.5, 0.5]) {
+        canvas.drawLine(Offset(x, -14), Offset(x, 14), paint);
+      }
+      for (var y = -14.0; y < 14; y += 2) {
+        canvas.drawLine(Offset(-0.5, y), Offset(0.5, y + 2), paint);
+      }
+      // A pair of wings either side of the truss at each of four stations,
+      // catching the light one station after another.
+      for (final y in [-12.5, -9.0, 9.0, 12.5]) {
+        final sheen = pow(max(0.0, sin(time * 0.8 - y * 0.12)), 12).toDouble();
+        for (final x in [-3.4, 3.4]) {
+          wing(
+            Rect.fromCenter(center: Offset(x, y), width: 5.8, height: 2.6),
+            const Color(0xFFC8955A),
+            6,
+            2,
+            sheen: sheen,
+          );
+        }
+      }
+      // Radiators inboard of the wings.
+      for (final y in [-5.0, 5.0]) {
+        wing(
+          Rect.fromCenter(center: Offset(2.4, y), width: 4, height: 1.4),
+          const Color(0xFFE6ECF4),
+          4,
+          1,
+        );
+      }
+      // The modules down the middle, a node across them, and a capsule
+      // docked at the bow.
+      paint.color = tinted(const Color(0xFFF2E3B8), 1);
+      for (final module in const [
+        Rect.fromLTRB(-7, -0.8, -4.8, 0.8),
+        Rect.fromLTRB(-4.5, -1.1, -0.7, 1.1),
+        Rect.fromLTRB(-0.4, -1, 2.6, 1),
+        Rect.fromLTRB(2.9, -0.8, 5.6, 0.8),
+      ]) {
+        canvas.drawRect(module, paint);
+      }
+      canvas
+        ..drawRect(
+          Rect.fromCenter(
+            center: const Offset(-2.6, 0),
+            width: 1.4,
+            height: 5.4,
+          ),
+          paint,
+        )
+        ..drawCircle(const Offset(6.6, 0), 0.8, paint..color = white(0.85));
+      // A strobe at the bow.
+      blink(const Offset(7.6, 0), Colors.white, 2);
+      canvas.restore();
+    case GaiaSatellite.array:
+      final turn = time * 0.25;
+      // Its wings face the sun twice a turn, and glint.
+      final glint = pow(max(0.0, cos(2 * turn)), 24).toDouble();
+      canvas
+        ..save()
+        ..translate(at.dx, at.dy)
+        ..rotate(direction.direction + turn)
+        ..scale(scale);
+      glow(10, 0.08 + 0.2 * glint);
+      canvas.drawLine(
+        const Offset(-6.5, 0),
+        const Offset(6.5, 0),
+        paint
+          ..strokeWidth = 0.6
+          ..color = white(0.55),
+      );
+      for (final side in [-1.0, 1.0]) {
+        for (var i = 0; i < 3; i++) {
+          wing(
+            Rect.fromCenter(
+              center: Offset(side * (9 + 4.7 * i), 0),
+              width: 4.3,
+              height: 5.6,
+            ),
+            const Color(0xFF8FB4FF),
+            3,
+            4,
+            sheen: glint,
+          );
+        }
+        // The hinge at the wing's root.
+        canvas.drawRect(
+          Rect.fromCenter(
+            center: Offset(side * 6.6, 0),
+            width: 0.9,
+            height: 1.4,
+          ),
+          paint..color = white(0.7),
+        );
+      }
+      // Its body in crinkled gold foil, an instrument on its face and an
+      // antenna whip on top, a green beacon at its tip.
+      canvas
+        ..drawRect(
+          const Rect.fromLTRB(-2.3, -2.3, 2.3, 2.3),
+          paint..color = tinted(const Color(0xFFE0B860), 1),
+        )
+        ..drawLine(
+          const Offset(-2.3, 0.8),
+          const Offset(0.4, -2.3),
+          paint
+            ..strokeWidth = 0.3
+            ..color = tinted(const Color(0xFFFFE7A8), 0.9),
+        )
+        ..drawLine(const Offset(-1, 2.3), const Offset(2.3, -0.6), paint)
+        ..drawLine(
+          const Offset(0.6, -2.3),
+          const Offset(2.3, 1),
+          paint..color = tinted(const Color(0xFF9C7A30), 0.9),
+        )
+        ..drawRect(
+          Rect.fromCenter(
+            center: const Offset(0.6, 0.7),
+            width: 1.4,
+            height: 1.4,
+          ),
+          paint..color = const Color(0xFF3A3A44).withValues(alpha: fade),
+        )
+        ..drawLine(
+          const Offset(0, -2.3),
+          const Offset(0, -5.2),
+          paint..color = white(0.6),
+        )
+        ..drawCircle(const Offset(0, -5.2), 0.35, paint..color = white(0.8));
+      blink(const Offset(0, -5.2), const Color(0xFF6BFF9A), 1.6);
+      if (!flat && glint > 0.1) {
+        paint
+          ..strokeWidth = 0.4
+          ..color = white(0.6 * glint);
+        for (final d in [const Offset(1, 0), const Offset(0, 1)]) {
+          canvas.drawLine(d * -10 * glint, d * 10 * glint, paint);
+        }
+      }
+      canvas.restore();
+    case GaiaSatellite.hubble:
+      final rock = sin(time * 0.3);
+      // Its tube catching the sun at the top of each rock.
+      final shine = pow(max(0.0, rock), 6).toDouble();
+      canvas
+        ..save()
+        ..translate(at.dx, at.dy)
+        ..rotate(direction.direction + 0.4 * rock)
+        ..scale(scale);
+      glow(10, 0.07 + 0.12 * shine);
+      // A wing either side on its boom, a mast down each.
+      paint
+        ..strokeWidth = 0.4
+        ..color = white(0.55);
+      for (final y in [-1.0, 1.0]) {
+        canvas.drawLine(Offset(-1, 1.9 * y), Offset(-1, 3.9 * y), paint);
+      }
+      for (final y in [-5.1, 5.1]) {
+        wing(
+          Rect.fromCenter(center: Offset(-1, y), width: 9.5, height: 2.4),
+          const Color(0xFFB08A55),
+          5,
+          1,
+        );
+        canvas.drawLine(
+          Offset(-5.75, y),
+          Offset(3.75, y),
+          paint
+            ..strokeWidth = 0.25
+            ..color = white(0.5),
+        );
+      }
+      // The aft shroud and the light shield, a high-gain antenna off the
+      // back.
+      canvas
+        ..drawLine(
+          const Offset(-6.5, 0),
+          const Offset(-7.8, 0),
+          paint
+            ..strokeWidth = 0.35
+            ..color = white(0.6),
+        )
+        ..drawCircle(const Offset(-8.2, 0), 0.7, paint..color = white(0.75))
+        ..drawRRect(
+          RRect.fromRectAndRadius(
+            const Rect.fromLTRB(-6.5, -2, -1.5, 2),
+            const Radius.circular(0.6),
+          ),
+          paint..color = tinted(const Color(0xFFBFC5D0), 0.95),
+        )
+        ..drawRect(
+          const Rect.fromLTRB(-1.5, -1.8, 5.8, 1.8),
+          paint..color = tinted(const Color(0xFFE4E7EE), 0.95),
+        );
+      // Seams around the light shield, and the aft bulkhead.
+      paint
+        ..strokeWidth = 0.25
+        ..color = tinted(const Color(0xFF8A919E), 0.9);
+      for (final x in [-1.5, 1.0, 3.5]) {
+        canvas.drawLine(Offset(x, -1.8), Offset(x, 1.8), paint);
+      }
+      canvas
+        ..drawLine(const Offset(-5, -2), const Offset(-5, 2), paint)
+        // Sunlight along its top.
+        ..drawLine(
+          const Offset(-6, -1.3),
+          const Offset(5.4, -1.3),
+          paint
+            ..strokeWidth = 0.4
+            ..color = white(0.15 + 0.7 * shine),
+        )
+        // The open aperture, and its door ajar.
+        ..drawLine(
+          const Offset(5.8, -1.6),
+          const Offset(5.8, 1.6),
+          paint
+            ..strokeWidth = 0.5
+            ..color = const Color(0xFF2A2F3A).withValues(alpha: fade),
+        )
+        ..drawLine(
+          const Offset(5.8, -1.8),
+          const Offset(8, -4),
+          paint
+            ..strokeWidth = 0.7
+            ..color = tinted(const Color(0xFFE4E7EE), 0.9),
+        )
+        ..restore();
+    case GaiaSatellite.dish:
+      canvas
+        ..save()
+        ..translate(at.dx, at.dy)
+        ..rotate(direction.direction + time * 0.3)
+        ..scale(scale);
+      glow(9, 0.07);
+      canvas.drawLine(
+        const Offset(-3.5, 0),
+        const Offset(3.5, 0),
+        paint
+          ..strokeWidth = 0.5
+          ..color = white(0.55),
+      );
+      for (final side in [-1.0, 1.0]) {
+        wing(
+          Rect.fromCenter(
+            center: Offset(side * 8.6, 0),
+            width: 10.6,
+            height: 3,
+          ),
+          const Color(0xFF8FB4FF),
+          5,
+          2,
+        );
+      }
+      // Its body in gold, a white radiator along its far side; the dish
+      // on its boom, facing away, ribbed, its feed on struts before it.
+      canvas
+        ..drawRect(
+          const Rect.fromLTRB(-2.1, -2.1, 2.1, 2.1),
+          paint..color = tinted(const Color(0xFFE0B860), 1),
+        )
+        ..drawRect(
+          const Rect.fromLTRB(-2.1, -2.1, 2.1, -1.3),
+          paint..color = tinted(const Color(0xFFEFF2F7), 0.95),
+        )
+        ..drawLine(
+          const Offset(-2.1, 0.4),
+          const Offset(2.1, 0.4),
+          paint
+            ..strokeWidth = 0.25
+            ..color = tinted(const Color(0xFF9C7A30), 0.9),
+        )
+        ..drawLine(
+          const Offset(0, 2.1),
+          const Offset(0, 3.6),
+          paint
+            ..strokeWidth = 0.4
+            ..color = white(0.6),
+        )
+        ..drawArc(
+          Rect.fromCenter(
+            center: const Offset(0, 5.4),
+            width: 7.4,
+            height: 3.8,
+          ),
+          pi,
+          pi,
+          true,
+          paint..color = white(0.8),
+        );
+      paint
+        ..strokeWidth = 0.25
+        ..color = tinted(const Color(0xFFB8BEC8), 0.9);
+      for (final x in [-2.4, 2.4]) {
+        canvas.drawLine(const Offset(0, 3.5), Offset(x, 5.4), paint);
+      }
+      paint.color = white(0.5);
+      for (final x in [-3.7, 3.7]) {
+        canvas.drawLine(Offset(x, 5.4), const Offset(0, 7.2), paint);
+      }
+      canvas.drawCircle(const Offset(0, 7.2), 0.45, paint..color = white(0.85));
+      // Now and then a pulse going out from the feed.
+      final pulse = (time % 3) / 1.5;
+      if (!flat && pulse < 1) {
+        canvas.drawArc(
+          Rect.fromCircle(center: const Offset(0, 7.2), radius: 1 + 7 * pulse),
+          pi / 4,
+          pi / 2,
+          false,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 0.35
+            ..color = white(0.45 * (1 - pulse)),
+        );
+      }
+      // Lights at its wingtips, red and green, blinking in turn.
+      blink(const Offset(-13.9, 0), const Color(0xFFFF4D4D), 1);
+      blink(const Offset(13.9, 0), const Color(0xFF6BFF9A), 1, offset: 0.5);
+      canvas.restore();
+    case GaiaSatellite.dot ||
+        GaiaSatellite.panels ||
+        GaiaSatellite.trail ||
+        GaiaSatellite.tumbler ||
+        GaiaSatellite.station ||
+        GaiaSatellite.train:
+      assert(false, '$look is not a rare satellite');
+  }
 }
 
 /// The sky debug panel over the chat: each part of the sky, changed live,
@@ -3119,7 +3698,7 @@ class GaiaSkyPanel extends StatelessWidget {
                     ),
                   ],
                 ),
-                Row(
+                Wrap(
                   children: [
                     TextButton(
                       onPressed: debug.resetSky,
@@ -3128,6 +3707,10 @@ class GaiaSkyPanel extends StatelessWidget {
                     TextButton(
                       onPressed: debug.testSkyBurst,
                       child: const Text('Shower burst'),
+                    ),
+                    TextButton(
+                      onPressed: debug.testSkySatellite,
+                      child: const Text('Send satellite'),
                     ),
                   ],
                 ),
@@ -3287,8 +3870,7 @@ class GaiaSkyPanel extends StatelessWidget {
                                       }),
                                       visualDensity: VisualDensity.compact,
                                       selected: debug.skyMoon == moon,
-                                      onSelected: (_) =>
-                                          debug.setSkyMoon(moon),
+                                      onSelected: (_) => debug.setSkyMoon(moon),
                                     ),
                                 ],
                               ),
@@ -3322,10 +3904,7 @@ class GaiaSkyPanel extends StatelessWidget {
                             case final moon?)
                           Row(
                             children: [
-                              const SizedBox(
-                                width: 64,
-                                child: Text('Model'),
-                              ),
+                              const SizedBox(width: 64, child: Text('Model')),
                               Expanded(
                                 child: Wrap(
                                   spacing: 6,
@@ -3499,6 +4078,10 @@ class GaiaSkyPanel extends StatelessWidget {
                                         GaiaSatellite.tumbler => 'Tumbler',
                                         GaiaSatellite.station => 'Station',
                                         GaiaSatellite.train => 'Train',
+                                        GaiaSatellite.iss => 'ISS',
+                                        GaiaSatellite.array => 'Array',
+                                        GaiaSatellite.hubble => 'Hubble',
+                                        GaiaSatellite.dish => 'Dish',
                                       }),
                                       visualDensity: VisualDensity.compact,
                                       selected: debug.skySatellite == satellite,

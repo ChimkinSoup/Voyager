@@ -4059,4 +4059,29 @@ Entry format:
 - Notes: a second chip tap in the same run ("design for change") scrolled to it and highlighted it (`mt7-ph-reveal4.png`). `_MemoriesTab._scrollToFocus` (`gaia_page.dart`) runs once, in a post-frame callback from `initState`; on the tab's first build `build` returns `SizedBox.shrink()` until `gaiaSettingsProvider` (and the memories) have a value, so `_focusKey` has no context then and nothing retries. Not fixed.
 - Notes (fixed 2026-11-17, committed in `e0c94843`): `_scrollToFocus`'s post-frame callback tries again on the next frame while the memories or the settings haven't loaded, and stops once they have (found or not). Widget test in `gaia_memory_tree_test.dart` ("a memory revealed as the page opens is scrolled to once the memories load (BUG-383)"): 60 memories, the page opened on the first; fails on the old code (the row at 5,230 px in an 800 px view), passes now. On the emulator (debug APK of the same tree, qa-128): force-stopped, launched, then Gaia → the pinned "CS246 Final Exam Study Memories" → "Recalled 3 memories" → "the Bridge pattern", the Memories tab's first build since launch. The tab opened scrolled to it, highlighted (`qa/shots/fv383-reveal.png`).
 
-<!-- Last ID: BUG-383. -->
+### BUG-384 [M0] Every Android launch logs a hotkey_manager MissingPluginException to the error log
+- Severity: Cosmetic
+- Found: 2026-11-22, MOBILE_TEST_PLAN.md M0 (emulator Medium_Phone_API_37.0, debug APK of `ffde9024` + uncommitted Gaia work, qa-128)
+- Steps: launch Voyager on Android (any account, or signed out), then read `app_flutter/voyager_errors.log` (`adb shell run-as com.example.voyager cat app_flutter/voyager_errors.log`).
+- Actual: each launch adds `ERROR … services library while activating platform stream on channel dev.leanflutter.plugins/hotkey_manager_event: MissingPluginException(No implementation found for method listen on channel dev.leanflutter.plugins/hotkey_manager_event)`, about 1.5 s after APP START. Present for the 2026-11-17 15:48, 2026-11-17 17:12 and 2026-11-22 19:20 launches. Nothing shows in the UI.
+- Expected: no error. Hotkeys are a no-op on Android (MOBILE_TEST_PLAN.md §0.2, `hotkey_service.dart`), so nothing should touch the plugin there, and the error log should hold only real errors (later phases read it after each flow).
+- Notes: `lib/main.dart:82-87` calls `hotKeyManager.unregisterAll()` with no platform check (only `devProfile == null`). The try/catch catches the method call, but first use of `hotKeyManager` subscribes to the plugin's event channel, which has no Android implementation, and that error is reported by the framework, not thrown to the caller. Not fixed (audit rule).
+- Redo on the OnePlus 12R (2026-11-22, qa-129): the same error on the first launch of a fresh install.
+
+### BUG-385 [M0] On a 794 dp tall phone the journal editor's body collapses to nothing while the soft keyboard is up, so text is typed blind
+- Severity: Major
+- Found: 2026-11-22, MOBILE_TEST_PLAN.md M0 redo (OnePlus 12R, Android 16, 1264×2780 at 560 dpi = 361×794 dp, Gboard; debug APK of `ffde9024` + uncommitted work; qa-129)
+- Steps: Journal → New entry (the Title field takes focus and the keyboard opens). Look at the editor; then close the keyboard, tap the body ("Start writing…"), and type.
+- Actual: with the keyboard up, the editor shows Title, Mood and the date row, then a yellow-and-black "BOTTOM OVERFLOWED BY 41 PIXELS" band where the body should be, and the quote line squeezed against the bottom nav (`qa/shots/m0p-entry.png`). The run log and `voyager_errors.log` say `A RenderFlex overflowed by 22 pixels on the bottom` (logical px). Tapping where the body hint peeks out above the nav doesn't focus it. With the keyboard down the body is a normal field (`m0p-nokbd.png`); tap it and the keyboard comes up, the body collapses again, and typed text goes into a field that can't be seen (`m0p-body2.png`: the field held the 46 typed characters, none visible). The bottom nav stays above the keyboard and takes ~160 dp of what's left.
+- Expected: with the keyboard up, the focused body stays visible with the caret in view (`adjustResize`; MOBILE_TEST_PLAN.md D3 "soft keyboard open"), e.g. the header rows scroll away or the bottom nav hides while the keyboard is up.
+- Notes: not seen on the emulator (411×914 dp), which had ~120 dp more height. Text typed blind is saved: the entry reached the DB and the outbox drained. A release build would hide the band, not the missing room (not checked). Every short phone in portrait is affected; M3/M5 should re-check after a fix, and check Dreams' editor, which has the same compact layout. Not fixed (audit rule).
+
+### BUG-386 [M0] Opening the soft keyboard on any page makes the kept-alive Calendar page throw `Invalid argument(s): 0.0`
+- Severity: Minor
+- Found: 2026-11-22, MOBILE_TEST_PLAN.md M0 redo (OnePlus 12R, 361×794 dp; qa-129)
+- Steps: on a fresh sign-in (Calendar never opened; the shell builds it offstage), go to Journal → New entry so the keyboard opens. Read `app_flutter/voyager_errors.log` or the `flutter run` log.
+- Actual: `widgets library building LayoutBuilder: Invalid argument(s): 0.0`, twice per keyboard opening, from `double.clamp` in `calendarMorphMonthDayLayoutSize` (`calendar_day_grid.dart:1340`) ← `calendarMorphEventFrozenMetrics` ← `CalendarLayoutCache.compute` (`calendar_page.dart:3529`) ← `_CalendarPageState._refreshLayoutCache`. Nothing visible on Journal; the Calendar page itself wasn't looked at with the keyboard up.
+- Expected: no error. The offstage Calendar is laid out in the shrunken viewport, where a month cell's inner height goes negative, and `(15 + 8).clamp(0.0, innerCellHeight)` throws when the upper bound is below the lower one.
+- Notes: error-log noise on every keyboard opening hides real errors in later phases. M8 should check the Calendar page with the keyboard up (its event panel has text fields). Not fixed (audit rule).
+
+<!-- Last ID: BUG-386. -->

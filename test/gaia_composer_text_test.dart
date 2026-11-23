@@ -15,6 +15,7 @@ import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_text_field.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
 import 'package:voyager/features/gaia/gaia_text_settings.dart';
+import 'package:voyager/features/gaia/usage/gaia_stats_model.dart';
 
 import 'fakes/gaia_fakes.dart';
 
@@ -575,6 +576,31 @@ void main() {
         await settle(tester);
       });
 
+      testWidgets('Tab off a list line keeps the composer focused', (
+        tester,
+      ) async {
+        await start(tester, GaiaTextSettings.off);
+        await type(tester, 'plain');
+        final focused = FocusManager.instance.primaryFocus;
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+        expect(FocusManager.instance.primaryFocus, same(focused));
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+        await tester.pump();
+        expect(FocusManager.instance.primaryFocus, same(focused));
+        expect(controller.draft.text, 'plain');
+        // Held: its repeats stay too.
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.tab);
+        await tester.sendKeyRepeatEvent(LogicalKeyboardKey.tab);
+        await tester.sendKeyRepeatEvent(LogicalKeyboardKey.tab);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+        expect(FocusManager.instance.primaryFocus, same(focused));
+        await settle(tester);
+      });
+
       testWidgets('Backspace just past a marker takes it away', (tester) async {
         await start(tester, GaiaTextSettings.off);
         await type(tester, '- a\n');
@@ -864,8 +890,40 @@ void main() {
         await tester.sendKeyEvent(LogicalKeyboardKey.enter);
         await tester.pump();
         expect(find.text('Usage'), findsOneWidget);
+        // Lifetime tokens are the stats' now (GAIA_STATS_HLD.md §6).
+        expect(find.text('Lifetime tokens'), findsNothing);
         expect(runner.sent, isEmpty);
         expect(controller.draft.text, isEmpty);
+        await settle(tester);
+      });
+
+      testWidgets('/stats shows locked tiles till a rare one is seen', (
+        tester,
+      ) async {
+        final runner = await startNative(tester);
+        controller.stats.value = const GaiaStats();
+        await type(tester, '/stats');
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pump();
+        expect(find.text('Stats'), findsOneWidget);
+        expect(runner.sent, isEmpty);
+        expect(controller.draft.text, isEmpty);
+        expect(find.text('???'), findsNWidgets(8));
+
+        controller.stats.value = GaiaStats(
+          satellites: {
+            'iss': GaiaSeen(count: 3, first: DateTime(2026, 11, 14)),
+          },
+          meteors: 1200,
+          days: const {'2026-11-21', '2026-11-22'},
+        );
+        await tester.pump();
+        expect(find.text('???'), findsNWidgets(7));
+        expect(find.text('ISS'), findsOneWidget);
+        expect(find.text('×3'), findsOneWidget);
+        expect(find.text('First seen\n14 Nov 2026'), findsOneWidget);
+        expect(find.text('1.2K'), findsOneWidget);
+        expect(find.text('2'), findsOneWidget);
         await settle(tester);
       });
     });

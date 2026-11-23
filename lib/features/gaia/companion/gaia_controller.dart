@@ -31,6 +31,7 @@ import 'package:voyager/features/gaia/companion/gaia_handoff.dart';
 import 'package:voyager/features/gaia/companion/gaia_image_render.dart';
 import 'package:voyager/features/gaia/companion/gaia_settings_panel.dart';
 import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
+import 'package:voyager/features/gaia/companion/gaia_sky.dart';
 import 'package:voyager/features/gaia/companion/gaia_zoom.dart';
 import 'package:voyager/features/gaia/companion/gaia_tool_results.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
@@ -42,6 +43,7 @@ import 'package:voyager/features/gaia/gaia_text_settings.dart';
 import 'package:voyager/features/gaia/host/gaia_actions.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 import 'package:voyager/features/gaia/tools/gaia_proposals.dart';
+import 'package:voyager/features/gaia/usage/gaia_stats_model.dart';
 import 'package:voyager/features/gaia/usage/gaia_tokens.dart';
 import 'package:voyager/features/gaia/usage/gaia_usage.dart';
 import 'package:voyager/features/gaia/usage/gaia_usage_limits.dart';
@@ -1207,6 +1209,11 @@ class GaiaController extends ChangeNotifier {
       draftFiles.isEmpty &&
       draftQuotes.isEmpty;
 
+  /// Whether the draft carries a window, control or quotes, the chips over
+  /// the field.
+  bool get hasDraftContext =>
+      windowContext != null || draftControl != null || draftQuotes.isNotEmpty;
+
   /// Edit & resend: [message]'s text, files, quotes and window in place of
   /// the draft's. Its images don't come back, so their tokens come out; an
   /// earlier message's it names stay.
@@ -1379,6 +1386,14 @@ class GaiaController extends ChangeNotifier {
   /// New chats sent from here whose first tier the router may still pick,
   /// from their send until it answers or is skipped.
   final _routing = <String>{};
+
+  /// Chats whose title the utility model is writing, so a first reply that
+  /// finishes before the title from its message arrives doesn't ask again.
+  final _titling = <String>{};
+
+  /// The first reply of a chat in [_titling], for a retry from it should the
+  /// title from its message not come.
+  final _titleReplies = <String, String>{};
 
   /// Whether the router picks the next message's tier when none is picked
   /// (§7.2): a new chat's first, until the router has answered.
@@ -2025,6 +2040,9 @@ class GaiaController extends ChangeNotifier {
     addListener(_draftsChanged);
     addListener(_followProbedHost);
     _followProbedHost();
+    focused.addListener(() {
+      if (!focused.value) _sendMeteors();
+    });
     _pipe
       ..onEvent = _onEvent
       ..onRequest = _onRequest
@@ -2051,6 +2069,9 @@ class GaiaController extends ChangeNotifier {
     _deviceId = hello['deviceId']! as String;
     if (hello['tokens'] case final List rows) {
       tokens.value = _tokenRows(rows);
+    }
+    if (hello['stats'] case final Map json) {
+      stats.value = GaiaStats.fromJson(json);
     }
     inboxCount = hello['inbox'] as int? ?? 0;
     await _applySettings((hello['settings']! as Map).cast<String, Object?>());
@@ -2301,6 +2322,18 @@ class GaiaController extends ChangeNotifier {
   /// Gaia's lifetime token count, every desktop's, as the main instance last
   /// sent it: null until read, and while signed out.
   final tokens = ValueNotifier<List<GaiaTokenRow>?>(null);
+
+  /// Gaia's lifetime stats, every desktop's, as the main instance last sent
+  /// them (GAIA_STATS_HLD.md §4): null until read, and while signed out.
+  final stats = ValueNotifier<GaiaStats?>(null);
+
+  /// Meteors seen since they were last sent, and the send waiting for more
+  /// (§3.4).
+  var _meteorsSeen = 0;
+  Timer? _meteorsSend;
+
+  /// The day a prompt was last noted on, so each is sent once.
+  String? _dayNoted;
   final _usageCheckedAt = <String, DateTime>{};
   final _runAuth = <String, GaiaRunAuth>{};
   final _runWorkedAt = <String, DateTime>{};
@@ -2764,6 +2797,41 @@ class GaiaController extends ChangeNotifier {
     for (final row in rows) GaiaTokenRow.fromJson(row as Map),
   ];
 
+  /// Counts what the sky saw (GAIA_STATS_HLD.md §3): a rare satellite or
+  /// aurora at once, meteors a minute at a time.
+  void noteSighting(GaiaSighting sighting) {
+    switch (sighting) {
+      case (satellite: final GaiaSatellite satellite, aurora: _):
+        _pipe.notify('statsSeen', {'kind': 'satellite', 'id': satellite.name});
+      case (satellite: _, aurora: final GaiaRareAurora aurora):
+        _pipe.notify('statsSeen', {'kind': 'aurora', 'id': aurora.name});
+      default:
+        _meteorsSeen++;
+        _meteorsSend ??= Timer(const Duration(minutes: 1), _sendMeteors);
+    }
+  }
+
+  /// Sends the meteors seen since last time: after a minute of them, or as
+  /// the window blurs or hides.
+  void _sendMeteors() {
+    _meteorsSend?.cancel();
+    _meteorsSend = null;
+    if (_meteorsSeen == 0 || !_pipe.connected) return;
+    _pipe.notify('statsSeen', {'kind': 'meteors', 'n': _meteorsSeen});
+    _meteorsSeen = 0;
+  }
+
+  /// A prompt sent: today is a day active, sent once a day; and a chat
+  /// started, if it was [isNew].
+  void _noteSent({required bool isNew}) {
+    if (debug.dummyMode) return;
+    if (isNew) _pipe.notify('statsSeen', {'kind': 'chat'});
+    final day = gaiaStatsDay(DateTime.now());
+    if (day == _dayNoted) return;
+    _dayNoted = day;
+    _pipe.notify('statsSeen', {'kind': 'day', 'day': day});
+  }
+
   void _onEvent(String event, Map<String, Object?> params) {
     switch (event) {
       case 'summon':
@@ -2822,6 +2890,11 @@ class GaiaController extends ChangeNotifier {
       case 'tokens':
         tokens.value = switch (params['rows']) {
           final List rows => _tokenRows(rows),
+          _ => null,
+        };
+      case 'stats':
+        stats.value = switch (params['stats']) {
+          final Map json => GaiaStats.fromJson(json),
           _ => null,
         };
       case 'accent':
@@ -4661,6 +4734,8 @@ class GaiaController extends ChangeNotifier {
         openBtws();
       case GaiaBuiltin.usage:
         _usageOpens.add(null);
+      case GaiaBuiltin.stats:
+        _statsOpens.add(null);
       case GaiaBuiltin.controlOff:
         await setHand(GaiaHand.off);
         noteHand();
@@ -4707,6 +4782,10 @@ class GaiaController extends ChangeNotifier {
   /// Asks the window to show the usage bars (`/usage`).
   Stream<void> get usageOpens => _usageOpens.stream;
   final _usageOpens = StreamController<void>.broadcast();
+
+  /// Asks the window to show the lifetime stats (`/stats`).
+  Stream<void> get statsOpens => _statsOpens.stream;
+  final _statsOpens = StreamController<void>.broadcast();
 
   /// Each chat's side questions as last loaded (GAIA_BTW_HLD.md §2), oldest
   /// first; a streaming one of this device's as it now stands.
@@ -5063,6 +5142,9 @@ class GaiaController extends ChangeNotifier {
       btw.chatId,
       title,
       body,
+      tag: btw.status == GaiaMessageStatus.error
+          ? 'Side question failed'
+          : 'Side question',
       error: btw.status == GaiaMessageStatus.error,
       btwId: btw.id,
     );
@@ -6460,7 +6542,15 @@ class GaiaController extends ChangeNotifier {
         ));
         return undo(error.message);
       }
+      // Titled now, while the reply runs, so the sidebar, the tray and the
+      // reply's toast have it; unless renamed while it was unsaved.
+      if (!debug.dummyMode &&
+          _titledOnSend(prompt) &&
+          chat.title == _firstLineTitle(prompt, files, quotes)) {
+        unawaited(_retitle(chatId, topic));
+      }
     }
+    _noteSent(isNew: isNew);
     // Sent: the main instance keeps its own copies.
     for (final image in images) {
       for (final path in {image.path, ?image.preview}) {
@@ -7891,8 +7981,7 @@ class GaiaController extends ChangeNotifier {
     switch (reply.status) {
       case GaiaMessageStatus.complete:
         title = reply.needsInput ? 'Gaia has a question' : 'Gaia is done';
-        final line = gaiaPlainLine(reply.text.trim().split('\n').first);
-        body = line.length > 120 ? '${line.substring(0, 120)}…' : line;
+        body = gaiaToastSnippet(reply.text, question: reply.needsInput);
       case GaiaMessageStatus.error:
         title = 'Gaia ran into an error';
         body = reply.error ?? '';
@@ -7903,6 +7992,12 @@ class GaiaController extends ChangeNotifier {
       chatId,
       title,
       body,
+      // A finished reply's is the chat's title alone.
+      tag: reply.status == GaiaMessageStatus.error
+          ? 'Failed'
+          : reply.needsInput
+          ? 'Question'
+          : null,
       error: reply.status == GaiaMessageStatus.error,
       question: reply.needsInput,
     );
@@ -7914,25 +8009,31 @@ class GaiaController extends ChangeNotifier {
     if (!_notifyOnDone || draining != null) return;
     if (_window.foreground && chatId == currentChatId) return;
     final String title;
+    final String tag;
     final String body;
     switch (card.kind) {
       case GaiaCardKind.question:
         title = 'Gaia has a question';
+        tag = 'Question';
         body = card.question;
       case GaiaCardKind.permission:
         title = 'Gaia needs your permission';
+        tag = 'Permission';
         body = card.description.isNotEmpty ? card.description : card.tool;
       case GaiaCardKind.proposal:
         title = 'Gaia has something to save';
+        tag = 'Save';
         body = gaiaProposalTitle(card.proposal!, card.proposal!.fields);
       case GaiaCardKind.control:
         title = 'Gaia asks to control the screen';
+        tag = 'Screen control';
         body = '${card.input['window'] ?? ''}';
     }
     _toast(
       chatId,
       title,
       body.length > 120 ? '${body.substring(0, 120)}…' : body,
+      tag: tag,
       question: true,
     );
     unawaited(_attend(chatId));
@@ -7961,11 +8062,14 @@ class GaiaController extends ChangeNotifier {
     _window.attend();
   }
 
-  /// In front, or floating, Gaia's own toast; otherwise a Windows one.
+  /// In front, or floating, Gaia's own toast; otherwise a Windows one. Its
+  /// title is the chat's, after [tag] when there is one, the icon saying
+  /// it's Gaia's; [title] only with no chat title to show.
   void _toast(
     String chatId,
     String title,
     String body, {
+    String? tag,
     bool error = false,
     bool question = false,
     String? btwId,
@@ -7976,8 +8080,12 @@ class GaiaController extends ChangeNotifier {
     final chatTitle = _chat(chatId)?.title ?? '';
     final toast = (
       chatId: chatId,
-      title: title,
-      body: chatTitle.isEmpty ? body : '$chatTitle: $body',
+      title: chatTitle.isEmpty
+          ? title
+          : tag == null
+          ? chatTitle
+          : '$tag · $chatTitle',
+      body: body,
       error: error,
       question: question,
     );
@@ -8292,6 +8400,17 @@ class GaiaController extends ChangeNotifier {
     return firstLine.length > 60 ? '${firstLine.substring(0, 60)}…' : firstLine;
   }
 
+  /// Whether a new chat is titled from [prompt] as it's sent: not one of
+  /// under three words, its image tokens aside, nor one of files or quotes
+  /// alone, which wait for the reply to say what they're about.
+  bool _titledOnSend(String prompt) =>
+      prompt
+          .replaceAll(gaiaImageTokenPattern, ' ')
+          .split(RegExp(r'\s+'))
+          .where((word) => word.isNotEmpty)
+          .length >=
+      3;
+
   /// Whether [reply] is the chat's first to finish, a failed or stopped one
   /// before it not counting, with the title still the first message's first
   /// line: any other title is the user's own name for it.
@@ -8314,14 +8433,27 @@ class GaiaController extends ChangeNotifier {
         );
   }
 
-  /// The utility model's title for a chat's first answered exchange, over the
-  /// first-line one it started with, unless it was renamed meanwhile.
-  Future<void> _retitle(String chatId, String prompt, String reply) async {
+  /// The utility model's title for a chat, over the first-line one it
+  /// started with, unless it was renamed meanwhile: from its first message
+  /// as it's sent, or, with [reply], from its first answered exchange when
+  /// that message was too thin to name ([_titledOnSend]) or the title from
+  /// it didn't come.
+  Future<void> _retitle(String chatId, String prompt, [String? reply]) async {
     final from = _chat(chatId)?.title;
     if (from == null) return;
+    if (!_titling.add(chatId)) {
+      if (reply != null) _titleReplies[chatId] = reply;
+      return;
+    }
     final title = await _utility?.title(prompt, reply);
+    _titling.remove(chatId);
+    final waiting = _titleReplies.remove(chatId);
     final current = _chat(chatId);
-    if (title == null || current == null || current.title != from) return;
+    if (current == null || current.title != from) return;
+    if (title == null) {
+      if (waiting != null) await _retitle(chatId, prompt, waiting);
+      return;
+    }
     chats = [
       for (final c in chats) c.id == chatId ? c.copyWith(title: title) : c,
     ];
@@ -8369,6 +8501,40 @@ String gaiaPlainLine(String line) => line
       (m) => m[1]!,
     )
     .trim();
+
+/// A reply's [text] as its toast's body: its prose as plain text on one
+/// line, its headings, code blocks, tables and rules left out, cut at a word
+/// by 120 characters. With [question], its last sentence that asks one, the
+/// prose whole when none does.
+String gaiaToastSnippet(String text, {bool question = false}) {
+  var code = false;
+  final lines = <String>[];
+  for (final line in text.split('\n')) {
+    final trimmed = line.trim();
+    if (trimmed.startsWith('```')) {
+      code = !code;
+    } else if (!code &&
+        trimmed.isNotEmpty &&
+        !RegExp(r'^#{1,6}\s').hasMatch(trimmed) &&
+        !trimmed.startsWith('|') &&
+        !RegExp(r'^([-*_]\s*){3,}$').hasMatch(trimmed)) {
+      lines.add(gaiaPlainLine(trimmed));
+    }
+  }
+  var plain = lines.join(' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+  if (question) {
+    final asked = plain
+        .split(RegExp(r'''(?<=[.!?]["'”’)\]]*)\s+'''))
+        .lastWhere(
+          (s) => RegExp(r'''\?["'”’)\]]*$''').hasMatch(s),
+          orElse: () => '',
+        );
+    if (asked.isNotEmpty) plain = asked;
+  }
+  if (plain.length <= 120) return plain;
+  final cut = plain.lastIndexOf(' ', 120);
+  return '${plain.substring(0, cut > 60 ? cut : 120).trimRight()}…';
+}
 
 /// A search hit's [snippet] on one line as plain text: each of its prose
 /// lines as [gaiaPlainLine] makes it, less the bold, strike and code marks

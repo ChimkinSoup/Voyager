@@ -177,18 +177,6 @@ class _OnThisDayOverlayState extends ConsumerState<OnThisDayOverlay>
     });
   }
 
-  void _dismiss(List<OnThisDayMatch> matches) {
-    final dismissed = ref.read(onThisDayDismissedProvider.notifier);
-    dismissed.state = {
-      ...dismissed.state,
-      for (final match in matches)
-        onThisDayDismissalKey(match.entry.id, widget.today),
-    };
-    // The card is about to go, and a removed MouseRegion never gets onExit.
-    _hovered = false;
-    _setExpanded(false);
-  }
-
   void _open(OnThisDayMatch match) {
     widget.onOpen(match.entry.id);
     _setExpanded(false);
@@ -197,23 +185,16 @@ class _OnThisDayOverlayState extends ConsumerState<OnThisDayOverlay>
   @override
   Widget build(BuildContext context) {
     _onScreen = TickerMode.valuesOf(context).enabled;
-    final dismissed = ref.watch(onThisDayDismissedProvider);
-    final matches = [
-      for (final match
-          in ref
-                  .watch(
-                    onThisDayProvider((
-                      day: widget.today,
-                      journalId: widget.journalId,
-                    )),
-                  )
-                  .valueOrNull ??
-              const <OnThisDayMatch>[])
-        if (!dismissed.contains(
-          onThisDayDismissalKey(match.entry.id, widget.today),
-        ))
-          match,
-    ];
+    final matches =
+        ref
+            .watch(
+              onThisDayProvider((
+                day: widget.today,
+                journalId: widget.journalId,
+              )),
+            )
+            .valueOrNull ??
+        const <OnThisDayMatch>[];
     if (matches.isEmpty) {
       if (_expanded) _setExpanded(false, rebuild: false);
       return const SizedBox.shrink();
@@ -282,7 +263,7 @@ class _OnThisDayOverlayState extends ConsumerState<OnThisDayOverlay>
                           showJournal: widget.journalId == null,
                           onPage: (next) => setState(() => _page = next),
                           onOpen: () => _open(matches[page]),
-                          onDismiss: () => _dismiss(matches),
+                          onTuck: () => _setExpanded(false),
                         ),
                       ),
                     ),
@@ -308,7 +289,7 @@ class _OnThisDayCard extends StatelessWidget {
     required this.showJournal,
     required this.onPage,
     required this.onOpen,
-    required this.onDismiss,
+    required this.onTuck,
   });
 
   /// 0 tucked, 1 out: the contents fade in as the card comes out, and the
@@ -324,7 +305,7 @@ class _OnThisDayCard extends StatelessWidget {
   final bool showJournal;
   final ValueChanged<int> onPage;
   final VoidCallback onOpen;
-  final VoidCallback onDismiss;
+  final VoidCallback onTuck;
 
   @override
   Widget build(BuildContext context) {
@@ -365,12 +346,12 @@ class _OnThisDayCard extends StatelessWidget {
                 ),
               ),
               IconButton(
-                tooltip: 'Dismiss',
+                tooltip: 'Tuck away',
                 iconSize: 16,
                 constraints: smallButton,
                 style: smallStyle,
                 padding: EdgeInsets.zero,
-                onPressed: onDismiss,
+                onPressed: onTuck,
                 icon: const Icon(PhosphorIconsRegular.x),
               ),
             ],

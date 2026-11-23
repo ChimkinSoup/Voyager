@@ -122,16 +122,6 @@ List<OnThisDayMatch> matchOnThisDay(
   return matches;
 }
 
-/// What ✕ records for one matched entry on [today].
-String onThisDayDismissalKey(String entryId, DateTime today) =>
-    '$entryId|${DateFormat('yyyy-MM-dd').format(today)}';
-
-/// The [onThisDayDismissalKey]s ✕ has closed. In memory only, so they last
-/// for this run of the app: a restart brings the card back the same day.
-final onThisDayDismissedProvider = StateProvider<Set<String>>(
-  (ref) => const {},
-);
-
 typedef OnThisDayQuery = ({DateTime day, String? journalId});
 
 /// Matches for a [journalDay] [OnThisDayQuery.day] (midnight) and scope.

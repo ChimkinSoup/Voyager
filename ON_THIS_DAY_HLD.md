@@ -14,7 +14,7 @@ Status: **implemented** (schema v125).
 - Show matches only on the journal page, as a card that tucks into the right edge rather than vanishing.
 - Never lose a memory to calendar gaps. Monthly goes back a fixed 31 days, so every day comes back exactly once. Under yearly, a Feb 29 appears on Feb 28 in a non-leap year.
 - Respect the journal's existing chrome toggles (mood, weather).
-- Sync the setting and carry it through import/export. Dismissals are deliberately **not** synced or persisted (§6.4).
+- Sync the setting and carry it through import/export.
 
 ## 2. Non-goals (v1)
 
@@ -23,7 +23,7 @@ Status: **implemented** (schema v125).
 - A global (app-wide) switch. The setting exists only per journal.
 - Matching by anything other than `entryDate` (not `createdAt`).
 - More than one monthly memory day. "Monthly" means **exactly 31 days back** only.
-- Remembering a dismissal across app restarts or devices.
+- Dismissing the card. ✕ only tucks it (§6.4).
 
 ---
 
@@ -39,7 +39,7 @@ Status: **implemented** (schema v125).
 | **Surface** | Journal page only. |
 | **Presentation** | A portrait card. Tucked, it stands upright in the right edge with a 24 px strip showing. Out, it sits by the right edge turned ~4° counterclockwise. Clicking the strip brings it out; any interaction outside the card tucks it back. |
 | **Multiple matches** | One card with paging ("1 of 3"), newest first. No stacked cards. The tucked strip shows how far back the first (newest) match is and, with more than one, the count. |
-| **Dismiss** | ✕ hides the card, strip included, **for the rest of this run of the app**. It is held in memory only: restarting the app the same day brings the card back, and it slides out again. Not synced, not persisted, not in backups. |
+| **✕** | Tucks the card, like an outside click. There is no dismissal: the strip always stays while there are matches (changed 2026-11-22, after an accidental ✕ click hid the card for the rest of the day). |
 | **Eligible entries** | Not soft-deleted, in a non-deleted journal, and not blank (the title or body has non-whitespace text). |
 | **Day boundaries** | Everything is compared in **device-local** calendar days. `entryDate` is stored in UTC and converted with `toLocal()` first. |
 | **Chrome toggles** | Mood appears only if that journal's `showMood` is on, and weather only if `showWeather` is on. The card never shows quotes. |
@@ -84,15 +84,14 @@ The two rules can never match the same entry. 31 days back is always in an earli
 ### 5.1 States
 
 ```
-hidden ──(un-dismissed matches exist)──▶ tucked
+hidden ──(matches exist)──▶ tucked
 tucked ──(first time this run, per day + scope, entries loaded, +400 ms)──▶ out
 tucked ──(click the strip)──▶ out
-out ──(outside tap / key press / Esc / Open / scope change)──▶ tucked
-out ──(✕)──▶ hidden until the app restarts
-any ──(no un-dismissed matches for the scope)──▶ hidden
+out ──(outside tap / key press / Esc / ✕ / Open / scope change)──▶ tucked
+any ──(no matches for the scope)──▶ hidden
 ```
 
-- **Auto-expand:** the card slides out on its own the **first time in each run of the app**, per `(day, scope)`, that the journal page has un-dismissed matches for that scope. Later visits in the same run start tucked. The memory is recorded only when the card actually slides out, so a scope switch that cancels the pending entrance doesn't use it up. It lives in a plain in-memory provider (`_onThisDayAutoExpandedProvider`), so a restart auto-expands again. That matches the restart behaviour of ✕. The shell keeps pages it has left mounted, with their tickers off (`TickerMode`). The entrance waits until the page is on screen, and a delay that runs out after the page was left is not recorded, so the page gets its entrance when the user comes back.
+- **Auto-expand:** the card slides out on its own the **first time in each run of the app**, per `(day, scope)`, that the journal page has matches for that scope. Later visits in the same run start tucked. The memory is recorded only when the card actually slides out, so a scope switch that cancels the pending entrance doesn't use it up. It lives in a plain in-memory provider (`_onThisDayAutoExpandedProvider`), so a restart auto-expands again. The shell keeps pages it has left mounted, with their tickers off (`TickerMode`). The entrance waits until the page is on screen, and a delay that runs out after the page was left is not recorded, so the page gets its entrance when the user comes back.
 - **Entrance delay:** 400 ms (`OnThisDayOverlay.entranceDelay`) after the page's entries have loaded (`ready`), so the card doesn't arrive while the list is settling.
 
 ### 5.2 What tucks it away
@@ -101,6 +100,7 @@ While out, any of these tuck it back:
 - A pointer-down anywhere outside the card, via `TapRegion.onTapOutside`. The tap still reaches its target; tucking never swallows it.
 - Any key press except a modifier on its own (Shift, Ctrl, Alt, Meta, Caps Lock, Fn), including typing into an already-focused editor. A shortcut such as Ctrl+S still tucks it, because its other key counts. A `HardwareKeyboard` handler is registered only while the card is out. It returns `false`, so the key is reported unhandled and the engine still delivers the typed character. The widget test asserts exactly that.
 - `Esc`, from anywhere.
+- ✕ in the card's header.
 - **Open**, after handing the entry to the page.
 - Switching the journal scope or the day. The card jumps straight to tucked, with no slide, so the new scope's memory never plays a slide-in. If the new scope has no matches, the card goes to hidden instead.
 
@@ -124,7 +124,7 @@ Scrolling with the wheel or trackpad does **not** tuck it, since reading while t
 ### 5.4 Content
 
 Top to bottom:
-- **Header:** memory icon in the journal colour, "On this day", and ✕ (tooltip "Dismiss").
+- **Header:** memory icon in the journal colour, "On this day", and ✕ (tooltip "Tuck away").
 - **Label and date:** e.g. "1 year ago · Sep 24".
 - **Journal:** name and colour dot, All view only.
 - **Title:** up to 2 lines, "Untitled" when blank.
@@ -163,14 +163,9 @@ New field `onThisDayCadence`, with enum `OnThisDayCadence { off, yearly, monthly
 - An export contains `onThisDayCadence`, and a restore keeps `yearly` and `monthlyAndYearly`.
 - Importing a backup made before this change yields `off`.
 
-### 6.4 Dismissals (in memory only)
+### 6.4 No dismissals
 
-- **Storage:** `onThisDayDismissedProvider`, a `StateProvider<Set<String>>` in `on_this_day.dart`, holds the dismissed keys for the current run of the app. There are no database rows, no outbox entries, no Firestore documents and no backup records.
-- **Key:** `<entryId>|<yyyy-MM-dd of T>`. There is one key per matched entry per day, so a dismissal holds whichever view it's made from: one journal or All.
-- **✕** adds a key for **every** match currently on the card, then tucks it.
-- **Filtering:** the overlay watches the set and filters matches synchronously before deciding its state, so the card disappears in the same frame. There is no optimistic local copy to reconcile.
-- **Why in memory:** the user wants a dismissed card to come back after a restart even on the same day. That also means a dismissal on one device doesn't hide the card on another.
-- **Leftover rows:** builds from before this change wrote `onthisday|…` rows to `dismissed_notifications_table`. Nothing reads them any more, and the Inbox ignores keys that belong to none of its feed items, so they are inert.
+✕ only tucks the card (§5.2), so there is nothing to store. Earlier builds kept an in-memory set of dismissed `<entryId>|<day>` keys that hid the card, strip included, until a restart; it was removed on 2026-11-22 after an accidental ✕ click lost the card for the day. Builds before that wrote `onthisday|…` rows to `dismissed_notifications_table`. Nothing reads them any more, and the Inbox ignores keys that belong to none of its feed items, so they are inert.
 
 ---
 
@@ -181,7 +176,7 @@ journalsProvider ───────────┐
                             ├─▶ onThisDayProvider((day, journalId))   matchOnThisDay, §4
 allJournalEntriesProvider ──┘            │
                                          ▼
-onThisDayDismissedProvider ──▶ OnThisDayOverlay (journal_page.dart)   filter, card state machine, §5
+                                         OnThisDayOverlay (journal_page.dart)   card state machine, §5
 ```
 
 - `onThisDayProvider` is `autoDispose`, so a (day, scope) pair's matches are dropped once no overlay watches them.
@@ -205,8 +200,8 @@ onThisDayDismissedProvider ──▶ OnThisDayOverlay (journal_page.dart)   filt
 
 | File | Covers |
 |------|--------|
-| `test/journal_on_this_day_match_test.dart` | Every row of the §4 table. Feb 29 → Feb 28 in non-leap years only. December → January wrap. A 23:30-local entry matches its local day. Yearly cadence drops the month-ago entry. Soft-deleted, blank, deleted-journal, `off`-journal and orphaned entries excluded. The All scope drops `includeInAllView == false`, but the journal's own scope keeps it. Ordering, labels and short distances ("1mo", "1y", "3y"), dismissal key format. |
-| `test/journal_on_this_day_card_test.dart` | Mounts the overlay over a stand-in list and text field (a bare `MaterialApp`, not AppShell). Auto-expands once. A list tap tucks it **and** selects the row. Typing tucks it, reaches the field, and is reported unhandled. Esc tucks it. The strip brings it out. The tucked strip shows the newest match's distance ("1y") and the count. A second visit the same run starts tucked. ✕ writes nothing to the database, stays closed for the run, comes back after a simulated restart (a fresh `ProviderContainer`), and the next day shows its own matches. **Open** hands over the entry id and tucks the card. Paging. Mood and weather per toggles. A lone modifier leaves it out, and Ctrl+S tucks it. Tab never focuses anything inside the card. A scope change while out goes straight to tucked. Off screen (`TickerMode` off), the entrance waits for the page to come back. ✕ under the mouse leaves no hover nudge. |
+| `test/journal_on_this_day_match_test.dart` | Every row of the §4 table. Feb 29 → Feb 28 in non-leap years only. December → January wrap. A 23:30-local entry matches its local day. Yearly cadence drops the month-ago entry. Soft-deleted, blank, deleted-journal, `off`-journal and orphaned entries excluded. The All scope drops `includeInAllView == false`, but the journal's own scope keeps it. Ordering, labels and short distances ("1mo", "1y", "3y") |
+| `test/journal_on_this_day_card_test.dart` | Mounts the overlay over a stand-in list and text field (a bare `MaterialApp`, not AppShell). Auto-expands once. A list tap tucks it **and** selects the row. Typing tucks it, reaches the field, and is reported unhandled. Esc tucks it. The strip brings it out. The tucked strip shows the newest match's distance ("1y") and the count. A second visit the same run starts tucked. ✕ tucks it and the strip brings it back. **Open** hands over the entry id and tucks the card. Paging. Mood and weather per toggles. A lone modifier leaves it out, and Ctrl+S tucks it. Tab never focuses anything inside the card. A scope change while out goes straight to tucked. Off screen (`TickerMode` off), the entrance waits for the page to come back. ✕ under the mouse leaves no hover nudge. |
 | `test/journal_on_this_day_open_scroll_test.dart` | The real page, in All journals and in one journal: 60 recent rows of mixed heights over a year-old memory. **Open** leaves the memory's row on screen. |
 | `test/journal_on_this_day_data_test.dart` | 124 → 125 migration gives `off` and keeps the journal. The repository and mapper round-trip every cadence. A remote document without the field keeps the local value, or `off` with no local. |
 | `test/import_export_test.dart` (group "On this day cadence in backups") | The export carries the cadence and a restore keeps it. A pre-change backup restores as `off`. |
@@ -220,7 +215,7 @@ The visual design (tucked, mid-swing, out; the one-line setting) was checked wit
 
 ## 10. Open points
 
-1. **No undo for ✕.** Tucking is the safety net, since an outside click only tucks. A restart also restores a dismissed card. If accidental dismissals happen, add an Undo toast.
+1. ~~**No undo for ✕.**~~ Resolved 2026-11-22: an accidental ✕ click did hide the card for the day, so ✕ now only tucks it.
 2. **Entry read per commit point** (focus loss, entry or journal switch, create, delete) once any journal is opted in (§7). Move to a date-window repository query if it shows up in profiles.
 3. ~~**The tucked strip overlaps the editor's right edge by ~8 px**~~ (§5.3). Resolved 2026-10-05: the peek was narrowed to the 24 px gutter after the overlap hid editor controls (BUG-055).
 4. **Midnight rollover** is picked up on the next page rebuild, not live.
@@ -236,7 +231,7 @@ The visual design (tucked, mid-swing, out; the one-line setting) was checked wit
 | `lib/data/database/app_database.dart` (+ `.g.dart`) | column, schema v125, migration |
 | `lib/data/repositories/drift_repositories.dart` | row ↔ model |
 | `lib/core/sync/firestore_document_mapper.dart` | to/from Firestore |
-| `lib/features/journal/on_this_day.dart` (new) | pure matcher, labels, `onThisDayProvider`, `onThisDayDismissedProvider` |
+| `lib/features/journal/on_this_day.dart` (new) | pure matcher, labels, `onThisDayProvider` |
 | `lib/features/journal/on_this_day_overlay.dart` (new) | card, tucked strip, motion, state machine |
 | `lib/features/journal/journal_page.dart` | mount the overlay, wire Open to `_openMemory` (open and scroll to it) |
 | `lib/features/journal/journal_settings_dialog.dart` | cadence control |

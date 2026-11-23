@@ -19,6 +19,47 @@ void main() {
     expect(gaiaPlainLine('Done.'), 'Done.');
   });
 
+  test("a reply's toast skips headings and code, and joins its prose", () {
+    expect(
+      gaiaToastSnippet(
+        '## Fix\n\nThe retry loop was **unbounded**.\n'
+        '```dart\nwhile (true) {}\n```\n| a | b |\n---\n- Capped at 5',
+      ),
+      'The retry loop was unbounded. Capped at 5',
+    );
+  });
+
+  test("a reply's toast is cut at a word", () {
+    final snippet = gaiaToastSnippet('word ' * 40);
+    expect(snippet.length, lessThanOrEqualTo(121));
+    expect(snippet, endsWith('word…'));
+  });
+
+  test('a question\'s toast is its last question', () {
+    expect(
+      gaiaToastSnippet(
+        'I found two configs. Is the first one stale? Which should I keep?',
+        question: true,
+      ),
+      'Which should I keep?',
+    );
+    expect(
+      gaiaToastSnippet('Tell me which one.', question: true),
+      'Tell me which one.',
+    );
+    expect(
+      gaiaToastSnippet(
+        'Done. Should I go ahead (and also update tests?) Thanks.',
+        question: true,
+      ),
+      'Should I go ahead (and also update tests?)',
+    );
+    expect(
+      gaiaToastSnippet('It ran. Did you mean "the old one?"', question: true),
+      'Did you mean "the old one?"',
+    );
+  });
+
   test('a search snippet is plain, on one line, its matches still marked', () {
     const s = GaiaSearchHit.start, e = GaiaSearchHit.end;
     expect(

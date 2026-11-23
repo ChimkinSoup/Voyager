@@ -16,7 +16,9 @@ import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_tool_results.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_greetings.dart';
+import 'package:voyager/features/gaia/companion/gaia_sky.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
+import 'package:voyager/features/gaia/usage/gaia_stats_model.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
@@ -1017,6 +1019,71 @@ void main() {
     expect(controller.justSent, isFalse);
   });
 
+  group('lifetime stats (GAIA_STATS_HLD.md §3)', () {
+    List<Map<String, Object?>> seen() => [
+      for (final (event, params) in main.events)
+        if (event == 'statsSeen') params,
+    ];
+
+    test('a new chat counts as started; each day active only once', () async {
+      await startCompanion();
+      runner.turns.addAll([
+        ...claudeFixtureTurns('single_turn.jsonl'),
+        ...claudeFixtureTurns('single_turn.jsonl'),
+        ...claudeFixtureTurns('single_turn.jsonl'),
+      ]);
+      await controller.send('Hello');
+      await settle();
+      await controller.send('And again');
+      await settle();
+      controller.newChat();
+      await controller.send('Another chat');
+      await settle();
+
+      expect(seen(), [
+        {'kind': 'chat'},
+        {'kind': 'day', 'day': gaiaStatsDay(DateTime.now())},
+        {'kind': 'chat'},
+      ]);
+    });
+
+    test('nothing counts in dummy mode', () async {
+      final debug = GaiaDebug();
+      await startCompanion(debug: debug);
+      debug.dummyMode = true;
+      await controller.send('Hello');
+      await settle();
+
+      expect(seen(), isEmpty);
+    });
+
+    test('rare sightings go at once; meteors wait for a blur', () async {
+      await startCompanion();
+      controller.focused.value = true;
+      const meteor = (satellite: null, aurora: null);
+      controller
+        ..noteSighting(meteor)
+        ..noteSighting((satellite: GaiaSatellite.iss, aurora: null))
+        ..noteSighting(meteor)
+        ..noteSighting((satellite: null, aurora: GaiaRareAurora.gold));
+      await settle();
+      expect(seen(), [
+        {'kind': 'satellite', 'id': 'iss'},
+        {'kind': 'aurora', 'id': 'gold'},
+      ]);
+
+      controller.focused.value = false;
+      await settle();
+      expect(seen().last, {'kind': 'meteors', 'n': 2});
+      // Sent, so not again.
+      controller.focused
+        ..value = true
+        ..value = false;
+      await settle();
+      expect(seen(), hasLength(3));
+    });
+  });
+
   test('a quote alone is sent, titled by its first line', () async {
     await startCompanion();
     runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
@@ -1253,8 +1320,8 @@ void main() {
         expect(main.events.where((e) => e.$1 == 'runDone'), isEmpty);
         final toast = toasts.single;
         expect(toast.chatId, chatId);
-        expect(toast.title, 'Gaia has a question');
-        expect(toast.body, startsWith('/msg6: '));
+        expect(toast.title, 'Question · /msg6');
+        expect(toast.body, isNot(contains('/msg6')));
         expect(toast.question, isTrue);
         expect(toast.error, isFalse);
       },
@@ -1274,7 +1341,7 @@ void main() {
 
       expect(toasts, isEmpty);
       final (_, done) = main.events.singleWhere((e) => e.$1 == 'runDone');
-      expect(done['title'], 'Gaia has a question');
+      expect(done['title'], 'Question · /msg6');
     });
 
     test(
@@ -1286,7 +1353,7 @@ void main() {
         await settle();
 
         final (_, done) = main.events.singleWhere((e) => e.$1 == 'runDone');
-        expect(done['title'], 'Gaia ran into an error');
+        expect(done['title'], 'Failed · /error');
       },
     );
 
@@ -1301,7 +1368,7 @@ void main() {
         await settle();
 
         expect(main.events.where((e) => e.$1 == 'runDone'), isEmpty);
-        expect(toasts.single.title, 'Gaia is done');
+        expect(toasts.single.title, '/msg1');
       },
     );
 
@@ -3312,6 +3379,23 @@ void main() {
       });
     });
 
+    test('a first message of three words or more titles the chat as it is '
+        'sent, once', () async {
+      await startCompanion(utility: utility('standard'));
+      // A turn with no result hangs until finished.
+      runner.turns.add([]);
+      final sent = controller.send('Fix the sync retry loop');
+      await settle();
+      expect(controller.currentRunning, isTrue);
+      expect(controller.currentChat!.title, 'Generated title');
+      expect((await main.chat()).title, 'Generated title');
+
+      runner.finish(controller.currentChatId!, text: 'Done.');
+      await sent;
+      await settle();
+      expect(calls.where((c) => c == 'title'), hasLength(1));
+    });
+
     test('a first line cut to length still counts as untitled', () async {
       await startCompanion(utility: utility('standard'));
       runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
@@ -4008,8 +4092,8 @@ void main() {
       await settle();
       final (_, done) = main.events.singleWhere((e) => e.$1 == 'runDone');
       expect(done['chatId'], controller.currentChatId);
-      expect(done['title'], 'Gaia is done');
-      expect(done['body'], startsWith('Say hello: '));
+      expect(done['title'], 'Say hello');
+      expect(done['body'], isNot(contains('Say hello')));
     });
 
     test('no toast while Gaia is on screen, or with it turned off', () async {
@@ -4285,6 +4369,17 @@ void main() {
 
     GaiaCardPart card(GaiaMessage message) =>
         message.parts.whereType<GaiaCardPart>().single;
+
+    test("a card raised while Gaia is hidden is a toast titled with its "
+        "kind's short tag and the chat's title", () async {
+      final tools = await hanging();
+      unawaited(tools.call('ask_user', {'question': 'Which day?'}));
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      await settle();
+      final (_, raised) = main.events.lastWhere((e) => e.$1 == 'runDone');
+      expect(raised['title'], 'Question · Hi');
+      expect(raised['body'], 'Which day?');
+    });
 
     test('a stop that says why shows on the activity card, and a plain '
         'one adds no card (BUG-357)', () async {

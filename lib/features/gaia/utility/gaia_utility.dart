@@ -152,15 +152,16 @@ class GaiaUtility {
     }
   }
 
-  /// A title for a chat from its first exchange, or null to keep the
-  /// first-line one.
-  Future<String?> title(String question, String reply) async {
+  /// A title for a chat from its first exchange, or from its first message
+  /// alone without [reply]; null to keep the first-line one.
+  Future<String?> title(String question, [String? reply]) async {
     try {
       final answer = await _runner.generate(
         'Write a title of at most six words for a chat that starts '
-            'with the exchange in <input>. Reply with the title only.',
-        'User: ${_clip(question, 2000)}\n\n'
-            'Assistant: ${_clip(reply, 2000)}',
+            'with the ${reply == null ? 'message' : 'exchange'} in <input>. '
+            'Reply with the title only.',
+        'User: ${_clip(question, 2000)}'
+            '${reply == null ? '' : '\n\nAssistant: ${_clip(reply, 2000)}'}',
         timeout: _titleTimeout,
         source: 'chat title',
       );
