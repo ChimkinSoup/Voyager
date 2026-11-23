@@ -4660,6 +4660,69 @@ class GaiaController extends ChangeNotifier {
     }
   }
 
+  /// [deleteChat] for [chatIds] at once, in one request. Returns each chat
+  /// deleted's id to what [restoreChats] needs to undo it.
+  Future<Map<String, String?>> deleteChats(List<String> chatIds) async {
+    final gone = chatIds.toSet();
+    chats = [
+      for (final c in chats)
+        if (!gone.contains(c.id)) c,
+    ];
+    gone.forEach(_messages.remove);
+    if (gone.contains(currentChatId)) {
+      newChat();
+    } else {
+      notifyListeners();
+    }
+    try {
+      final result = await _pipe.request('deleteChats', {'chatIds': chatIds});
+      return (result! as Map).cast<String, String?>();
+    } on GaiaPipeException catch (error) {
+      debugPrint('[gaia] chats not deleted: $error');
+      await _refresh();
+      rethrow;
+    }
+  }
+
+  /// [restoreChat] for each of [deleted], from [deleteChats]; [open] in
+  /// view again, once it's back.
+  Future<void> restoreChats(
+    Map<String, String?> deleted, {
+    String? open,
+  }) async {
+    try {
+      for (final MapEntry(key: chatId, value: at) in deleted.entries) {
+        await _request('restoreChat', {'chatId': chatId, 'mediaDeletedAt': at});
+      }
+    } finally {
+      // Those restored before one failed show.
+      await _refresh();
+    }
+    if (open != null && _chat(open) != null) await selectChat(open);
+  }
+
+  /// Stops those of [chatIds] that are running, and waits till their runs
+  /// have ended, so none writes to its chat after a delete.
+  Future<void> stopAll(Iterable<String> chatIds) async {
+    final ids = chatIds.where(isRunning).toList();
+    if (ids.isEmpty) return;
+    final ended = Completer<void>();
+    void check() {
+      if (!ids.any(isRunning) && !ended.isCompleted) ended.complete();
+    }
+
+    addListener(check);
+    try {
+      await Future.wait([for (final id in ids) stop(id)]);
+      check();
+      await ended.future;
+    } finally {
+      removeListener(check);
+    }
+    // A stopped message going back to the composer.
+    await Future.wait([for (final id in ids) ?_takingBack[id]]);
+  }
+
   /// With [open], as it was when deleted: the chat in view again, once
   /// it's back.
   Future<void> restoreChat(

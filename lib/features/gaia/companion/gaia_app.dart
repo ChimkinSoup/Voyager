@@ -1346,7 +1346,14 @@ class _SidebarState extends State<_Sidebar> {
   final _tiles =
       <
         String,
-        ({GaiaChat chat, bool selected, bool running, bool? open, Widget tile})
+        ({
+          GaiaChat chat,
+          bool selected,
+          bool picked,
+          bool running,
+          bool? open,
+          Widget tile,
+        })
       >{};
 
   /// Each chat's and project's row, by `chat <id>` or `project <id>`: a
@@ -1370,6 +1377,13 @@ class _SidebarState extends State<_Sidebar> {
   /// Whether the Archived chats show; folded away each time Gaia opens.
   var _archivedOpen = false;
   final _renameFocus = FocusNode();
+
+  /// The chats Ctrl+ or Shift+clicked, for the menu of what's done to them
+  /// all; [_anchor], the one a Shift+click's range runs from. Only chats
+  /// shown: [_shown], in the order they are, as last built.
+  final _picked = <String>{};
+  String? _anchor;
+  var _shown = <String>[];
 
   @override
   void didUpdateWidget(_Sidebar old) {
@@ -1603,42 +1617,53 @@ class _SidebarState extends State<_Sidebar> {
       );
 
   /// A project made, open and named "New project" in its row, ready to be
-  /// renamed; with [moving], that chat moved into it.
-  Future<void> _newProject({GaiaChat? moving}) async {
+  /// renamed; with [moving], those chats moved into it.
+  Future<void> _newProject({List<GaiaChat> moving = const []}) async {
     final controller = widget.controller;
     final project = await controller.createProject('New project');
     unawaited(controller.sidebar.setProjectOpen(project.id, true));
-    if (moving != null) await controller.moveChat(moving.id, project.id);
+    for (final chat in moving) {
+      await controller.moveChat(chat.id, project.id);
+    }
     if (mounted) _startRename(project.id, project.name, project: true);
   }
 
-  /// Move to project's list (GAIA_PROJECTS_HLD.md §3.2): the projects it
-  /// isn't in, a new one, and out of the one it is in.
-  void _moveMenu(GaiaChat chat, Offset position) {
+  /// Move to project's list (GAIA_PROJECTS_HLD.md §3.2): the projects
+  /// [chats] aren't all in, a new one, and out of the ones they are in.
+  void _moveMenu(List<GaiaChat> chats, Offset position) {
     final controller = widget.controller;
-    final inProject = controller.project(chat.projectId);
+    final inProjects = {
+      for (final chat in chats) controller.project(chat.projectId)?.id,
+    };
+    Future<void> moveAll(String? projectId) async {
+      for (final chat in chats) {
+        if (controller.project(chat.projectId)?.id == projectId) continue;
+        await controller.moveChat(chat.id, projectId);
+      }
+    }
+
     showGaiaMenu(context, position, [
       for (final project in gaiaProjectsListed(
         controller.chats,
         controller.projects,
       ))
-        if (project.id != inProject?.id)
+        if (!(inProjects.length == 1 && inProjects.single == project.id))
           GaiaMenuItem(
             label: '',
             accented: project.name,
             icon: Icons.folder_outlined,
-            onPressed: () => controller.moveChat(chat.id, project.id),
+            onPressed: () => moveAll(project.id),
           ),
       GaiaMenuItem(
         label: 'New project…',
         icon: Icons.create_new_folder_outlined,
-        onPressed: () => _newProject(moving: chat),
+        onPressed: () => _newProject(moving: chats),
       ),
-      if (inProject != null)
+      if (inProjects.any((id) => id != null))
         GaiaMenuItem(
           label: 'Remove from project',
           icon: Icons.folder_off_outlined,
-          onPressed: () => controller.moveChat(chat.id, null),
+          onPressed: () => moveAll(null),
         ),
     ]);
   }
@@ -1881,7 +1906,7 @@ class _SidebarState extends State<_Sidebar> {
       GaiaMenuItem(
         label: 'Move to project',
         icon: Icons.drive_file_move_outlined,
-        onPressed: () => _moveMenu(chat, position),
+        onPressed: () => _moveMenu([chat], position),
       ),
       GaiaMenuItem(
         label: chat.archived ? 'Unarchive' : 'Archive',
@@ -1910,25 +1935,189 @@ class _SidebarState extends State<_Sidebar> {
     ]);
   }
 
+  /// The picked chats, in the order shown.
+  List<GaiaChat> _pickedChats() {
+    final byId = {for (final chat in widget.controller.chats) chat.id: chat};
+    return [
+      for (final id in _shown)
+        if (_picked.contains(id)) ?byId[id],
+    ];
+  }
+
+  void _clearPicked() => setState(() {
+    _picked.clear();
+    _anchor = null;
+  });
+
+  /// A click on [chat]'s row: with Ctrl, it's picked or unpicked; with
+  /// Shift, the shown chats from the last one picked (or the open one) to
+  /// it are; otherwise it opens, and the picked are let go.
+  void _tapChat(GaiaChat chat) {
+    final keyboard = HardwareKeyboard.instance;
+    final controller = widget.controller;
+    if (keyboard.isControlPressed) {
+      setState(() {
+        if (!_picked.remove(chat.id)) _picked.add(chat.id);
+        _anchor = chat.id;
+      });
+      return;
+    }
+    if (keyboard.isShiftPressed) {
+      final to = _shown.indexOf(chat.id);
+      var from = _shown.indexOf(_anchor ?? controller.currentChatId ?? '');
+      if (from < 0) from = to;
+      setState(() {
+        _picked
+          ..clear()
+          ..addAll(_shown.sublist(min(from, to), max(from, to) + 1));
+        _anchor ??= _shown[from];
+      });
+      return;
+    }
+    if (_picked.isNotEmpty) _clearPicked();
+    unawaited(controller.selectChat(chat.id));
+  }
+
+  /// What's done to all the picked chats at once.
+  void _pickedMenu(Offset position) {
+    final controller = widget.controller;
+    final chats = _pickedChats();
+    if (chats.isEmpty) return;
+    final allPinned = chats.every((chat) => chat.pinned);
+    final allArchived = chats.every((chat) => chat.archived);
+    Future<void> each(Future<void> Function(GaiaChat chat) action) async {
+      for (final chat in chats) {
+        await action(chat);
+      }
+    }
+
+    showGaiaMenu(context, position, [
+      GaiaMenuItem(
+        label: allPinned ? 'Unpin' : 'Pin',
+        icon: allPinned ? Icons.push_pin : Icons.push_pin_outlined,
+        onPressed: () => each(
+          (chat) => chat.pinned == !allPinned
+              ? Future.value()
+              : controller.setPinned(chat.id, !allPinned),
+        ),
+      ),
+      GaiaMenuItem(
+        label: 'Move to project',
+        icon: Icons.drive_file_move_outlined,
+        onPressed: () => _moveMenu(chats, position),
+      ),
+      GaiaMenuItem(
+        label: allArchived ? 'Unarchive' : 'Archive',
+        icon: allArchived ? Icons.unarchive_outlined : Icons.archive_outlined,
+        onPressed: () => each(
+          (chat) => chat.archived == !allArchived
+              ? Future.value()
+              : controller.setArchived(chat.id, !allArchived),
+        ),
+      ),
+      GaiaMenuItem(
+        label: chats.length == 1 ? 'Delete' : 'Delete ${chats.length} chats',
+        icon: Icons.delete_outline,
+        destructive: true,
+        onPressed: () => _deletePicked(chats),
+      ),
+    ]);
+  }
+
+  /// [chats] off the list at once, after asking when any is running, which
+  /// is stopped first: the run would write it back. The toast undoes it.
+  Future<void> _deletePicked(List<GaiaChat> chats) async {
+    final controller = widget.controller;
+    final ids = [for (final chat in chats) chat.id];
+    final running = ids.where(controller.isRunning).length;
+    if (running > 0) {
+      final them = ids.length == 1 ? 'it' : 'them';
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(
+            ids.length == 1
+                ? 'Delete a running chat?'
+                : 'Delete ${ids.length} chats?',
+          ),
+          content: Text(
+            running == 1
+                ? '1 chat is still running. Deleting $them stops it.'
+                : '$running chats are still running. Deleting $them stops '
+                      'them.',
+          ),
+          actions: [
+            GaiaButton(
+              label: 'Cancel',
+              onPressed: () => Navigator.of(context).pop(false),
+            ),
+            GaiaButton(
+              label: 'Delete anyway',
+              onPressed: () => Navigator.of(context).pop(true),
+              color: Theme.of(context).colorScheme.error,
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+    }
+    _clearPicked();
+    final open = ids.contains(controller.currentChatId)
+        ? controller.currentChatId
+        : null;
+    // One may have started since it was asked about, or with none running.
+    await controller.stopAll(ids);
+    final Map<String, String?> deleted;
+    try {
+      deleted = await controller.deleteChats(ids);
+    } on GaiaPipeException catch (error) {
+      if (!mounted) return;
+      showGaiaToast(
+        context,
+        mark: GaiaToastMark.error,
+        title: ids.length == 1
+            ? '${chats.single.title} not deleted'
+            : 'Chats not deleted',
+        body: '$error',
+      );
+      return;
+    }
+    if (!mounted || deleted.isEmpty) return;
+    showGaiaToast(
+      context,
+      mark: GaiaToastMark.done,
+      title: deleted.length == 1
+          ? 'Deleted ${chats.firstWhere((c) => deleted.containsKey(c.id)).title}'
+          : 'Deleted ${deleted.length} chats',
+      body: 'Click to undo',
+      onTap: () => controller.restoreChats(deleted, open: open),
+    );
+  }
+
   /// [open]: whether the chat's forks show under it; null when it has none.
   Widget _tile(GaiaChat chat, {bool? open}) {
     final controller = widget.controller;
     final selected = chat.id == controller.currentChatId;
+    final picked = _picked.contains(chat.id);
     final running = controller.isRunning(chat.id);
     final renaming = chat.id == _renaming && !_renamingProject;
     if (_tiles[chat.id] case final last?
         when !renaming &&
             identical(last.chat, chat) &&
             last.selected == selected &&
+            last.picked == picked &&
             last.running == running &&
             last.open == open) {
       return last.tile;
     }
     final tile = GestureDetector(
       key: _rowKey('chat ${chat.id}'),
-      onSecondaryTapUp: (details) => _menu(chat, details.globalPosition),
+      onSecondaryTapUp: (details) => _picked.contains(chat.id)
+          ? _pickedMenu(details.globalPosition)
+          : _menu(chat, details.globalPosition),
       child: _ChatTile(
         selected: selected,
+        picked: picked,
         title: renaming
             ? _renameField()
             : Text(chat.title, overflow: TextOverflow.ellipsis),
@@ -1961,7 +2150,7 @@ class _SidebarState extends State<_Sidebar> {
                 ],
               )
             : null,
-        onTap: renaming ? null : () => controller.selectChat(chat.id),
+        onTap: renaming ? null : () => _tapChat(chat),
       ),
     );
     if (renaming) {
@@ -1972,6 +2161,7 @@ class _SidebarState extends State<_Sidebar> {
     _tiles[chat.id] = (
       chat: chat,
       selected: selected,
+      picked: picked,
       running: running,
       open: open,
       tile: tile,
@@ -1991,6 +2181,27 @@ class _SidebarState extends State<_Sidebar> {
     };
     _rowKeys.removeWhere((key, _) => !rows.contains(key));
     final sections = gaiaChatSections(controller.chats, controller.projects);
+    Iterable<String> shownIn(List<GaiaForkGroup> groups) sync* {
+      for (final (:chat, :forks) in groups) {
+        yield chat.id;
+        if (!controller.sidebar.collapsed.contains(chat.id)) {
+          yield* forks.map((fork) => fork.id);
+        }
+      }
+    }
+
+    _shown = [
+      ...shownIn(sections.pinned),
+      for (final section in sections.projects)
+        if (controller.sidebar.openProjects.contains(section.project.id))
+          ...shownIn(section.groups),
+      ...shownIn(sections.chats),
+      if (_archivedOpen) ...shownIn(sections.archived),
+    ];
+    // One folded away or deleted is let go.
+    _picked.retainAll(_shown);
+    // Kept though unpicked, as a Ctrl+click that unpicks still moves it.
+    if (!_shown.contains(_anchor)) _anchor = null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -2034,13 +2245,47 @@ class _SidebarState extends State<_Sidebar> {
             ],
           ),
         ),
+        // While chats are picked, what's picked in New chat's place, at its
+        // height: the rows don't move under the cursor between clicks.
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: GaiaButton(
-            icon: Icons.add,
-            label: 'New chat',
-            onPressed: () => _newChat(controller),
-          ),
+          child: _picked.isEmpty
+              ? GaiaButton(
+                  icon: Icons.add,
+                  label: 'New chat',
+                  onPressed: () => _newChat(controller),
+                )
+              : SizedBox(
+                  height: 36,
+                  child: Row(
+                    children: [
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          '${_picked.length} selected',
+                          style: GaiaType.label.copyWith(color: GaiaInk.muted),
+                        ),
+                      ),
+                      if (_picked.length < _shown.length) ...[
+                        const SizedBox(width: 8),
+                        GaiaButton(
+                          label: 'Select all',
+                          size: 28,
+                          padding: 10,
+                          onPressed: () =>
+                              setState(() => _picked.addAll(_shown)),
+                        ),
+                      ],
+                      const SizedBox(width: 4),
+                      GaiaActionIcon(
+                        label: 'Clear selection',
+                        icon: Icons.close,
+                        compact: true,
+                        onPressed: _clearPicked,
+                      ),
+                    ],
+                  ),
+                ),
         ),
         Expanded(
           child: ScrollConfiguration(
@@ -2208,6 +2453,7 @@ class _SidebarState extends State<_Sidebar> {
 class _ChatTile extends StatefulWidget {
   const _ChatTile({
     required this.selected,
+    this.picked = false,
     required this.title,
     this.chevron,
     required this.trailing,
@@ -2216,6 +2462,10 @@ class _ChatTile extends StatefulWidget {
   });
 
   final bool selected;
+
+  /// Ctrl+ or Shift+clicked, among the chats something's done to at once:
+  /// tinted in the accent.
+  final bool picked;
   final Widget title;
 
   /// Right after the title: a chat's fold for its forks.
@@ -2244,7 +2494,9 @@ class _ChatTileState extends State<_ChatTile> {
     final selected = widget.selected;
     // Not while it's being renamed: the field is what's under the cursor.
     final hovered = _hovered && widget.onTap != null;
-    final lit = selected || hovered;
+    final picked = widget.picked;
+    final accent = Theme.of(context).colorScheme.primary;
+    final lit = selected || hovered || picked;
     return MouseRegion(
       cursor: widget.onTap == null
           ? MouseCursor.defer
@@ -2260,14 +2512,18 @@ class _ChatTileState extends State<_ChatTile> {
           margin: const EdgeInsets.only(bottom: 2),
           padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(
-            color: selected
+            color: picked
+                ? accent.withValues(alpha: hovered ? 0.22 : 0.16)
+                : selected
                 ? GaiaInk.selected
                 : hovered
                 ? GaiaInk.hover
                 : GaiaInk.hover.withValues(alpha: 0),
             borderRadius: BorderRadius.circular(GaiaRadius.row),
             border: Border.all(
-              color: selected
+              color: picked
+                  ? accent.withValues(alpha: 0.45)
+                  : selected
                   ? GaiaInk.hairline
                   : GaiaInk.hairline.withValues(alpha: 0),
             ),
@@ -3780,63 +4036,6 @@ class _EmptyChat extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-/// The composer's stop while a reply runs: faint, breathing toward red
-/// and back, and red under the cursor. Still where Gaia's idle motion is,
-/// or with animations off.
-class _BreathingStop extends StatefulWidget {
-  const _BreathingStop({super.key, required this.onPressed});
-
-  final VoidCallback onPressed;
-
-  @override
-  State<_BreathingStop> createState() => _BreathingStopState();
-}
-
-class _BreathingStopState extends State<_BreathingStop>
-    with SingleTickerProviderStateMixin {
-  late final _breath = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1200),
-  );
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (GaiaAmbient.of(context) && !MediaQuery.disableAnimationsOf(context)) {
-      if (!_breath.isAnimating) _breath.repeat(reverse: true);
-    } else {
-      _breath.stop();
-    }
-  }
-
-  @override
-  void dispose() {
-    _breath.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final red = Theme.of(context).colorScheme.error;
-    return AnimatedBuilder(
-      animation: _breath,
-      builder: (context, _) => GaiaActionIcon(
-        label: 'Stop',
-        icon: Icons.stop,
-        tooltip: false,
-        fill: false,
-        litColor: red,
-        restColor: Color.lerp(
-          GaiaInk.faint,
-          red,
-          0.6 * Curves.easeInOut.transform(_breath.value),
-        ),
-        onPressed: widget.onPressed,
       ),
     );
   }
@@ -6587,8 +6786,20 @@ class _ComposerState extends State<_Composer> {
                                         gaiaBtwText(_text.text) == null &&
                                         gaiaQueueText(_text.text) == null &&
                                         gaiaRememberText(_text.text) == null
-                                    ? _BreathingStop(
+                                    ? GaiaActionIcon(
                                         key: const ValueKey('stop'),
+                                        label: 'Stop',
+                                        icon: Icons.stop,
+                                        tooltip: false,
+                                        fill: false,
+                                        litColor: Theme.of(
+                                          context,
+                                        ).colorScheme.error,
+                                        // Dimmed at rest, so hover shows.
+                                        restColor: Theme.of(context)
+                                            .colorScheme
+                                            .error
+                                            .withValues(alpha: 0.6),
                                         onPressed: () => controller.stop(
                                           controller.currentChatId!,
                                         ),

@@ -175,6 +175,14 @@ class GaiaDevPipe extends GaiaPipe {
         await _store.deleteChat(p['chatId']! as String);
         await _store.deleteDraft(p['chatId']! as String);
         return {'mediaDeletedAt': null};
+      case 'deleteChats':
+        final deleted = await _store.deleteChats(
+          (p['chatIds']! as List).cast<String>(),
+        );
+        for (final chatId in deleted) {
+          await _store.deleteDraft(chatId);
+        }
+        return {for (final chatId in deleted) chatId: null};
       case 'restoreChat':
         await _store.restoreChat(p['chatId']! as String);
         await _store.restoreDraft(p['chatId']! as String);

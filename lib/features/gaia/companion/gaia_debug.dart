@@ -11,6 +11,8 @@ import 'package:voyager/features/gaia/companion/gaia_moon.dart';
 import 'package:voyager/features/gaia/companion/gaia_sky.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 import 'package:voyager/features/gaia/tools/gaia_proposals.dart';
+import 'package:voyager/features/gaia/usage/gaia_stats_model.dart';
+import 'package:voyager/features/gaia/usage/gaia_tokens.dart';
 import 'package:voyager/features/gaia/usage/gaia_usage.dart';
 import 'package:voyager/features/gaia/usage/gaia_usage_limits.dart';
 
@@ -775,6 +777,114 @@ Map<String, List<GaiaLimitPreview>> gaiaLimitPreviews() {
         resets: [(account: a, at: null), (account: b, at: null)],
       ),
     ],
+  };
+}
+
+/// Made-up lifetime stats and tokens for the debug menu to open the stats
+/// dialog with (GAIA_STATS_HLD.md §5), by label. Tokens are counted for the
+/// default Claude and Codex accounts, and for one that's gone.
+Map<String, ({GaiaStats? stats, List<GaiaTokenRow>? tokens})>
+gaiaStatsPreviews() {
+  final now = DateTime.now();
+  Set<String> days(int n) => {
+    for (var i = 0; i < n; i++)
+      gaiaStatsDay(now.subtract(Duration(days: i * 2))),
+  };
+  GaiaSeen seen(int count, int daysAgo) => GaiaSeen(
+    count: count,
+    first: now.subtract(Duration(days: daysAgo)),
+  );
+  GaiaTokenRow row(String account, String source, String model, int total) =>
+      GaiaTokenRow(
+        account: account,
+        source: source,
+        model: model,
+        count: GaiaTokenCount(
+          input: total ~/ 10,
+          output: total ~/ 20,
+          cacheRead: total * 7 ~/ 10,
+          cacheWrite: total - total ~/ 10 - total ~/ 20 - total * 7 ~/ 10,
+        ),
+      );
+  const claude = kGaiaClaudeCodeAdapter;
+  const codex = kGaiaCodexAdapter;
+  const gone = '$kGaiaClaudeCodeAdapter/preview-removed';
+  List<GaiaTokenRow> tokens(int scale, {required bool accounts}) => [
+    row(claude, 'quick', 'haiku', 40000 * scale),
+    row(claude, 'standard', 'sonnet', 900000 * scale),
+    row(claude, 'deep', 'opus', 600000 * scale),
+    row(claude, '${kGaiaTokensUtility}router', 'haiku', 30000 * scale),
+    row(claude, '${kGaiaTokensUtility}titles', 'haiku', 8000 * scale),
+    if (accounts) ...[
+      row(claude, 'deep', 'fable', 1200000 * scale),
+      row(claude, '${kGaiaTokensUtility}memory', 'haiku', 50000 * scale),
+      row(claude, kGaiaTokensOther, 'sonnet', 20000 * scale),
+      row(codex, 'quick', 'mini', 70000 * scale),
+      row(codex, 'deep', 'sol', 800000 * scale),
+      row(gone, 'standard', 'sonnet', 300000 * scale),
+    ],
+  ];
+
+  return {
+    'Not read yet': (stats: null, tokens: null),
+    'Empty': (stats: const GaiaStats(), tokens: const []),
+    'Half unlocked': (
+      stats: GaiaStats(
+        satellites: {'hubble': seen(2, 9), 'dish': seen(5, 20)},
+        auroras: {'twilight': seen(1, 4), 'crimson': seen(3, 18)},
+        meteors: 148,
+        chats: 31,
+        days: days(12),
+      ),
+      tokens: tokens(1, accounts: false),
+    ),
+    'Fully populated': (
+      stats: GaiaStats(
+        satellites: {
+          'iss': seen(1, 30),
+          'hubble': seen(4, 160),
+          'array': seen(9, 190),
+          'dish': seen(17, 205),
+        },
+        auroras: {
+          'gold': seen(1, 12),
+          'mauve': seen(3, 95),
+          'twilight': seen(6, 150),
+          'crimson': seen(11, 210),
+        },
+        meteors: 9620,
+        chats: 1380,
+        days: days(214),
+      ),
+      tokens: tokens(10, accounts: true),
+    ),
+    // Phase 1's accepted gap (§8.1): seen before the first snapshot.
+    'Seen, no first date': (
+      stats: const GaiaStats(
+        satellites: {'iss': GaiaSeen(count: 1), 'array': GaiaSeen(count: 2)},
+        auroras: {'gold': GaiaSeen(count: 1)},
+        meteors: 3,
+        chats: 1,
+        days: {},
+      ),
+      tokens: const [],
+    ),
+    'Huge numbers': (
+      stats: GaiaStats(
+        satellites: {
+          for (final look in ['iss', 'hubble', 'array', 'dish'])
+            look: seen(123456, 3650),
+        },
+        auroras: {
+          for (final colours in ['gold', 'mauve', 'twilight', 'crimson'])
+            colours: seen(123456, 3650),
+        },
+        meteors: 98765432,
+        chats: 1234567,
+        days: days(3650),
+      ),
+      tokens: tokens(2000, accounts: true),
+    ),
   };
 }
 

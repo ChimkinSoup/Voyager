@@ -226,6 +226,13 @@ class _Main {
       case 'deleteChat':
         await store.deleteChat(params['chatId']! as String);
         return {'mediaDeletedAt': null};
+      case 'deleteChats':
+        return {
+          for (final chatId in await store.deleteChats(
+            (params['chatIds']! as List).cast<String>(),
+          ))
+            chatId: null,
+        };
       case 'restoreChat':
         await store.restoreChat(params['chatId']! as String);
         return null;
@@ -692,6 +699,38 @@ void main() {
         expect(controller.currentChatId, 'c1');
       },
     );
+
+    test('Deleting several stops the running one first, in one request; one '
+        'undo brings them all back', () async {
+      await startCompanion();
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send('Hi');
+      await settle();
+      final running = controller.currentChatId!;
+      runner.turns.add([const ClaudeTextStart(), const ClaudeTextDelta('Hm')]);
+      final sending = controller.send('Again');
+      await settle();
+      expect(controller.isRunning(running), isTrue);
+
+      await controller.stopAll(['c1', running]);
+      expect(controller.isRunning(running), isFalse);
+      expect(runner.stopped, [running]);
+      await sending;
+
+      final deleted = await controller.deleteChats(['c1', running]);
+      expect(deleted.keys, unorderedEquals(['c1', running]));
+      expect(controller.chats, isEmpty);
+      expect(controller.currentChatId, isNull);
+      await settle();
+      expect(await main.store.chats(), isEmpty);
+
+      await controller.restoreChats(deleted, open: running);
+      expect(
+        [for (final chat in controller.chats) chat.id],
+        unorderedEquals(['c1', running]),
+      );
+      expect(controller.currentChatId, running);
+    });
   });
 
   group('memories (§11)', () {

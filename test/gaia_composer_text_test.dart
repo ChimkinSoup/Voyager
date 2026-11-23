@@ -921,7 +921,7 @@ void main() {
         expect(find.text('???'), findsNWidgets(7));
         expect(find.text('ISS'), findsOneWidget);
         expect(find.text('×3'), findsOneWidget);
-        expect(find.text('First seen\n14 Nov 2026'), findsOneWidget);
+        expect(find.text('since 14 Nov 2026'), findsOneWidget);
         expect(find.text('1.2K'), findsOneWidget);
         expect(find.text('2'), findsOneWidget);
         await settle(tester);

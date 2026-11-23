@@ -605,6 +605,19 @@ class GaiaChatStore {
   /// [restoreChat] can undo it.
   Future<void> deleteChat(String chatId) => _repository.softDeleteChat(chatId);
 
+  /// [deleteChat] for each of [chatIds] that's still live, one write at a
+  /// time with a stopped run's last saves; gives back those it deleted.
+  Future<List<String>> deleteChats(List<String> chatIds) => _serial(() async {
+    final deleted = <String>[];
+    for (final chatId in chatIds) {
+      final chat = await _repository.getChat(chatId);
+      if (chat == null || chat.isDeleted) continue;
+      await _repository.softDeleteChat(chatId);
+      deleted.add(chatId);
+    }
+    return deleted;
+  });
+
   /// A stopped message given back to the composer (GAIA_HLD.md §9.6): it
   /// and its empty reply erased, as the trash's "Delete forever" leaves a
   /// row, and with [chat] their chat, which held nothing else. Erased even

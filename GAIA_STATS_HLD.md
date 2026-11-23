@@ -1,7 +1,7 @@
 # Gaia — Lifetime Stats (HLD)
 
-Status: **Design (2026-11-22). Phase 1 built and checked live 2026-11-22 (§8.1); Phase 2
-built and checked live 2026-11-22 (§8.2).** A small lifetime tracker for Gaia, separate
+Status: **Done (2026-11-22). Phase 1 built and checked live 2026-11-22 (§8.1); Phase 2
+built and checked live 2026-11-22 (§8.2), with a later layout pass (§8.3).** A small lifetime tracker for Gaia, separate
 from `/usage`: lifetime tokens (moved out of `/usage`), the rare satellites and rare
 auroras you've seen, meteors seen, chats started and days active.
 
@@ -142,15 +142,15 @@ Tokens keep their existing lifetime totals.
 
 ### 5.1 Layout
 
-From top to bottom, capped at the same width as `/usage`:
+From top to bottom, 80% of the window's width:
 
 1. **Title** "Stats", with × on the right.
 2. **Headline row**: four stat tiles, each a large number with a small label. Days
    active, chats started, meteors seen, and lifetime tokens (compact, e.g. "48.2M").
-3. **Rare satellites**: a row of four tiles, rarest first (ISS, Hubble, Array, Dish).
+3. **Rare satellites**: a row of four tiles, rarest last (Dish, Array, Hubble, ISS).
    Each shows its icon, name, "×3" and "First seen 14 Nov 2026".
-4. **Rare auroras**: four tiles in the same style, rarest first (gold, mauve, twilight,
-   crimson).
+4. **Rare auroras**: four tiles in the same style, rarest last (crimson, twilight,
+   mauve, gold).
 5. **Lifetime tokens**: the heading and `gaiaTokenLines` exactly as `/usage` has them
    now, followed by "Not read yet" while there's no data.
 
@@ -284,6 +284,44 @@ Splitting the work keeps each diff reviewable.
   header's drag areas measured 0-66 and 96-216 logical px either side of the moon's
   66-96, so the window can still be dragged on both sides. A real mouse drag wasn't
   run.
+
+### 8.3 Layout pass (2026-11-22, after the live check)
+
+- **Width:** the dialog is 80% of the window's width instead of a fixed 480 px. The
+  Dialog's insets still cap it.
+- **Order:** satellites and auroras run rarest last (Dish, Array, Hubble, ISS; crimson,
+  twilight, mauve, gold), as §5.1 now says.
+- **Rows:** tiles are laid out row by row, each row as tall as its tallest tile. A
+  tile's count sits right of the name, or wraps under it when there's no room, and is
+  formatted with digit grouping.
+- **Debug menu:** `showGaiaStats` takes a `preview`, and the debug menu opens the
+  dialog with made-up data from `gaiaStatsPreviews()` (Not read yet, Empty, Half
+  unlocked, Fully populated, Seen with no first date, Huge numbers). The real stats
+  aren't touched.
+- **Not checked live:** the §8.2 live notes describe the earlier layout. This pass
+  hasn't been run in the companion.
+
+### 8.4 Look pass (2026-11-22)
+
+- **Headline row:** no boxes. Four numbers, each over a one-line label, split by
+  hairline dividers, or two rows of two when narrow.
+- **Rare tiles:** each item sits on a small window of night sky with its own seeded
+  stars. Auroras are drawn as three curtains of rays (high, main, low), not a swatch.
+  Locked tiles show the same curtains or craft, faint and flat, over a dimmer window.
+  Seen tiles glow a little in their colour (starlight for satellites, the main curtain
+  colour for auroras). A tile unlocked while the dialog is open flares and settles over
+  1.6 s.
+- **Date:** one line, "since 14 Nov 2026", replacing the two-line "First seen".
+- **Header:** faint seeded stars behind the title, fading out downwards.
+- **Motion:** headlines, headings, tiles and tokens fade and rise in one after another
+  when the dialog opens. They stay still under reduced motion.
+- **Tokens:** the "All" row is gone, since the headline already shows the total. Its
+  in/out/cache split leads the section. Accounts are bright semibold, tiers dim, models
+  muted, and splits faint. Each tier has a thin accent bar showing its share of its
+  account.
+- **Checked:** scratch renders of half-unlocked, fully populated, narrow, mid-rise and
+  mid-flare states, then deleted. `gaia_stats_test`, `gaia_composer_text_test` and
+  `gaia_debug_test` pass. Not run in the companion yet.
 
 ## 9. How it's checked
 

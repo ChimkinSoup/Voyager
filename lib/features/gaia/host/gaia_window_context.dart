@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi';
-import 'dart:io' show Platform, sleep;
+import 'dart:io' show Platform, pid, sleep;
 import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart' show debugPrint, kDebugMode;
+import 'package:flutter/scheduler.dart' show SchedulerBinding;
 import 'package:path/path.dart' as p;
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
@@ -143,7 +144,20 @@ GaiaForegroundWindow _describeWindow(int hwnd) {
     );
     // Off this isolate: these calls wait on the window's thread, for as long
     // as the app is busy.
-    if (other != 0) Isolate.run(() => _moveWindow(other, otherHalf)).ignore();
+    if (other != 0) {
+      final moved = Isolate.run(() => _moveWindow(other, otherHalf));
+      // Voyager's own window, maximised, is resized twice back to back (out
+      // of maximised, then to its half), and the engine can present the frame
+      // drawn for the first size into the second: sheared, with its halves
+      // swapped. An idle page then never draws over it, so draw once more.
+      if (_ownedBy(other, pid)) {
+        moved
+            .then((_) => SchedulerBinding.instance.scheduleForcedFrame())
+            .ignore();
+      } else {
+        moved.ignore();
+      }
+    }
     return gaia;
   } finally {
     free(cursor);

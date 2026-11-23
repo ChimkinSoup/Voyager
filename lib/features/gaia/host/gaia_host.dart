@@ -73,7 +73,9 @@ const kGaiaNotificationBtwSeparator = '#btw:';
 /// pinned}`, `setArchived {chatId, archived}`, `projects`, `putProject {project}`, `renameProject {projectId,
 /// name}`, `setProject {chatId, projectId}`, `setProjectFolder {projectId,
 /// path}` (this device's, null to remove it), `deleteProject {projectId,
-/// withChats}`, `deleteChat {chatId}` (returns `{mediaDeletedAt}`), `restoreChat
+/// withChats}`, `deleteChat {chatId}` (returns `{mediaDeletedAt}`),
+/// `deleteChats {chatIds}` (returns each deleted chat's id to its
+/// `mediaDeletedAt`), `restoreChat
 /// {chatId, mediaDeletedAt}`, `messages {chatId}`, `searchMessages {query}`
 /// (`[GaiaSearchHit]`), `putMessage {message}`,
 /// `attachImage {chatId, path}` (returns `{mediaId, path, mimeType, width,
@@ -1487,6 +1489,18 @@ class GaiaHost {
         await _syncBorder(store);
         final at = await _chatDeleted(store, chatId);
         return {'mediaDeletedAt': at?.toIso8601String()};
+      case 'deleteChats':
+        final chatIds = (params['chatIds']! as List).cast<String>();
+        for (final chatId in chatIds) {
+          _osControl.stop('The chat was deleted.', chatId: chatId);
+          _osControl.endTurn(chatId);
+        }
+        final deleted = await store.deleteChats(chatIds);
+        if (deleted.isNotEmpty) await _syncBorder(store);
+        return {
+          for (final chatId in deleted)
+            chatId: (await _chatDeleted(store, chatId))?.toIso8601String(),
+        };
       case 'takeBack':
         final chat = params['chat'] == true;
         final messages = [

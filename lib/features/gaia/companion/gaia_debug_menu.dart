@@ -23,6 +23,7 @@ import 'package:voyager/features/gaia/companion/gaia_orb.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_studio.dart';
 import 'package:voyager/features/gaia/companion/gaia_notch.dart';
 import 'package:voyager/features/gaia/companion/gaia_red_orb_studies.dart';
+import 'package:voyager/features/gaia/companion/gaia_stats.dart';
 import 'package:voyager/features/gaia/companion/gaia_text_field.dart';
 import 'package:voyager/features/gaia/companion/gaia_tier_picker.dart';
 import 'package:voyager/features/gaia/companion/gaia_toast.dart';
@@ -415,6 +416,29 @@ class _DebugMenu extends StatelessWidget {
             ),
           ),
         ],
+        heading('Lifetime stats'),
+        Text(
+          'The stats dialog with made-up stats and tokens. Accounts are the '
+          'default Claude and Codex ones, plus one that has been removed. The '
+          'real stats are left as they are.',
+          style: muted,
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final MapEntry(key: label, value: preview)
+                in gaiaStatsPreviews().entries)
+              GaiaButton(
+                label: label,
+                // Over the menu, so closing it comes back here.
+                onPressed: () => unawaited(
+                  showGaiaStats(context, controller, preview: preview),
+                ),
+              ),
+          ],
+        ),
         heading('Forking'),
         Text(
           'Shown at the end of the message forked from while the fork waits for a '

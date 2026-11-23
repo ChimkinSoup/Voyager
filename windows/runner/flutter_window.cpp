@@ -337,12 +337,26 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   // Before Flutter: a plugin handling it would skip this.
   if (message == WM_DESTROY) ClearAppUserModelProperties(hwnd);
 
+  // window_manager's hidden title bar keeps a 1px border along the top on
+  // Windows 11 (its version check is backwards), and that pixel hit-tests as
+  // the resize edge. With the window's top at the screen's top, as the split
+  // hotkey or a snap leaves it, the cursor pushed up there never reaches the
+  // app, so the title bar never slides down. Take the pixel back.
+  const bool calc_size = message == WM_NCCALCSIZE && wparam;
+  const LONG proposed_top =
+      calc_size ? reinterpret_cast<NCCALCSIZE_PARAMS*>(lparam)->rgrc[0].top
+                : 0;
+
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     std::optional<LRESULT> result =
         flutter_controller_->HandleTopLevelWindowProc(hwnd, message, wparam,
                                                       lparam);
     if (result) {
+      if (calc_size && !::IsZoomed(hwnd)) {
+        RECT& client = reinterpret_cast<NCCALCSIZE_PARAMS*>(lparam)->rgrc[0];
+        if (client.top == proposed_top + 1) client.top = proposed_top;
+      }
       return *result;
     }
   }

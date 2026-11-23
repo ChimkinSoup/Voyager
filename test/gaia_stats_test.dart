@@ -115,18 +115,32 @@ void main() {
         for (final text in tester.widgetList<Text>(find.byType(Text)))
           if (!text.data!.contains(' in · ')) text.data!,
       ];
+      // Each group shut to its total.
       expect(texts(), [
-        'All',
-        '4.07K',
         'Claude · Default',
         '3.17K',
         'Quick',
         '100',
-        'claude-haiku-5-5',
-        '100',
         'Deep',
         '3K',
-        'claude-opus-5-5',
+        'Utility',
+        '70',
+        'codex/work',
+        '900',
+        'Standard',
+        '900',
+      ]);
+      expect(find.textContaining(' in · '), findsNWidgets(3));
+
+      // Clicked open: its split and its lines.
+      await tester.tap(find.text('Utility'));
+      await tester.pumpAndSettle();
+      expect(texts(), [
+        'Claude · Default',
+        '3.17K',
+        'Quick',
+        '100',
+        'Deep',
         '3K',
         'Utility',
         '70',
@@ -138,9 +152,12 @@ void main() {
         '900',
         'Standard',
         '900',
-        'gpt-6.1-sol',
-        '900',
       ]);
+      expect(find.textContaining(' in · '), findsNWidgets(4));
+
+      await tester.tap(find.text('Utility'));
+      await tester.pumpAndSettle();
+      expect(find.text('Image caption'), findsNothing);
     },
   );
 }
