@@ -1,6 +1,6 @@
 # Gaia — Settings Panel and Memory Review (HLD)
 
-Status: **Design (2026-11-20), open questions decided (§11). Phases 1 and 2 built and checked live 2026-11-22 (§10.1, §10.2); Phase 3 built and checked live the same day (§10.3); Phases 4-7 not built.** Moves the Gaia page's management tabs
+Status: **Design (2026-11-20), open questions decided (§11). Phases 1 and 2 built and checked live 2026-11-22 (§10.1, §10.2); Phase 3 built and checked live the same day (§10.3); Phase 4 built and checked live 2026-11-23 (§10.4); Phases 5-7 not built.** Moves the Gaia page's management tabs
 (GAIA_HLD.md §17) into the companion, in Gaia's own look, so everything Gaia needs is
 reachable from the Gaia window. The Memories tab is redesigned rather than ported, and
 gains a new card-by-card review with an "Ask Gaia" chat about the memory in front of you.
@@ -629,6 +629,148 @@ device documents are gone.
 **Not checked live:**
 - **The phone**, as before. Its own pairing UI (`_ThisPhone`) is unchanged and isn't in
   the panel.
+
+### 10.4 Phase 4 as built (2026-11-23)
+
+**Built:** `companion/settings/gaia_memories_tab.dart` (the tab, its breadcrumb, topic
+strip, inline name fields, suggestion rows and memory cards) and
+`companion/gaia_topic_picker.dart`. On the host, `GaiaMemories` gained `list` (memories,
+topics, live projects, and the pin and merge suggestions the page works out), `edit`,
+`archive`, `unarchive`, `delete`, `undelete` and `sourceChatOf`, plus `GaiaMemoryList` and
+JSON for memories and topics. New requests: `memories`, `editMemory` {memoryId, text, tags},
+`archiveMemory`, `unarchiveMemory`, `deleteMemory`, `undeleteMemory`, `pinMemory`,
+`newTopic` (returns the id), `renameTopic`, `moveTopic`, `mergeTopic`, `deleteTopic`,
+`moveMemory` {within}, `addMemoryTopic`, `removeMemoryTopic`, `acceptSuggestedTopic`,
+`dropSuggestedTopic`, `pinLater` and `keepApart`. New event: `memories`, debounced like
+`changed`, sent on writes to memories, topics, this device's suggestion hints, the recall
+history and projects.
+`decideMemory` now takes no `chatId` from the panel (the memory's source chat is used, if
+any) and answers with the `id` that stands, so a merge into an active memory can be said.
+The `openMemory` request, the host's `_openMemory` and `voyager_app.dart`'s
+`_openGaiaMemory` are gone: the recall chip calls `GaiaController.openMemory`, which opens
+the panel at Memories with the memory revealed. The inbox chip calls `openInbox`.
+`GaiaSettings.patched` takes `autoAcceptCurator`. The repository gained
+`listRecallHistory`. The memory card's topic chip is public as `GaiaTopicChip`, shared by the
+list's cards.
+
+**Where it differs from the design above:**
+- **One `memories` request**, not three (`memories`, `memoryTree`, `memorySuggestions`): the
+  tab needs all of it each time, and one read can't show memories and topics out of step.
+  The suggestions were already pure functions in `gaia_memories.dart`; `list` calls them.
+- **No review bar yet** (§5.2 item 4 is Phase 5). The inbox is a section, as on the page:
+  proposals, then pin and merge suggestions as rows with their two answers. It's open at All
+  memories and in a search, and **folded inside a topic or Unsorted**, where 35 waiting
+  memories buried the topic's own (found live). Show/Hide opens it.
+- **Unsorted's Sort these** is on the tab (Accept, Skip, a chip click leaving a topic out,
+  Accept all), run by the companion's own utility model with no round trip, as §3.2 allows.
+  Suggest topics on an unsorted card is too.
+- **The list card is its own widget** in the tab file, not a "remembered" variant of
+  `GaiaMemoryCard` (§5.3): that card is built around a chat's `GaiaMemoryPart`. They share
+  `GaiaTopicChip`, so topics read the same.
+- **Card editing** edits the tags too (a second field), since the page's dialog did. Enter
+  saves, Shift+Enter is a newline, Esc cancels, a click away saves.
+- **Card actions:** on hover, Suggest topics (unsorted, nothing offered), pin, the main action
+  (Remember / Archive / Remember again), Dismiss or Delete, and ⋯. ⋯ and a right-click give
+  Open its chat (when it has one), Edit, Remember and pin (a proposal), Move to topic… and
+  Dismiss/Delete. Delete's toast says "Click to undo." (Gaia's toast has no button).
+- **Ask Gaia** isn't on the cards yet (Phase 6).
+- **+ Topic in the strip** reads "+ Subtopic" inside a topic and names the new one in place.
+  The picker's "New topic: …" makes it under the topic in view. Rename edits a chip in place,
+  or with F2 (or Rename) on the topic in view, its crumb.
+- **Include subtopics** is a pill at the breadcrumb's right, shown for a topic with
+  subtopics, since the page has the checkbox.
+- **Dragging a topic chip** onto another chip or crumb (All memories for the root) moves it,
+  besides Move under….
+- **Keys:** the tab has its own focus scope, so Ctrl+F is its search rather than Gaia's chat
+  search (found live: the shell's Ctrl+F won). Esc in the search clears it, then lets go of
+  it; the next Esc closes the panel.
+- **Lazy lists:** the cards are built as they scroll in. Built all at once, as the page does,
+  clearing a search on qa-128's ~365 memories was a 625 ms build in debug (found live; now
+  26–73 ms). A revealed memory far down is found by stepping the scroll a screen at a time
+  until its card exists.
+- **The inbox chip shows the inbox:** All memories, the search cleared, the inbox open and
+  scrolled to (found live: it first reopened the tab where it was left, deep in the list).
+
+**Tests:** `test/gaia_memories_tab_test.dart` (16): one scroll with breadcrumb and chips,
+counts, Include subtopics, the folded inbox; search over text, tags and topic names; Ctrl+F,
+the Esc sequence and F2 on the crumb; edit in place with tags, Esc, a refusal toast; card
+topic chips and the picker (filter, Enter, new topic under the topic in view); hover actions
+(Remember, Archive, pin refusal, Delete and its undo toast); the chip menu (rename in place,
+Move under… with Top level, Merge into… confirmed, Delete's message, a project's topic
+without Merge or Delete); + Subtopic; a card dragged onto a chip moves it within the topic in
+view, and with Ctrl adds it; pin and merge suggestion answers; Sort these and Accept; the
+recall chip from a floater (no `openMemory` sent); a reveal far down the lazy list; the inbox
+chip from inside a topic with a search typed; a reveal with a search typed; the `memories`
+event read only while the tab shows. `gaia_host_test.dart` has 6 more: the listing and the
+`memories` event; `editMemory` and its refusals; archive, remember again, delete, undelete,
+pin, a proposal remembered with no chat id and one merged into an active memory; topic and
+filing requests with their refusals; a project's topic and keep-apart; accepting and dropping
+a suggested topic. The full `test/gaia_*_test.dart` run: 2,038 passed, 25 skipped, none failed.
+
+**Checked live** on `gaiaqa` (qa-128), from the `vwt-run` build copy with this tree's bundle
+(no native change), real main instance and companion over the real pipe, all input in
+background mode, hover-only buttons by VM-injected hover:
+- **Real data:** 35 waiting, 39 root topics with counts, Unsorted 13. Into CS246: the
+  breadcrumb, its subtopics with counts, + Subtopic. Search over text, tags and topic names,
+  with the chips narrowing to match.
+- **Cards:** two `/remember`ed test memories (the utility model offered "New topic: Bike" on
+  one). Edit in place saved (version up); the tags field saved `locker-room` normalized; an
+  Esc-cancelled edit wrote nothing. The new topic accepted made Bike and filed it; a topic
+  chip's click took it out; + Topic's picker filtered by path ("fit" → Fitness), Enter took
+  the first, and a typed name made "P4L Lockers" and filed the memory there.
+- **Topic menu:** Rename in place on the chip; Move under… (Top level offered first) moved it
+  under Bike; F2 renamed the topic in view on its crumb; Include subtopics hid and showed the
+  subtopic's memory; + Subtopic made one in place; Merge into… asked, then merged and showed
+  the topic merged into; Delete asked, saying the subtopics move up, and did that. The card's
+  Move to topic… left the topics in view and filed it in Fitness.
+- **Hover actions:** Pin moved the card to Pinned, Unpin back; Archive folded it into
+  Archived; Remember again brought it back; Delete then the toast's "Click to undo." restored
+  it (in one harness run: the toast lasts about 4 s, and the first try missed it).
+- **Inbox:** Not now on a pin suggestion stored a 30-day pin-later hint and dropped the row;
+  Remember on a curator proposal made it active (CS246's count went up by one); Dismiss then
+  the undo toast put it back in the inbox.
+- **Unsorted:** Suggest topics on one card filed it in Tea with tags (a real utility-model
+  call). Sort these placed all 12 (a real call); a chip click left a topic out of one, Accept
+  filed it in the rest with the tags, Skip dropped another's suggestion, and Accept all's
+  count followed.
+- **A recall chip** in a real chat ("Weekend Trip Planning Approach") opened Memories with
+  that memory scrolled to and edged, far down the lazy list; the main window stayed where it
+  was (off screen, not in front), and no `openMemory` was sent (the request is gone).
+- **The inbox chip** (alert set to 30, then back to 100) from Unsorted with a search typed
+  opened All memories at the inbox, search cleared.
+- **A card's chat link** opened that chat and closed the panel. The auto-accept switch saved
+  on and off.
+- **The `memories` event:** a memory restored by the host (not the panel) reappeared in the
+  open tab with no refetch from the panel.
+- **Five bugs found live and fixed**, each with a widget test: the slow eager list; the
+  buried inbox inside a topic; Ctrl+F opening the chat search over the panel; F2 renaming a
+  topic whose chip isn't shown (now its crumb); the inbox chip reopening deep in the list.
+  A sixth was found while fixing these: a reveal cleared a typed search during a build,
+  which would have thrown.
+
+Test data: the two P4L memories and the P4L topics are in the trash. Left on qa-128 by the
+pass: one curator proposal remembered ("My CS246 project group meets…"), a pin-later hint on
+the Biscuit memory, the oolong memory filed in Tea and the Dataview one in CS246 ›
+Assignments, the Latex snippets memory's sort suggestion skipped (nothing written).
+
+**Not checked live:**
+- **Dragging** a card or a topic chip onto a chip or crumb. Draggable drops don't land from
+  background or VM-injected input, so this ran in widget tests only; a live drag needs a
+  foreground run with Juno's OK.
+- **The recall chip in a floater:** opening a floater takes the user's focus. The widget test
+  covers the switch to the Gaia window.
+- **The Gaia page side by side:** the main window's nav in this profile doesn't show the Gaia
+  page, so every write was checked in the database instead. The page reads the same tables.
+- **Merge suggestions:** qa-128 has none to answer; widget-tested, and `keepApart` and
+  `mergeTopic` were host-tested and live through the chip menu.
+- **The pin budget refusal** and **unarchive refused as a duplicate**: host- and
+  widget-tested, not provoked live.
+- **Accept all** on 10 real suggestions (it would have refiled the qa account's memories);
+  each Accept was checked live, and Accept all is a loop of it.
+- **A proposal's card in its chat** changing as the panel remembers or dismisses it: the
+  proposals answered live had no card (the curator found them). `setMemoryCards` is the
+  page's call and is host-tested.
+- **Another device and the phone**, as before.
 
 ## 11. Decisions (2026-11-20)
 

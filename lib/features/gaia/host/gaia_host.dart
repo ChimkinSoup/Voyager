@@ -92,7 +92,6 @@ const kGaiaNotificationBtwSeparator = '#btw:';
 /// `memoryRecall {chatId, text, message, recalled, pinned, projectId}` (stage 1's `{picks, candidates, strong}` for a
 /// message, §4.2-§4.4), `recalled {chatId, memoryIds}` (the recall
 /// history, §3.3),
-/// `openMemory {memoryId}` (shown on the Gaia page, §4.5),
 /// `memoryTool {chatId, tool, arguments}` (a `memory_*` tool's text),
 /// `projectTool {chatId, tool, arguments}` (a `project_*` tool's text),
 /// `setSummary {chatId, summary, seq}`,
@@ -273,8 +272,15 @@ class GaiaHost {
   GaiaStatsCounter? _stats;
   Future<void> Function(String word)? _addWord;
 
-  /// Shows a memory on the Gaia page (GAIA_MEMORY_TOPICS_HLD.md §4.5).
-  void Function(String memoryId)? _openMemory;
+  /// Memories, topics or this device's suggestion hints changed: the settings
+  /// panel's Memories tab asks again (GAIA_SETTINGS_HLD.md §3.1).
+  StreamSubscription<void>? _memoryTopicChanges;
+  StreamSubscription<void>? _memoryHintChanges;
+  // Recalls move the pin suggestions it shows.
+  StreamSubscription<void>? _recallChanges;
+  // A project made or deleted changes which topics are protected.
+  StreamSubscription<void>? _projectChanges;
+  Timer? _memoriesSoon;
   StreamSubscription<void>? _changes;
   StreamSubscription<GaiaSettings>? _settingsChanges;
   StreamSubscription<void>? _draftChanges;
@@ -373,7 +379,6 @@ class GaiaHost {
     GaiaExecutor? executor,
     GaiaMemories? memories,
     Future<void> Function(String word)? addWord,
-    void Function(String memoryId)? openMemory,
     GaiaBeaconService? beacon,
     GaiaPower? power,
     bool Function()? vaultUnlocked,
@@ -393,7 +398,6 @@ class GaiaHost {
       });
     if (vaultUnlocked != null) _vaultUnlocked = vaultUnlocked;
     _addWord = addWord;
-    _openMemory = openMemory;
     _beacon = beacon
       ?..onCommand = _runCommand
       ..setAborted(_aborted)
@@ -458,10 +462,23 @@ class GaiaHost {
     // The header's inbox chip, whether or not the panel is open.
     _memoryChanges = repository.watchMemories().listen((memories) {
       final count = gaiaInboxCount(memories);
+      _memoriesChanged();
       if (count == _inbox) return;
       _inbox = count;
       if (_pipe.connected) _pipe.notify('inbox', {'count': count});
     });
+    _memoryTopicChanges = repository.watchMemoryTopics().listen(
+      (_) => _memoriesChanged(),
+    );
+    _memoryHintChanges = repository.watchMemoryHints().listen(
+      (_) => _memoriesChanged(),
+    );
+    _recallChanges = repository.watchRecallHistory().listen(
+      (_) => _memoriesChanged(),
+    );
+    _projectChanges = repository.watchProjects().listen(
+      (_) => _memoriesChanged(),
+    );
     _settingsChanges = repository.watchSettings().listen((settings) {
       _settings = settings;
       unawaited(_applyHotkeys(settings.keybinds));
@@ -520,6 +537,11 @@ class GaiaHost {
     unawaited(_changes?.cancel());
     unawaited(_settingsChanges?.cancel());
     unawaited(_memoryChanges?.cancel());
+    unawaited(_memoryTopicChanges?.cancel());
+    unawaited(_memoryHintChanges?.cancel());
+    unawaited(_recallChanges?.cancel());
+    unawaited(_projectChanges?.cancel());
+    _memoriesSoon?.cancel();
     unawaited(_draftChanges?.cancel());
     unawaited(_queueChanges?.cancel());
     unawaited(_btwChanges?.cancel());
@@ -1225,6 +1247,15 @@ class GaiaHost {
     );
   }
 
+  /// The settings panel's Memories tab asks again on the `memories` event,
+  /// sent once for a burst of writes, as `changed` is.
+  void _memoriesChanged() {
+    _memoriesSoon ??= Timer(_changedDelay, () {
+      _memoriesSoon = null;
+      if (_pipe.connected) _pipe.notify('memories');
+    });
+  }
+
   /// The lifetime token count, for the companion; null until read.
   List<Object?>? get _tokenTotals => switch (_tokens?.totals.value) {
     final rows? => [for (final row in rows) row.toJson()],
@@ -1790,9 +1821,6 @@ class GaiaHost {
             projectId: params['projectId'] as String?,
           ),
         );
-      case 'openMemory':
-        _openMemory?.call(params['memoryId']! as String);
-        return null;
       case 'memoryTool':
         try {
           return await _memoriesOrThrow().tool(
@@ -1831,6 +1859,11 @@ class GaiaHost {
         try {
           final memoryId = params['memoryId']! as String;
           final memories = _memoriesOrThrow();
+          // From the settings panel's inbox, with no card to say it's from:
+          // the chat it came from, if any.
+          final chatId =
+              params['chatId'] as String? ??
+              await memories.sourceChatOf(memoryId);
           final decided = await memories.decide(
             memoryId,
             accept: accept,
@@ -1850,13 +1883,16 @@ class GaiaHost {
               pinFailed = error.message;
             }
           }
-          await store.setMemoryCards(
-            params['chatId']! as String,
-            memoryId,
-            decided.state,
-            decided.text,
-          );
+          if (chatId != null) {
+            await store.setMemoryCards(
+              chatId,
+              memoryId,
+              decided.state,
+              decided.text,
+            );
+          }
           return {
+            'id': decided.id,
             'state': decided.state.name,
             'text': decided.text,
             'pinFailed': ?pinFailed,
@@ -1876,6 +1912,155 @@ class GaiaHost {
           text,
         );
         return {'text': text};
+      // The settings panel's Memories tab (GAIA_SETTINGS_HLD.md §3.2),
+      // through the same GaiaMemories calls as the Gaia page.
+      case 'memories':
+        return gaiaMemoryListToJson(await _memoriesOrThrow().list());
+      case 'editMemory':
+        final memoryId = params['memoryId']! as String;
+        final text = params['text']! as String;
+        final was = await _readOrThrow(
+          () => _memoriesOrThrow().edit(
+            memoryId,
+            text: text,
+            tags: (params['tags'] as List?)?.cast<String>(),
+          ),
+        );
+        // An open card in its chat offers it as it now says.
+        if (was != null &&
+            was.status == GaiaMemoryStatus.proposed &&
+            was.sourceChatId != null &&
+            was.text != text.trim()) {
+          await store.setMemoryCards(
+            was.sourceChatId!,
+            memoryId,
+            GaiaCardState.open,
+            text.trim(),
+          );
+        }
+        return null;
+      case 'archiveMemory':
+        await _memoriesOrThrow().archive(params['memoryId']! as String);
+        return null;
+      case 'unarchiveMemory':
+        await _readOrThrow(
+          () => _memoriesOrThrow().unarchive(params['memoryId']! as String),
+        );
+        return null;
+      case 'deleteMemory':
+        // A proposal's card says it was dismissed, until that's undone.
+        final was = await _memoriesOrThrow().delete(
+          params['memoryId']! as String,
+        );
+        if (was != null &&
+            was.status == GaiaMemoryStatus.proposed &&
+            was.sourceChatId != null) {
+          await store.setMemoryCards(
+            was.sourceChatId!,
+            was.id,
+            GaiaCardState.rejected,
+            was.text,
+          );
+        }
+        return null;
+      case 'undeleteMemory':
+        final restored = await _memoriesOrThrow().undelete(
+          params['memoryId']! as String,
+        );
+        if (restored != null &&
+            restored.status == GaiaMemoryStatus.proposed &&
+            restored.sourceChatId != null) {
+          await store.setMemoryCards(
+            restored.sourceChatId!,
+            restored.id,
+            GaiaCardState.open,
+            restored.text,
+          );
+        }
+        return null;
+      case 'pinMemory':
+        await _readOrThrow(
+          () => _memoriesOrThrow().pin(
+            params['memoryId']! as String,
+            pinned: params['pinned'] == true,
+          ),
+        );
+        return null;
+      case 'newTopic':
+        final name = (params['name']! as String).trim();
+        if (name.isEmpty) throw GaiaPipeException('Give it a name.');
+        return (await _memoriesOrThrow().newTopic(
+          name,
+          parentId: params['parentId'] as String?,
+        )).id;
+      case 'renameTopic':
+        await _memoriesOrThrow().renameTopic(
+          params['topicId']! as String,
+          params['name']! as String,
+        );
+        return null;
+      case 'moveTopic':
+        await _readOrThrow(
+          () => _memoriesOrThrow().moveTopic(
+            params['topicId']! as String,
+            params['parentId'] as String?,
+          ),
+        );
+        return null;
+      case 'mergeTopic':
+        await _readOrThrow(
+          () => _memoriesOrThrow().mergeTopic(
+            params['topicId']! as String,
+            params['intoId']! as String,
+          ),
+        );
+        return null;
+      case 'deleteTopic':
+        await _readOrThrow(
+          () => _memoriesOrThrow().deleteTopic(params['topicId']! as String),
+        );
+        return null;
+      case 'moveMemory':
+        await _memoriesOrThrow().moveMemory(
+          params['memoryId']! as String,
+          params['topicId']! as String,
+          within: switch (params['within']) {
+            final List within => {...within.cast<String>()},
+            _ => null,
+          },
+        );
+        return null;
+      case 'addMemoryTopic':
+        await _memoriesOrThrow().addMemoryTopic(
+          params['memoryId']! as String,
+          params['topicId']! as String,
+        );
+        return null;
+      case 'removeMemoryTopic':
+        await _memoriesOrThrow().removeMemoryTopic(
+          params['memoryId']! as String,
+          params['topicId']! as String,
+        );
+        return null;
+      case 'acceptSuggestedTopic':
+        await _memoriesOrThrow().acceptSuggestedTopic(
+          params['memoryId']! as String,
+        );
+        return null;
+      case 'dropSuggestedTopic':
+        await _memoriesOrThrow().dropSuggestedTopic(
+          params['memoryId']! as String,
+        );
+        return null;
+      case 'pinLater':
+        await _memoriesOrThrow().pinLater(params['memoryId']! as String);
+        return null;
+      case 'keepApart':
+        await _memoriesOrThrow().keepApart(
+          params['topicId']! as String,
+          params['intoId']! as String,
+        );
+        return null;
       case 'projectTool':
         final reads = _projectReads;
         if (reads == null) throw GaiaPipeException('Voyager data is not ready');
@@ -2349,6 +2534,15 @@ class GaiaHost {
 
   GaiaExecutor _executorOrThrow() =>
       _executor ?? (throw GaiaPipeException('Voyager data is not ready'));
+
+  /// [read], with a refusal said to the companion.
+  Future<T> _readOrThrow<T>(Future<T> Function() read) async {
+    try {
+      return await read();
+    } on GaiaReadException catch (error) {
+      throw GaiaPipeException(error.message);
+    }
+  }
 
   GaiaMemories _memoriesOrThrow() =>
       _memories ?? (throw GaiaPipeException('Voyager data is not ready'));

@@ -2800,6 +2800,7 @@ class GaiaSettings extends SoftDeletable {
         : null,
     splitGaiaRight: changes['splitGaiaRight'] as bool?,
     userName: changes['userName'] as String?,
+    autoAcceptCurator: changes['autoAcceptCurator'] as bool?,
     memoryAlertAt: switch (changes['memoryAlertAt']) {
       final num at => max(1, at.toInt()),
       _ => null,

@@ -408,6 +408,119 @@ class GaiaMemories {
     return memory.text;
   }
 
+  /// Everything the settings panel's Memories tab shows
+  /// (GAIA_SETTINGS_HLD.md §3.2): every live memory and topic, the live
+  /// projects (whose topics can't be merged away or deleted), and the pin
+  /// and merge suggestions, as the Gaia page works them out.
+  Future<GaiaMemoryList> list() async {
+    final memories = await _repository.listMemories();
+    final topics = await _repository.listMemoryTopics();
+    final projects = {
+      for (final project in await _repository.listProjects()) project.id,
+    };
+    final hints = await _repository.listMemoryHints();
+    final history = await _repository.listRecallHistory();
+    return (
+      memories: memories,
+      topics: topics,
+      projects: projects,
+      pins: gaiaPinSuggestions(memories, history, hints, utcNow()),
+      merges: gaiaMergeSuggestions(
+        GaiaTopicTree(topics),
+        memories,
+        projects,
+        hints,
+      ),
+    );
+  }
+
+  /// Memory [id] edited to say [text], with [tags] if given (the Gaia page's
+  /// edit, GAIA_SETTINGS_HLD.md §5.3). It was before, for its card in its
+  /// chat; null for one unchanged. Throws a [GaiaReadException] for a memory
+  /// gone, empty or overlong text, or an active one edited to say what
+  /// another active one does, which would be a second copy in every chat's
+  /// index. A proposal is checked as it's remembered.
+  Future<GaiaMemory?> edit(
+    String id, {
+    required String text,
+    List<String>? tags,
+  }) async {
+    final memory = await _repository.getMemory(id);
+    if (memory == null || memory.isDeleted) {
+      throw GaiaReadException('That memory is gone.');
+    }
+    final body = text.trim();
+    if (body.isEmpty) throw GaiaReadException('A memory needs text.');
+    if (body.length > kGaiaMemoryMaxLength) {
+      throw GaiaReadException(
+        'A memory is one short fact, at most $kGaiaMemoryMaxLength '
+        'characters.',
+      );
+    }
+    final newTags = tags == null ? memory.tags : gaiaMemoryTags(tags);
+    if (body == memory.text && listEquals(newTags, memory.tags)) return null;
+    if (memory.status == GaiaMemoryStatus.active && body != memory.text) {
+      if (await sameActive(body, except: id) case final other?) {
+        throw GaiaReadException('Already remembered: ${other.text}');
+      }
+    }
+    await _repository.upsertMemory(memory.copyWith(text: body, tags: newTags));
+    return memory;
+  }
+
+  /// The chat memory [id] was learnt in; null for none.
+  Future<String?> sourceChatOf(String id) async =>
+      (await _repository.getMemory(id))?.sourceChatId;
+
+  /// Active memory [id] archived: kept out of every chat's index.
+  Future<void> archive(String id) async {
+    final memory = await _repository.getMemory(id);
+    if (memory == null ||
+        memory.isDeleted ||
+        memory.status != GaiaMemoryStatus.active) {
+      return;
+    }
+    await _repository.upsertMemory(
+      memory.copyWith(status: GaiaMemoryStatus.archived),
+    );
+  }
+
+  /// Archived memory [id] remembered again. Throws a [GaiaReadException]
+  /// when an active one says the same.
+  Future<void> unarchive(String id) async {
+    final memory = await _repository.getMemory(id);
+    if (memory == null ||
+        memory.isDeleted ||
+        memory.status != GaiaMemoryStatus.archived) {
+      return;
+    }
+    if (await sameActive(memory.text, except: id) case final other?) {
+      throw GaiaReadException('Already remembered: ${other.text}');
+    }
+    await _repository.upsertMemory(
+      memory.copyWith(status: GaiaMemoryStatus.active),
+    );
+  }
+
+  /// Memory [id] to the trash, or a proposal dismissed; it was, for its card
+  /// in its chat, or null for one already gone.
+  Future<GaiaMemory?> delete(String id) async {
+    final memory = await _repository.getMemory(id);
+    if (memory == null || memory.isDeleted) return null;
+    await _repository.upsertMemory(memory.copyWith(deletedAt: utcNow()));
+    return memory;
+  }
+
+  /// Memory [id] back from the trash: [delete] undone. It now, or null for
+  /// one that isn't in the trash.
+  Future<GaiaMemory?> undelete(String id) async {
+    final memory = await _repository.getMemory(id);
+    if (memory == null || !memory.isDeleted) return null;
+    final restored = memory.copyWith(clearDeletedAt: true);
+    await _repository.upsertMemory(restored);
+    return restored;
+  }
+
   /// The active memory, other than [except], that says what [text] does,
   /// from any project (GAIA_MEMORY_TOPICS_HLD.md §5); null for none.
   Future<GaiaMemory?> sameActive(String text, {String? except}) async {
@@ -1150,6 +1263,112 @@ typedef GaiaMergeSuggestion = ({
   GaiaMemoryTopic into,
   String why,
 });
+
+/// What the settings panel's Memories tab shows ([GaiaMemories.list]).
+typedef GaiaMemoryList = ({
+  List<GaiaMemory> memories,
+  List<GaiaMemoryTopic> topics,
+  Set<String> projects,
+  List<GaiaPinSuggestion> pins,
+  List<GaiaMergeSuggestion> merges,
+});
+
+/// [list] as the pipe carries it: a suggestion names its memory or topics
+/// by id.
+Map<String, Object?> gaiaMemoryListToJson(GaiaMemoryList list) => {
+  'memories': [for (final memory in list.memories) gaiaMemoryToJson(memory)],
+  'topics': [for (final topic in list.topics) gaiaMemoryTopicToJson(topic)],
+  'projects': [...list.projects],
+  'pins': [
+    for (final pin in list.pins) {'memoryId': pin.memory.id, 'why': pin.why},
+  ],
+  'merges': [
+    for (final merge in list.merges)
+      {'from': merge.from.id, 'into': merge.into.id, 'why': merge.why},
+  ],
+};
+
+GaiaMemoryList gaiaMemoryListFromJson(Map<Object?, Object?> json) {
+  final memories = [
+    for (final memory in json['memories']! as List)
+      gaiaMemoryFromJson(memory! as Map),
+  ];
+  final topics = [
+    for (final topic in json['topics']! as List)
+      gaiaMemoryTopicFromJson(topic! as Map),
+  ];
+  final memoryById = {for (final memory in memories) memory.id: memory};
+  final topicById = {for (final topic in topics) topic.id: topic};
+  return (
+    memories: memories,
+    topics: topics,
+    projects: {...(json['projects']! as List).cast<String>()},
+    pins: [
+      for (final pin in json['pins']! as List)
+        if (memoryById[(pin as Map)['memoryId']] case final memory?)
+          (memory: memory, why: pin['why']! as String),
+    ],
+    merges: [
+      for (final merge in json['merges']! as List)
+        if ((topicById[(merge as Map)['from']], topicById[merge['into']]) case (
+          final from?,
+          final into?,
+        ))
+          (from: from, into: into, why: merge['why']! as String),
+    ],
+  );
+}
+
+Map<String, Object?> gaiaMemoryToJson(GaiaMemory memory) => {
+  'id': memory.id,
+  'createdAt': memory.createdAt.toIso8601String(),
+  'updatedAt': memory.updatedAt.toIso8601String(),
+  'version': memory.version,
+  'text': memory.text,
+  'tags': memory.tags,
+  'sourceChatId': memory.sourceChatId,
+  'status': memory.status.name,
+  'projectId': memory.projectId,
+  'topicIds': memory.topicIds,
+  'pinned': memory.pinned,
+  'suggestedTopic': gaiaSuggestedTopicToJson(memory.suggestedTopic),
+};
+
+GaiaMemory gaiaMemoryFromJson(Map<Object?, Object?> json) => GaiaMemory(
+  id: json['id']! as String,
+  createdAt: DateTime.parse(json['createdAt']! as String),
+  updatedAt: DateTime.parse(json['updatedAt']! as String),
+  version: json['version']! as int,
+  text: json['text']! as String,
+  tags: gaiaMemoryTags(json['tags']),
+  sourceChatId: json['sourceChatId'] as String?,
+  status: gaiaMemoryStatusFromName(json['status']),
+  projectId: json['projectId'] as String?,
+  topicIds: gaiaTopicIdsFromJson(json['topicIds']),
+  pinned: json['pinned'] == true,
+  suggestedTopic: gaiaSuggestedTopicFromJson(json['suggestedTopic']),
+);
+
+Map<String, Object?> gaiaMemoryTopicToJson(GaiaMemoryTopic topic) => {
+  'id': topic.id,
+  'createdAt': topic.createdAt.toIso8601String(),
+  'updatedAt': topic.updatedAt.toIso8601String(),
+  'version': topic.version,
+  'name': topic.name,
+  'parentId': topic.parentId,
+  'projectId': topic.projectId,
+};
+
+GaiaMemoryTopic gaiaMemoryTopicFromJson(Map<Object?, Object?> json) =>
+    GaiaMemoryTopic(
+      id: json['id']! as String,
+      createdAt: DateTime.parse(json['createdAt']! as String),
+      updatedAt: DateTime.parse(json['updatedAt']! as String),
+      version: json['version']! as int,
+      name: json['name']! as String,
+      parentId: json['parentId'] as String?,
+      projectId: json['projectId'] as String?,
+    );
 
 /// Topics in [tree] to suggest merging (§5): two under the same parent with
 /// near-identical names (case, punctuation and a plural aside), or two

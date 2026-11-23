@@ -2320,6 +2320,357 @@ void main() {
     });
   });
 
+  group("the settings panel's Memories tab (GAIA_SETTINGS_HLD.md §3.2)", () {
+    final now = DateTime.utc(2026, 11, 23);
+    GaiaMemory memory(
+      String id,
+      String text, {
+      GaiaMemoryStatus status = GaiaMemoryStatus.active,
+      List<String> topicIds = const [],
+      GaiaSuggestedTopic? suggestedTopic,
+    }) => GaiaMemory(
+      id: id,
+      createdAt: now,
+      updatedAt: now,
+      text: text,
+      status: status,
+      topicIds: topicIds,
+      suggestedTopic: suggestedTopic,
+    );
+    GaiaMemoryTopic topic(
+      String id,
+      String name, {
+      String? parentId,
+      String? projectId,
+    }) => GaiaMemoryTopic(
+      id: id,
+      name: name,
+      parentId: parentId,
+      projectId: projectId,
+      createdAt: now,
+      updatedAt: now,
+    );
+
+    String refusal(void Function() call) {
+      try {
+        call();
+      } on GaiaPipeException catch (error) {
+        return error.message;
+      }
+      fail('not refused');
+    }
+
+    test('memories lists every live memory and topic, the projects, and the '
+        'suggestions; a write sends the memories event', () {
+      final repository = DriftGaiaRepository(db);
+      run(show: true, memories: GaiaMemories(repository), (async, _) {
+        repository.upsertMemoryTopics(
+          [topic('t1', 'Cooking'), topic('t2', 'cooking.')],
+          [
+            memory('m1', 'I like tea', topicIds: ['t1']),
+            memory('m2', 'I like naps', status: GaiaMemoryStatus.proposed),
+          ],
+        );
+        repository.upsertProject(
+          GaiaProject(id: 'p1', name: 'Trip', createdAt: now, updatedAt: now),
+        );
+        async.elapse(const Duration(seconds: 1));
+        connect(async);
+        final list = gaiaMemoryListFromJson(request(async, 'memories')! as Map);
+        expect(
+          {for (final m in list.memories) m.id: (m.text, m.status)},
+          {
+            'm1': ('I like tea', GaiaMemoryStatus.active),
+            'm2': ('I like naps', GaiaMemoryStatus.proposed),
+          },
+        );
+        expect(list.memories.singleWhere((m) => m.id == 'm1').topicIds, ['t1']);
+        expect({for (final t in list.topics) t.name}, contains('Cooking'));
+        expect(list.projects, {'p1'});
+        // Two topics named alike: the page's merge suggestion.
+        expect(
+          [
+            for (final merge in list.merges) {merge.from.id, merge.into.id},
+          ],
+          [
+            {'t1', 't2'},
+          ],
+        );
+
+        companions.single.events.clear();
+        request(async, 'newTopic', {'name': ' Travel ', 'parentId': 't1'});
+        async.elapse(const Duration(seconds: 1));
+        expect(
+          companions.single.events.where((e) => e.startsWith('memories')),
+          hasLength(1),
+        );
+        final again = gaiaMemoryListFromJson(
+          request(async, 'memories')! as Map,
+        );
+        final travel = again.topics.singleWhere((t) => t.name == 'Travel');
+        expect(travel.parentId, 't1');
+        expect(
+          refusal(() => request(async, 'newTopic', {'name': ' '})),
+          'Give it a name.',
+        );
+
+        // A project made changes which topics are protected.
+        companions.single.events.clear();
+        repository.upsertProject(
+          GaiaProject(id: 'p2', name: 'Move', createdAt: now, updatedAt: now),
+        );
+        async.elapse(const Duration(seconds: 1));
+        expect(
+          companions.single.events.where((e) => e.startsWith('memories')),
+          hasLength(1),
+        );
+      });
+    });
+
+    test(
+      'editMemory saves text and tags, and refuses what the page refuses',
+      () {
+        final repository = DriftGaiaRepository(db);
+        run(show: true, memories: GaiaMemories(repository), (async, _) {
+          repository.upsertMemory(memory('m1', 'I like tea'));
+          repository.upsertMemory(memory('m2', 'I like naps'));
+          async.flushMicrotasks();
+          connect(async);
+          request(async, 'editMemory', {
+            'memoryId': 'm2',
+            'text': ' I like long naps ',
+            'tags': ['Sleep', '#rest '],
+          });
+          GaiaMemory? edited;
+          repository.getMemory('m2').then((m) => edited = m);
+          async.flushMicrotasks();
+          expect(edited!.text, 'I like long naps');
+          expect(edited!.tags, ['sleep', 'rest']);
+          // An active one edited to say what another does.
+          expect(
+            refusal(
+              () => request(async, 'editMemory', {
+                'memoryId': 'm2',
+                'text': 'i like TEA',
+              }),
+            ),
+            'Already remembered: I like tea',
+          );
+          expect(
+            refusal(
+              () =>
+                  request(async, 'editMemory', {'memoryId': 'm2', 'text': ''}),
+            ),
+            'A memory needs text.',
+          );
+          expect(
+            refusal(
+              () => request(async, 'editMemory', {
+                'memoryId': 'm2',
+                'text': 'x' * 501,
+              }),
+            ),
+            contains('at most 500'),
+          );
+        });
+      },
+    );
+
+    test('archive, remember again, delete and undelete, pin; a proposal '
+        'remembered with no chat id, and one an active one says merged', () {
+      final repository = DriftGaiaRepository(db);
+      run(show: true, memories: GaiaMemories(repository), (async, _) {
+        repository.upsertMemory(memory('m1', 'I like tea'));
+        repository.upsertMemory(
+          memory('m2', 'I like naps', status: GaiaMemoryStatus.proposed),
+        );
+        repository.upsertMemory(
+          memory('m3', 'I LIKE TEA', status: GaiaMemoryStatus.proposed),
+        );
+        async.flushMicrotasks();
+        connect(async);
+        GaiaMemory? read(String id) {
+          GaiaMemory? found;
+          repository.getMemory(id).then((m) => found = m);
+          async.flushMicrotasks();
+          return found;
+        }
+
+        request(async, 'archiveMemory', {'memoryId': 'm1'});
+        expect(read('m1')!.status, GaiaMemoryStatus.archived);
+        request(async, 'unarchiveMemory', {'memoryId': 'm1'});
+        expect(read('m1')!.status, GaiaMemoryStatus.active);
+
+        final remembered =
+            request(async, 'decideMemory', {
+                  'memoryId': 'm2',
+                  'accept': true,
+                  'text': 'I like naps',
+                })!
+                as Map;
+        expect((remembered['id'], remembered['state']), ('m2', 'accepted'));
+        expect(read('m2')!.status, GaiaMemoryStatus.active);
+        final merged =
+            request(async, 'decideMemory', {
+                  'memoryId': 'm3',
+                  'accept': true,
+                  'text': 'I LIKE TEA',
+                })!
+                as Map;
+        expect((merged['id'], merged['text']), ('m1', 'I like tea'));
+        expect(read('m3')!.isDeleted, isTrue);
+
+        request(async, 'archiveMemory', {'memoryId': 'm2'});
+        repository.upsertMemory(memory('m4', 'I like naps'));
+        async.flushMicrotasks();
+        expect(
+          refusal(() => request(async, 'unarchiveMemory', {'memoryId': 'm2'})),
+          'Already remembered: I like naps',
+        );
+
+        request(async, 'deleteMemory', {'memoryId': 'm4'});
+        expect(read('m4')!.isDeleted, isTrue);
+        request(async, 'undeleteMemory', {'memoryId': 'm4'});
+        expect(read('m4')!.isDeleted, isFalse);
+
+        request(async, 'pinMemory', {'memoryId': 'm1', 'pinned': true});
+        expect(read('m1')!.pinned, isTrue);
+        repository.upsertMemory(memory('m5', 'x' * 1995));
+        async.flushMicrotasks();
+        expect(
+          refusal(
+            () =>
+                request(async, 'pinMemory', {'memoryId': 'm5', 'pinned': true}),
+          ),
+          isNotEmpty,
+        );
+        expect(read('m5')!.pinned, isFalse);
+      });
+    });
+
+    test('topic and filing requests go through GaiaMemories, with its '
+        'refusals', () {
+      final repository = DriftGaiaRepository(db);
+      run(show: true, memories: GaiaMemories(repository), (async, _) {
+        repository.upsertMemoryTopics(
+          [
+            topic('a', 'School'),
+            topic('b', 'CS246', parentId: 'a'),
+            topic('c', 'Food'),
+          ],
+          [
+            memory('m1', 'Assignment 3 is due Friday', topicIds: ['a', 'c']),
+          ],
+        );
+        async.flushMicrotasks();
+        connect(async);
+        GaiaMemoryList list() =>
+            gaiaMemoryListFromJson(request(async, 'memories')! as Map);
+        List<String> topicsOf(String id) =>
+            list().memories.singleWhere((m) => m.id == id).topicIds;
+
+        // Moved within School's subtree: Food stays.
+        request(async, 'moveMemory', {
+          'memoryId': 'm1',
+          'topicId': 'b',
+          'within': ['a', 'b'],
+        });
+        expect(topicsOf('m1'), unorderedEquals(['c', 'b']));
+        request(async, 'removeMemoryTopic', {'memoryId': 'm1', 'topicId': 'c'});
+        request(async, 'addMemoryTopic', {'memoryId': 'm1', 'topicId': 'a'});
+        expect(topicsOf('m1'), unorderedEquals(['b', 'a']));
+
+        request(async, 'renameTopic', {'topicId': 'c', 'name': 'Cooking'});
+        expect(list().topics.singleWhere((t) => t.id == 'c').name, 'Cooking');
+        expect(
+          refusal(
+            () =>
+                request(async, 'moveTopic', {'topicId': 'a', 'parentId': 'b'}),
+          ),
+          contains('under itself'),
+        );
+        request(async, 'moveTopic', {'topicId': 'b', 'parentId': null});
+        expect(list().topics.singleWhere((t) => t.id == 'b').parentId, isNull);
+        request(async, 'mergeTopic', {'topicId': 'b', 'intoId': 'a'});
+        expect(topicsOf('m1'), ['a']);
+        request(async, 'deleteTopic', {'topicId': 'c'});
+        expect([for (final t in list().topics) t.id], ['a']);
+      });
+    });
+
+    test("a project's topic can't be merged away or deleted, and a pair kept "
+        'apart drops out of the suggestions', () {
+      final repository = DriftGaiaRepository(db);
+      run(show: true, memories: GaiaMemories(repository), (async, _) {
+        repository.upsertProject(
+          GaiaProject(id: 'p1', name: 'Trip', createdAt: now, updatedAt: now),
+        );
+        repository.upsertMemoryTopics([
+          topic(gaiaProjectTopicId('p1'), 'Trip', projectId: 'p1'),
+          topic('t1', 'Cooking'),
+          topic('t2', 'Cookings'),
+        ], const []);
+        async.flushMicrotasks();
+        connect(async);
+        expect(
+          refusal(
+            () => request(async, 'deleteTopic', {
+              'topicId': gaiaProjectTopicId('p1'),
+            }),
+          ),
+          contains("project's topic"),
+        );
+        expect(
+          refusal(
+            () => request(async, 'mergeTopic', {
+              'topicId': gaiaProjectTopicId('p1'),
+              'intoId': 't1',
+            }),
+          ),
+          contains('merged into, not merged away'),
+        );
+        GaiaMemoryList list() =>
+            gaiaMemoryListFromJson(request(async, 'memories')! as Map);
+        expect(list().merges, hasLength(1));
+        request(async, 'keepApart', {'topicId': 't1', 'intoId': 't2'});
+        expect(list().merges, isEmpty);
+      });
+    });
+
+    test('a suggested topic accepted makes it and files the memory there; '
+        'dropped, it goes', () {
+      final repository = DriftGaiaRepository(db);
+      run(show: true, memories: GaiaMemories(repository), (async, _) {
+        repository.upsertMemory(
+          memory(
+            'm1',
+            'Exam on Monday',
+            suggestedTopic: (name: 'Exams', parentId: null),
+          ),
+        );
+        repository.upsertMemory(
+          memory(
+            'm2',
+            'Quiz on Tuesday',
+            suggestedTopic: (name: 'Quizzes', parentId: null),
+          ),
+        );
+        async.flushMicrotasks();
+        connect(async);
+        request(async, 'acceptSuggestedTopic', {'memoryId': 'm1'});
+        request(async, 'dropSuggestedTopic', {'memoryId': 'm2'});
+        final list = gaiaMemoryListFromJson(request(async, 'memories')! as Map);
+        final exams = list.topics.singleWhere((t) => t.name == 'Exams');
+        final m1 = list.memories.singleWhere((m) => m.id == 'm1');
+        final m2 = list.memories.singleWhere((m) => m.id == 'm2');
+        expect(m1.topicIds, [exams.id]);
+        expect(m1.suggestedTopic, isNull);
+        expect(m2.topicIds, isEmpty);
+        expect(m2.suggestedTopic, isNull);
+      });
+    });
+  });
+
   group('drain (§3.2)', () {
     test('with no runs, finishes at once and launches nothing after', () {
       run(show: true, (async, host) {

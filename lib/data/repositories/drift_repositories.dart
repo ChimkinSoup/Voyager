@@ -10484,6 +10484,12 @@ class DriftGaiaRepository implements GaiaRepository {
   }
 
   @override
+  Future<List<GaiaRecallRow>> listRecallHistory() async => [
+    for (final row in await _db.select(_db.gaiaRecallHistoryTable).get())
+      (memoryId: row.memoryId, chatId: row.chatId, recalledAt: row.recalledAt),
+  ];
+
+  @override
   Stream<List<GaiaRecallRow>> watchRecallHistory() => _db
       .select(_db.gaiaRecallHistoryTable)
       .watch()

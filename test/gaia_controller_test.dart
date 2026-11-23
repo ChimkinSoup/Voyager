@@ -79,7 +79,6 @@ class _Main {
 
   /// What each memoryRecall matched on, and the memories asked to be shown.
   final recallTexts = <String>[];
-  final openedMemories = <String>[];
 
   /// The memories each curator read was shown as kept already.
   final curatorKept = <String>[];
@@ -349,9 +348,6 @@ class _Main {
             projectId: params['projectId'] as String?,
           ),
         );
-      case 'openMemory':
-        openedMemories.add(params['memoryId']! as String);
-        return null;
       case 'recalled':
         await memories.recalled(params['chatId']! as String, [
           ...(params['memoryIds']! as List).cast<String>(),

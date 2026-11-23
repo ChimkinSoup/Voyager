@@ -16,6 +16,7 @@ import 'package:voyager/features/gaia/adapters/codex/codex_runner.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_setup.dart';
 import 'package:voyager/features/gaia/host/gaia_actions.dart';
 import 'package:voyager/features/gaia/host/gaia_host.dart';
+import 'package:voyager/features/gaia/host/gaia_memories.dart';
 import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
 import 'package:voyager/features/gaia/remote/gaia_device_keys.dart';
 import 'package:voyager/features/gaia/remote/gaia_remote.dart';
@@ -141,9 +142,14 @@ class GaiaSortNotifier extends Notifier<GaiaSortState> {
     ref.listen(gaiaMemoriesProvider, (_, next) {
       final memories = next.valueOrNull;
       if (memories == null || state.suggested.isEmpty) return;
+      final tree = GaiaTopicTree(
+        ref.read(gaiaMemoryTopicsProvider).valueOrNull ?? const [],
+      );
       final unsorted = {
         for (final memory in memories)
-          if (!memory.isDeleted && memory.topicIds.isEmpty) memory.id,
+          if (!memory.isDeleted &&
+              memory.topicIds.every((id) => tree.path(id).isEmpty))
+            memory.id,
       };
       final kept = {
         for (final MapEntry(:key, :value) in state.suggested.entries)

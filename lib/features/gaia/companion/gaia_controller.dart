@@ -41,6 +41,7 @@ import 'package:voyager/features/gaia/gaia_pipe.dart';
 import 'package:win32/win32.dart' show AllowSetForegroundWindow;
 import 'package:voyager/features/gaia/gaia_text_settings.dart';
 import 'package:voyager/features/gaia/host/gaia_actions.dart';
+import 'package:voyager/features/gaia/host/gaia_memories.dart';
 import 'package:voyager/features/gaia/remote/gaia_remote.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 import 'package:voyager/features/gaia/tools/gaia_proposals.dart';
@@ -1956,14 +1957,14 @@ class GaiaController extends ChangeNotifier {
     return !accept && state == GaiaCardState.rejected;
   }
 
-  /// Memory [id] shown on the Gaia page's Memories tab, from the recall chip
-  /// (GAIA_MEMORY_TOPICS_HLD.md §4.5).
+  /// Memory [id] shown in the settings panel's Memories tab, from the recall
+  /// chip (GAIA_SETTINGS_HLD.md §2.1): in the Gaia window, from a floater.
   Future<void> openMemory(String id) async {
-    try {
-      await _pipe.request('openMemory', {'memoryId': id});
-    } on GaiaPipeException catch (error) {
-      _note("Couldn't open that memory", error.message, error: true);
-    }
+    revealMemoryId = id;
+    // The list last read may be from before [id] was remembered: the tab
+    // waits for a fresh one to look for it in.
+    memoryList = null;
+    await openPanel(tab: GaiaPanelTab.memories);
   }
 
   /// Memory card [memory], dismissed from its card, open again in [message]
@@ -2921,6 +2922,10 @@ class GaiaController extends ChangeNotifier {
         if (panel.open && panel.tab == GaiaPanelTab.actions) {
           unawaited(_loadActions());
         }
+      case 'memories':
+        if (panel.open && panel.tab == GaiaPanelTab.memories) {
+          unawaited(_loadMemories());
+        }
       case 'chapters':
         _adoptChapters(params);
       case 'drafts':
@@ -3270,6 +3275,8 @@ class GaiaController extends ChangeNotifier {
         await _loadQueue();
       case GaiaPanelTab.setup:
         await checkSetup();
+      case GaiaPanelTab.memories:
+        await _loadMemories();
       default:
     }
   }
@@ -3373,6 +3380,185 @@ class GaiaController extends ChangeNotifier {
 
   Future<void> setBeaconMode(bool on) =>
       _pipe.request('setBeaconMode', {'on': on});
+
+  /// The Memories tab's content (GAIA_SETTINGS_HLD.md §5), as the main
+  /// instance last sent it; null until it's first read.
+  GaiaMemoryList? memoryList;
+
+  /// A memory the Memories tab is to show, from a recall chip; it clears
+  /// this once it has.
+  String? revealMemoryId;
+
+  /// The inbox chip asked for the inbox: the tab shows it and clears this.
+  var revealInbox = false;
+
+  /// The header's inbox chip (GAIA_SETTINGS_HLD.md §5.5): the Memories tab at
+  /// its inbox, in the Gaia window.
+  Future<void> openInbox() async {
+    revealInbox = true;
+    await openPanel(tab: GaiaPanelTab.memories);
+  }
+
+  Future<void> _loadMemories() async {
+    try {
+      final listed = await _pipe.request('memories');
+      if (listed is! Map) return;
+      memoryList = gaiaMemoryListFromJson(listed);
+      _keepSorted();
+      notifyListeners();
+    } on GaiaPipeException catch (error) {
+      debugPrint('[gaia] memories not read: $error');
+    }
+  }
+
+  /// One of the Memories tab's writes ([method], in `gaia_host.dart`), then
+  /// the tab read again, so it shows the write without waiting for the
+  /// `memories` event. Throws a [GaiaPipeException] saying why it couldn't.
+  Future<Object?> writeMemories(
+    String method, [
+    Map<String, Object?> params = const {},
+  ]) async {
+    final answer = await _pipe.request(method, params);
+    await _loadMemories();
+    return answer;
+  }
+
+  /// Proposed memory [memory] remembered from the inbox, pinned too with
+  /// [pin]; its card in its chat says so. An active one that already says it
+  /// stands instead, which a toast says. A pin over the budget is refused in
+  /// one, the memory still remembered.
+  Future<void> rememberMemory(GaiaMemory memory, {bool pin = false}) async {
+    final decided = await writeMemories('decideMemory', {
+      'memoryId': memory.id,
+      'accept': true,
+      'text': memory.text,
+      if (pin) 'pin': true,
+    });
+    if (decided case {
+      'id': final String id,
+      'text': final String text,
+    } when id != memory.id) {
+      _note('Already remembered', text);
+    }
+    if (decided case {'pinFailed': final String why}) {
+      _note('Remembered, not pinned', why, error: true);
+    }
+  }
+
+  /// The Memories tab's Suggest topics: [memory] filed by the utility model
+  /// (GAIA_MEMORY_TOPICS_HLD.md §5). What it couldn't do, said; null when it
+  /// went in a topic or was offered one.
+  Future<String?> suggestTopics(GaiaMemory memory) async {
+    final placed = await _place(memory.id, memory.text);
+    await _loadMemories();
+    return switch (placed) {
+      true => null,
+      false => 'No topic fits it yet.',
+      null => "Gaia's utility model couldn't place it.",
+    };
+  }
+
+  /// Sort these on Unsorted (GAIA_MEMORY_TOPICS_HLD.md §6): where the
+  /// utility model would file each memory, by id, until it's accepted or
+  /// skipped. Nothing moves before that.
+  var memorySorted = const <String, GaiaPlacement>{};
+  var memorySorting = false;
+  String? memorySortError;
+
+  /// [memories] not already suggested for, in batches of [kGaiaSortBatch],
+  /// each batch's suggestions shown as it's answered. A failure stops it,
+  /// saying why.
+  Future<void> sortMemories(List<GaiaMemory> memories) async {
+    if (memorySorting) return;
+    final left = [
+      for (final memory in memories)
+        if (!memorySorted.containsKey(memory.id)) memory,
+    ];
+    memorySorting = true;
+    memorySortError = null;
+    notifyListeners();
+    try {
+      for (var at = 0; at < left.length; at += kGaiaSortBatch) {
+        final Map<String, Object?>? placed;
+        try {
+          placed = await _sort([
+            for (final memory in left.sublist(
+              at,
+              min(at + kGaiaSortBatch, left.length),
+            ))
+              (id: memory.id, text: memory.text),
+          ]);
+        } on GaiaPipeException catch (error) {
+          memorySortError = error.message;
+          break;
+        }
+        if (placed == null) {
+          memorySortError = "Gaia's utility model couldn't sort them.";
+          break;
+        }
+        memorySorted = {
+          ...memorySorted,
+          for (final MapEntry(:key, :value) in placed.entries)
+            key: gaiaPlacementFromJson(value),
+        };
+        notifyListeners();
+      }
+    } finally {
+      memorySorting = false;
+      notifyListeners();
+    }
+  }
+
+  /// Memory [id]'s suggestion as [placement]; dropped once it places
+  /// nothing, or with none: skipped, or accepted.
+  void changeSorted(String id, [GaiaPlacement? placement]) {
+    final sorted = {...memorySorted};
+    if (placement == null ||
+        (placement.topicIds.isEmpty && placement.suggested == null)) {
+      sorted.remove(id);
+    } else {
+      sorted[id] = placement;
+    }
+    memorySorted = sorted;
+    notifyListeners();
+  }
+
+  /// Sort these's suggestion for memory [id] accepted: filed in its topics
+  /// with its tags, and its new topic, if any, made and filed in too.
+  Future<void> acceptSorted(String id) async {
+    final placement = memorySorted[id];
+    if (placement == null) return;
+    changeSorted(id);
+    try {
+      await _pipe.request('placedMemory', {
+        'memoryId': id,
+        'placement': gaiaPlacementToJson(placement),
+      });
+    } on GaiaPipeException {
+      changeSorted(id, placement);
+      rethrow;
+    }
+    if (placement.suggested != null) {
+      await _pipe.request('acceptSuggestedTopic', {'memoryId': id});
+    }
+    await _loadMemories();
+  }
+
+  /// A memory filed some other way, or deleted, loses its suggestion, so
+  /// none is left to show if it's ever Unsorted again.
+  void _keepSorted() {
+    final list = memoryList;
+    if (list == null || memorySorted.isEmpty) return;
+    final tree = GaiaTopicTree(list.topics);
+    final unsorted = {
+      for (final memory in list.memories)
+        if (memory.topicIds.every((id) => tree.path(id).isEmpty)) memory.id,
+    };
+    memorySorted = {
+      for (final MapEntry(:key, :value) in memorySorted.entries)
+        if (unsorted.contains(key)) key: value,
+    };
+  }
 
   /// A notification clicked, or a chat picked on the Gaia page.
   Future<void> openChat(String chatId, {String? btwId}) async {

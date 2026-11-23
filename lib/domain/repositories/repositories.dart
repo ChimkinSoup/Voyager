@@ -998,6 +998,9 @@ abstract class GaiaRepository {
     int keepChats = 20,
   });
 
+  /// The recall history [recordRecall] keeps.
+  Future<List<GaiaRecallRow>> listRecallHistory();
+
   /// The recall history [recordRecall] keeps, as it changes.
   Stream<List<GaiaRecallRow>> watchRecallHistory();
 

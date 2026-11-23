@@ -897,7 +897,10 @@ class _Header extends StatelessWidget {
                       ),
               ),
             if (controller.inboxCount >= controller.memoryAlertAt) ...[
-              _InboxChip(count: controller.inboxCount),
+              _InboxChip(
+                count: controller.inboxCount,
+                onTap: () => unawaited(controller.openInbox()),
+              ),
               const SizedBox(width: 10),
             ],
             if (chip != null) ...[
@@ -974,10 +977,12 @@ class _Header extends StatelessWidget {
 /// The header's inbox alert (GAIA_SETTINGS_HLD.md §5.5): how many memories
 /// wait for a decision, once there are at least the number set. The
 /// untested-CLI chip's shape, in gold rather than rose, as it isn't urgent.
+/// A click opens the settings panel's Memories tab, in the Gaia window.
 class _InboxChip extends StatelessWidget {
-  const _InboxChip({required this.count});
+  const _InboxChip({required this.count, required this.onTap});
 
   final int count;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -985,7 +990,7 @@ class _InboxChip extends StatelessWidget {
     final gold = theme.brightness == Brightness.light
         ? kGaiaAstralGoldOnLight
         : kGaiaAstralGold;
-    return Container(
+    final chip = Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: gold.withValues(alpha: 0.12),
@@ -1002,6 +1007,10 @@ class _InboxChip extends StatelessWidget {
           ),
         ],
       ),
+    );
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(onTap: onTap, child: chip),
     );
   }
 }

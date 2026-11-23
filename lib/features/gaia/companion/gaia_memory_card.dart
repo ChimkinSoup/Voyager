@@ -147,7 +147,7 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         for (final topic in filing.topics)
-          _TopicChip(
+          GaiaTopicChip(
             label: topic.path,
             style: label,
             background: background,
@@ -159,7 +159,7 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
             ]),
           ),
         if (suggested != null)
-          _TopicChip(
+          GaiaTopicChip(
             label: 'New topic: $suggested',
             style: label,
             background: background,
@@ -187,7 +187,7 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
             // none to clear it, and Enter later would be swallowed.
             onPointerUp: (_) => Future.microtask(() => _wasOpen = false),
             onPointerCancel: (_) => _wasOpen = false,
-            child: _TopicChip(
+            child: GaiaTopicChip(
               key: _addKey,
               label: '+ Topic',
               style: label,
@@ -324,8 +324,8 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
 /// A topic on the card: squared off with the composer's corners, its edge
 /// lit while hovered, as a still [GaiaButton]'s is: in the accent, or in
 /// rose when a click [removes] it.
-class _TopicChip extends StatefulWidget {
-  const _TopicChip({
+class GaiaTopicChip extends StatefulWidget {
+  const GaiaTopicChip({
     super.key,
     required this.label,
     required this.style,
@@ -355,10 +355,10 @@ class _TopicChip extends StatefulWidget {
   final bool? checked;
 
   @override
-  State<_TopicChip> createState() => _TopicChipState();
+  State<GaiaTopicChip> createState() => _GaiaTopicChipState();
 }
 
-class _TopicChipState extends State<_TopicChip> {
+class _GaiaTopicChipState extends State<GaiaTopicChip> {
   var _hovered = false;
   var _focused = false;
 

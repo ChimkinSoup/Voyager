@@ -9,6 +9,7 @@ import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_style.dart';
 import 'package:voyager/features/gaia/companion/gaia_text_field.dart';
 import 'package:voyager/features/gaia/companion/settings/gaia_actions_tab.dart';
+import 'package:voyager/features/gaia/companion/settings/gaia_memories_tab.dart';
 import 'package:voyager/features/gaia/companion/settings/gaia_queue_tab.dart';
 import 'package:voyager/features/gaia/companion/settings/gaia_settings_tab.dart';
 import 'package:voyager/features/gaia/companion/settings/gaia_setup_tab.dart';
@@ -127,7 +128,9 @@ class GaiaSettingsPanelView extends StatelessWidget {
                     GaiaPanelTab.settings => GaiaSettingsTab(
                       controller: controller,
                     ),
-                    _ => const _NotYet(),
+                    GaiaPanelTab.memories => GaiaMemoriesTab(
+                      controller: controller,
+                    ),
                   },
                 ),
               ),
@@ -244,23 +247,6 @@ class _TabLabelState extends State<_TabLabel> {
       ),
     );
   }
-}
-
-/// A tab still to come here (GAIA_SETTINGS_HLD.md §10).
-class _NotYet extends StatelessWidget {
-  const _NotYet();
-
-  @override
-  Widget build(BuildContext context) => GaiaPanelScroll(
-    slivers: [
-      SliverToBoxAdapter(
-        child: Text(
-          "Not here yet. It's on the Gaia page in Voyager for now.",
-          style: GaiaType.row.copyWith(color: GaiaInk.muted),
-        ),
-      ),
-    ],
-  );
 }
 
 /// The readable width a tab's content is held to, centred in the panel.
