@@ -315,6 +315,24 @@ options" (changed 2026-11-12, from a chip on the right that only chats in a proj
   Delete stay in the sidebar's menu, which renames in place. **New project…** stays in the
   sidebar's Move to project menu for the same reason: the header has no place to name one.
 
+### 7.5 `/project` (companion)
+
+`/project`, or `/move`, moves the chat from the keyboard (added 2026-11-23). Picked from the
+`/` palette, or sent alone, it starts the draft as `/project `, anything else the draft held
+waiting on the lines under it, and the palette lists the projects instead of commands:
+
+- **Rows:** "Move to <project>" for each project the chat isn't in, in the sidebar's order,
+  then **Remove from project** when it's in one. The rest of the `/project` line filters
+  them as the palette filters commands; Remove from project shows only while the filter is
+  empty or matches it.
+- **Picking** (Enter, Tab or a click) moves the chat as the header's crumb does (§7.2): on a
+  chat not yet sent, it sets the project the first send goes in. The `/project` line
+  leaves the draft and the rest stays. A toast says where it went; clicking it moves it
+  back.
+- **No row matching:** Enter does nothing. The line never goes to the agent.
+- **Not made here:** it never creates a project, so a typo can't make one.
+- **Companion only.** The Gaia page and the phone keep their menus.
+
 ### 7.3 Gaia page (desktop)
 
 The Chats tab groups by project the same way. The Memories tab gets the project filter

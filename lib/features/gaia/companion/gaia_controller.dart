@@ -5229,6 +5229,10 @@ class GaiaController extends ChangeNotifier {
         await attachThis();
       case GaiaBuiltin.btw:
         openBtws();
+      // Picked from in the composer (GAIA_PROJECTS_HLD.md §7.5): sent from
+      // elsewhere, as a popped queue's, there's nothing to pick from.
+      case GaiaBuiltin.project:
+        break;
       case GaiaBuiltin.usage:
         _usageOpens.add(null);
       case GaiaBuiltin.stats:

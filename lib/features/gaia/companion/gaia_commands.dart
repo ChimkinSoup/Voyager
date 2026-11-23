@@ -50,6 +50,10 @@ enum GaiaBuiltin {
   /// Alone, it opens the side questions.
   btw('btw', 'Ask a side question about this chat'),
 
+  /// Picks from the projects the rest of its line filters: see
+  /// [gaiaProjectPick] (GAIA_PROJECTS_HLD.md §7.5).
+  project('project', 'Move this chat to a project', aliases: {'move'}),
+
   /// Gaia's usage bars rather than the CLI's own text, which is laid out
   /// for a terminal (GAIA_NATIVE_COMMANDS.md §5).
   usage('usage', 'Show plan usage for the next message\'s accounts'),
@@ -194,19 +198,7 @@ List<GaiaPaletteItem> filterGaiaPalette(
   String query, {
   List<String> recent = const [],
 }) {
-  final q = query.toLowerCase();
-  int? score(String name) {
-    // So an alias like `q` isn't lost under the `/queue` it's a prefix of.
-    if (name == query) return -1;
-    final n = name.toLowerCase();
-    if (n.startsWith(q)) return 0;
-    if (n.contains(q)) return 1;
-    var i = 0;
-    for (final char in n.split('')) {
-      if (i < q.length && char == q[i]) i++;
-    }
-    return i == q.length ? 2 : null;
-  }
+  int? score(String name) => _fuzzyScore(name, query);
 
   // A built-in's best over its name and aliases. An alias counts only as
   // the very name or a prefix, so `/s` doesn't bring up `/new` for `reset`.
@@ -240,6 +232,22 @@ List<GaiaPaletteItem> filterGaiaPalette(
             : a.$3 - b.$3,
       );
   return [for (final (_, _, _, item) in scored) item];
+}
+
+/// How well [name] matches [query]: -1 the very name, 0 a prefix, 1 a
+/// substring, 2 the letters in order, null not at all.
+int? _fuzzyScore(String name, String query) {
+  // So an alias like `q` isn't lost under the `/queue` it's a prefix of.
+  if (name == query) return -1;
+  final q = query.toLowerCase();
+  final n = name.toLowerCase();
+  if (n.startsWith(q)) return 0;
+  if (n.contains(q)) return 1;
+  var i = 0;
+  for (final char in n.split('')) {
+    if (i < q.length && char == q[i]) i++;
+  }
+  return i == q.length ? 2 : null;
 }
 
 /// The `/word` being typed at the caret, for the palette: its query (what's
@@ -348,6 +356,44 @@ String? gaiaQueueText(String draft) {
 String? gaiaBtwText(String draft) {
   final match = RegExp(r'^/btw\s+(\S[\s\S]*)$').firstMatch(draft.trim());
   return match?.group(1)!.trim();
+}
+
+/// `/project` or `/move` and a space starting [draft] (GAIA_PROJECTS_HLD.md
+/// §7.5): the rest of its line, to filter the projects by, and where the
+/// line ends, its newline included, to take it out once one is picked. Null
+/// otherwise.
+({String query, int end})? gaiaProjectPick(String draft) {
+  final match = RegExp(r'^/(?:project|move)[ \t]+').firstMatch(draft);
+  if (match == null) return null;
+  final newline = draft.indexOf('\n');
+  final lineEnd = newline == -1 ? draft.length : newline;
+  return (
+    query: draft.substring(match.end, lineEnd).trim(),
+    end: newline == -1 ? draft.length : newline + 1,
+  );
+}
+
+/// `/project`'s rows for [query] (GAIA_PROJECTS_HLD.md §7.5): the projects
+/// of [listed], in the sidebar's order, but the chat's [current] one, that
+/// match it as the palette matches names, best first; then null, for
+/// Remove from project, when it has a [current] one and the query is empty or
+/// matches that.
+List<GaiaProject?> gaiaProjectRows(
+  List<GaiaProject> listed,
+  String? current,
+  String query,
+) {
+  final scored = [
+    for (final (index, project) in listed.indexed)
+      if (project.id != current)
+        if (_fuzzyScore(project.name, query) case final s?) (s, index, project),
+  ]..sort((a, b) => a.$1 != b.$1 ? a.$1 - b.$1 : a.$2 - b.$2);
+  return [
+    for (final (_, _, project) in scored) project,
+    if (current != null &&
+        (query.isEmpty || _fuzzyScore('Remove from project', query) != null))
+      null,
+  ];
 }
 
 /// What's left of [draft] after a leading `/this` (§15.5) and some text, to

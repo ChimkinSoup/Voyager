@@ -330,7 +330,7 @@ class _GaiaPaletteState extends State<GaiaPalette>
     // Once its row is laid out.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || widget.highlight >= widget.items.length) return;
-      final row = _rows[widget.items[widget.highlight].label]?.currentContext;
+      final row = _rows[_ids()[widget.highlight]]?.currentContext;
       final box = row?.findRenderObject();
       if (row == null || box == null) return;
       final position = Scrollable.of(row).position;
@@ -358,11 +358,23 @@ class _GaiaPaletteState extends State<GaiaPalette>
     super.dispose();
   }
 
+  /// Each row's id, for its keys: its text, numbered past the first when
+  /// rows read the same, as two projects of one name do.
+  List<String> _ids() {
+    final seen = <String, int>{};
+    final ids = <String>[];
+    for (final item in widget.items) {
+      final text = '${item.label}${item.accented ?? ''}';
+      final n = seen[text] = (seen[text] ?? 0) + 1;
+      ids.add(n == 1 ? text : '$text#$n');
+    }
+    return ids;
+  }
+
   @override
   Widget build(BuildContext context) {
-    _rows.removeWhere(
-      (label, _) => !widget.items.any((item) => item.label == label),
-    );
+    final ids = _ids();
+    _rows.removeWhere((id, _) => !ids.contains(id));
     return _MenuShell(
       growFrom: Alignment.bottomLeft,
       animate: widget.animate,
@@ -376,7 +388,7 @@ class _GaiaPaletteState extends State<GaiaPalette>
               behavior: ScrollConfiguration.of(
                 context,
               ).copyWith(scrollbars: false),
-              child: _rowsList(context),
+              child: _rowsList(context, ids),
             ),
           ),
         ),
@@ -384,43 +396,44 @@ class _GaiaPaletteState extends State<GaiaPalette>
     );
   }
 
-  Widget _rowsList(BuildContext context) => SingleChildScrollView(
-    padding: const EdgeInsets.all(6),
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (final (index, item) in widget.items.indexed) ...[
-          if (index > 0) const SizedBox(height: 2),
-          // Keyed, so a row's hover stays with it as the query
-          // filters the rows above it.
-          KeyedSubtree(
-            key: ValueKey(item.label),
-            child: _Entering(
-              entrance: _entrance,
-              delay:
-                  _optionsDelay +
-                  _optionsStagger * index.clamp(0, _rowsAtOpen - 1),
-              leaving: null,
-              leaveDelay: Duration.zero,
-              child: KeyedSubtree(
-                key: _rows.putIfAbsent(item.label, GlobalKey.new),
-                child: _Pressable(
-                  onPressed: item.onPressed,
-                  builder: (lit) => _menuRow(
-                    context,
-                    item,
-                    (lit && !_snap) || index == widget.highlight,
-                    fade: _snap ? Duration.zero : _fade,
+  Widget _rowsList(BuildContext context, List<String> ids) =>
+      SingleChildScrollView(
+        padding: const EdgeInsets.all(6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final (index, item) in widget.items.indexed) ...[
+              if (index > 0) const SizedBox(height: 2),
+              // Keyed, so a row's hover stays with it as the query
+              // filters the rows above it.
+              KeyedSubtree(
+                key: ValueKey(ids[index]),
+                child: _Entering(
+                  entrance: _entrance,
+                  delay:
+                      _optionsDelay +
+                      _optionsStagger * index.clamp(0, _rowsAtOpen - 1),
+                  leaving: null,
+                  leaveDelay: Duration.zero,
+                  child: KeyedSubtree(
+                    key: _rows.putIfAbsent(ids[index], GlobalKey.new),
+                    child: _Pressable(
+                      onPressed: item.onPressed,
+                      builder: (lit) => _menuRow(
+                        context,
+                        item,
+                        (lit && !_snap) || index == widget.highlight,
+                        fade: _snap ? Duration.zero : _fade,
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
-          ),
-        ],
-      ],
-    ),
-  );
+            ],
+          ],
+        ),
+      );
 }
 
 /// [child] in [decoration], coming in as the palette does: growing on the

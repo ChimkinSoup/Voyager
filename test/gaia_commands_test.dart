@@ -186,6 +186,7 @@ void main() {
       'stash-pop',
       'this',
       'btw',
+      'project',
       'usage',
       'stats',
       'control-off',

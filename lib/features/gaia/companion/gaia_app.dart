@@ -5753,6 +5753,96 @@ class _ComposerState extends State<_Composer> {
     );
   }
 
+  /// `/project`'s rows while the draft starts with it (GAIA_PROJECTS_HLD.md
+  /// §7.5), null for Remove from project; null when it doesn't, or Esc closed
+  /// them.
+  List<GaiaProject?>? get _projectRows {
+    final pick = gaiaProjectPick(_text.text);
+    if (pick == null || _text.text == _paletteClosedFor) return null;
+    return _projectRowsFor(pick.query);
+  }
+
+  /// [_projectRows] for [query], shut or not.
+  List<GaiaProject?> _projectRowsFor(String query) {
+    final controller = widget.controller;
+    return gaiaProjectRows(
+      gaiaProjectsListed(controller.chats, controller.projects),
+      _chatProject,
+      query,
+    );
+  }
+
+  /// The chat's project, or the one a new chat's first send goes in.
+  String? get _chatProject {
+    final controller = widget.controller;
+    return controller
+        .project(
+          controller.currentChatId == null
+              ? controller.newChatProject
+              : controller.currentChat?.projectId,
+        )
+        ?.id;
+  }
+
+  /// A `/project` row picked (GAIA_PROJECTS_HLD.md §7.5): the chat moves to
+  /// [to], or out of its project for null, as the header's crumb moves it,
+  /// and its line leaves the draft. A toast offers it back.
+  void _pickProject(GaiaProject? to) {
+    final controller = widget.controller;
+    final pick = gaiaProjectPick(_text.text);
+    if (pick == null) return;
+    final asTyped = _text.text.substring(0, pick.end).trim();
+    final rest = _text.text.substring(pick.end);
+    _text.value = TextEditingValue(
+      text: rest,
+      selection: TextSelection.collapsed(offset: rest.length),
+    );
+    final chatId = controller.currentChatId;
+    final from = controller.project(_chatProject);
+    void move(String? projectId) => chatId == null
+        ? controller.pickNewChatProject(projectId)
+        : unawaited(controller.moveChat(chatId, projectId));
+    move(to?.id);
+    _used(GaiaBuiltin.project.name);
+    _record(asTyped);
+    showGaiaToast(
+      context,
+      mark: GaiaToastMark.done,
+      title: to == null ? 'Removed from ${from?.name}' : 'Moved to ${to.name}',
+      body: 'Click to undo',
+      onTap: () {
+        // A new chat sent since is in [to] now, as a chat.
+        if (chatId == null && controller.currentChatId != null) return;
+        // Only while it's still where this put it: not over a later move,
+        // nor for a chat since deleted.
+        if (chatId == null) {
+          if (controller.newChatProject != to?.id) return;
+        } else {
+          final chat = controller.chats
+              .where((chat) => chat.id == chatId)
+              .firstOrNull;
+          if (chat == null || chat.projectId != to?.id) return;
+        }
+        move(from?.id);
+      },
+    );
+    _focus.requestFocus();
+  }
+
+  /// `/project` opened (GAIA_PROJECTS_HLD.md §7.5): its line starts the
+  /// draft, over whatever else the draft held.
+  void _openProjects() {
+    const line = '/project ';
+    // One already starting the draft gives way to this one.
+    final pick = gaiaProjectPick(_text.text);
+    final draft = pick == null ? _text.text : _text.text.substring(pick.end);
+    final rest = draft.trim().isEmpty ? '' : '\n$draft';
+    _text.value = TextEditingValue(
+      text: '$line$rest',
+      selection: const TextSelection.collapsed(offset: line.length),
+    );
+  }
+
   /// Every row the palette can show, the CLI's own [natives] among them.
   List<GaiaPaletteItem> _paletteItems(List<GaiaNativeCommand>? natives) =>
       gaiaPaletteItems(
@@ -5837,6 +5927,11 @@ class _ComposerState extends State<_Composer> {
         text: text,
         selection: TextSelection.collapsed(offset: text.length),
       );
+    } else if (item.builtin == GaiaBuiltin.project) {
+      // Its projects show over the line it starts; what else the draft held
+      // waits under it.
+      _cutToken();
+      _openProjects();
     } else if (item.builtin case final builtin?) {
       _cutToken();
       if (await _runBuiltin(builtin)) {
@@ -5911,7 +6006,7 @@ class _ComposerState extends State<_Composer> {
         return KeyEventResult.handled;
       }
     }
-    if (_palette.isEmpty) {
+    if (_palette.isEmpty && (_projectRows?.isEmpty ?? true)) {
       // Tab takes the unknown command's suggestion.
       if (event is KeyDownEvent &&
           event.logicalKey == LogicalKeyboardKey.tab &&
@@ -5944,10 +6039,12 @@ class _ComposerState extends State<_Composer> {
         unawaited(_send());
       case LogicalKeyboardKey.tab:
         unawaited(
-          _pick(
-            palette[_highlight.clamp(0, palette.length - 1)],
-            complete: true,
-          ),
+          palette.isEmpty
+              ? _send()
+              : _pick(
+                  palette[_highlight.clamp(0, palette.length - 1)],
+                  complete: true,
+                ),
         );
       case LogicalKeyboardKey.arrowDown:
         _move(1);
@@ -6146,7 +6243,9 @@ class _ComposerState extends State<_Composer> {
   }
 
   void _move(int by) {
-    final rows = _palette.length;
+    final rows = _palette.isNotEmpty
+        ? _palette.length
+        : _projectRows?.length ?? 0;
     if (rows == 0) return;
     setState(() => _highlight = (_highlight + by) % rows);
   }
@@ -6225,6 +6324,10 @@ class _ComposerState extends State<_Composer> {
         (_btwDock.currentState?.close() ?? false)) {
       return true;
     }
+    if (builtin == GaiaBuiltin.project) {
+      _openProjects();
+      return true;
+    }
     if (builtin != GaiaBuiltin.controlAuto) {
       await controller.runBuiltin(builtin);
       return true;
@@ -6274,6 +6377,18 @@ class _ComposerState extends State<_Composer> {
     final palette = _palette;
     if (palette.isNotEmpty) {
       return _pick(palette[_highlight.clamp(0, palette.length - 1)]);
+    }
+    // Never sent to the agent: with no row to pick, nothing happens.
+    if (gaiaProjectPick(_text.text) case final pick?) {
+      // A recalled entry, its rows shut, still picks as typed
+      // (GAIA_HISTORY_HLD.md §4.4).
+      final rows = _text.text == _browseText
+          ? _projectRowsFor(pick.query)
+          : _projectRows ?? const [];
+      if (rows.isNotEmpty) {
+        _pickProject(rows[_highlight.clamp(0, rows.length - 1)]);
+      }
+      return;
     }
     return _submit();
   }
@@ -6460,6 +6575,30 @@ class _ComposerState extends State<_Composer> {
     if (!_btwPortal.isShowing) _btwPortal.show();
     final running = controller.currentRunning;
     final palette = _palette;
+    // The palette's rows: its commands, or `/project`'s projects
+    // (GAIA_PROJECTS_HLD.md §7.5).
+    final rows = [
+      for (final item in palette)
+        GaiaMenuItem(
+          label: '/${item.name}',
+          detail: item.description,
+          onPressed: () => _pick(item),
+        ),
+      if (palette.isEmpty)
+        for (final project in _projectRows ?? const <GaiaProject?>[])
+          project == null
+              ? GaiaMenuItem(
+                  label: 'Remove from project',
+                  icon: Icons.folder_off_outlined,
+                  onPressed: () => _pickProject(null),
+                )
+              : GaiaMenuItem(
+                  label: 'Move to ',
+                  accented: project.name,
+                  icon: Icons.folder_outlined,
+                  onPressed: () => _pickProject(project),
+                ),
+    ];
     final send = _sendCombo(controller);
     final card = controller.openCard;
     // A question's options by number, while there's nothing typed to put
@@ -6483,6 +6622,11 @@ class _ComposerState extends State<_Composer> {
               GaiaFixedKey.queue.activator: () {
                 final text = _text.text.trim();
                 if (text.isEmpty) return;
+                // A /project pick is the composer's, never the agent's.
+                if (gaiaProjectPick(_text.text) != null ||
+                    gaiaBuiltinIn(text) == GaiaBuiltin.project) {
+                  return;
+                }
                 _text.clear();
                 unawaited(controller.enqueue(text));
               },
@@ -6517,7 +6661,7 @@ class _ComposerState extends State<_Composer> {
                       // Hidden while the palette shows, which would sit under
                       // it, and back as it was once the palette goes.
                       child: Visibility(
-                        visible: palette.isEmpty,
+                        visible: rows.isEmpty,
                         maintainState: true,
                         child: Material(
                           type: MaterialType.transparency,
@@ -6534,7 +6678,7 @@ class _ComposerState extends State<_Composer> {
               },
               child: OverlayPortal(
                 controller: _portal,
-                overlayChildBuilder: (context) => palette.isEmpty
+                overlayChildBuilder: (context) => rows.isEmpty
                     ? const SizedBox.shrink()
                     : Align(
                         alignment: Alignment.topLeft,
@@ -6556,18 +6700,8 @@ class _ComposerState extends State<_Composer> {
                                 // Already open over the side questions it
                                 // takes the place of.
                                 animate: !controller.btwPanelOpen,
-                                highlight: _highlight.clamp(
-                                  0,
-                                  palette.length - 1,
-                                ),
-                                items: [
-                                  for (final item in palette)
-                                    GaiaMenuItem(
-                                      label: '/${item.name}',
-                                      detail: item.description,
-                                      onPressed: () => _pick(item),
-                                    ),
-                                ],
+                                highlight: _highlight.clamp(0, rows.length - 1),
+                                items: rows,
                               ),
                             ),
                           ),
