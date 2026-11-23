@@ -10536,6 +10536,13 @@ class DriftGaiaRepository implements GaiaRepository {
         ),
       );
 
+  @override
+  Future<void> deleteMemoryHint(GaiaMemoryHintKind kind, String subject) =>
+      (_db.delete(
+            _db.gaiaMemoryHintsTable,
+          )..where((t) => t.kind.equals(kind.name) & t.subject.equals(subject)))
+          .go();
+
   SimpleSelectStatement<$GaiaQueueTableTable, GaiaQueueTableData> _queue({
     bool includeDeleted = false,
   }) => _db.select(_db.gaiaQueueTable)

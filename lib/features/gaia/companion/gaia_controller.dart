@@ -29,6 +29,7 @@ import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_greetings.dart';
 import 'package:voyager/features/gaia/companion/gaia_handoff.dart';
 import 'package:voyager/features/gaia/companion/gaia_image_render.dart';
+import 'package:voyager/features/gaia/companion/gaia_memory_review.dart';
 import 'package:voyager/features/gaia/companion/gaia_settings_panel.dart';
 import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
 import 'package:voyager/features/gaia/companion/gaia_sky.dart';
@@ -1961,6 +1962,8 @@ class GaiaController extends ChangeNotifier {
   /// chip (GAIA_SETTINGS_HLD.md §2.1): in the Gaia window, from a floater.
   Future<void> openMemory(String id) async {
     revealMemoryId = id;
+    // The list shows it, not a review in progress.
+    review = null;
     // The list last read may be from before [id] was remembered: the tab
     // waits for a fresh one to look for it in.
     memoryList = null;
@@ -3396,6 +3399,7 @@ class GaiaController extends ChangeNotifier {
   /// its inbox, in the Gaia window.
   Future<void> openInbox() async {
     revealInbox = true;
+    review = null;
     await openPanel(tab: GaiaPanelTab.memories);
   }
 
@@ -3426,8 +3430,8 @@ class GaiaController extends ChangeNotifier {
   /// Proposed memory [memory] remembered from the inbox, pinned too with
   /// [pin]; its card in its chat says so. An active one that already says it
   /// stands instead, which a toast says. A pin over the budget is refused in
-  /// one, the memory still remembered.
-  Future<void> rememberMemory(GaiaMemory memory, {bool pin = false}) async {
+  /// one, the memory still remembered. The id of the memory that stands.
+  Future<String> rememberMemory(GaiaMemory memory, {bool pin = false}) async {
     final decided = await writeMemories('decideMemory', {
       'memoryId': memory.id,
       'accept': true,
@@ -3443,7 +3447,39 @@ class GaiaController extends ChangeNotifier {
     if (decided case {'pinFailed': final String why}) {
       _note('Remembered, not pinned', why, error: true);
     }
+    return switch (decided) {
+      {'id': final String id} => id,
+      _ => memory.id,
+    };
   }
+
+  /// The Memories tab's review in progress (GAIA_SETTINGS_HLD.md §6); null
+  /// for the list.
+  GaiaMemoryReview? review;
+
+  void startReview(GaiaMemoryReview deck) {
+    review = deck;
+    notifyListeners();
+  }
+
+  void endReview() {
+    if (review == null) return;
+    review = null;
+    notifyListeners();
+  }
+
+  /// A refusal in the review said in a toast, which outlives the tab.
+  void noteRefusal(String title, String body) =>
+      _note(title, body, error: true);
+
+  /// [memories] and [topics] put back as they were, for the review's undo.
+  Future<void> revertMemories({
+    List<GaiaMemory> memories = const [],
+    List<GaiaMemoryTopic> topics = const [],
+  }) => writeMemories('revertMemories', {
+    'memories': [for (final memory in memories) gaiaMemoryToJson(memory)],
+    'topics': [for (final topic in topics) gaiaMemoryTopicToJson(topic)],
+  });
 
   /// The Memories tab's Suggest topics: [memory] filed by the utility model
   /// (GAIA_MEMORY_TOPICS_HLD.md §5). What it couldn't do, said; null when it
@@ -3465,6 +3501,9 @@ class GaiaController extends ChangeNotifier {
   var memorySorting = false;
   String? memorySortError;
 
+  /// The sort running, done when it ends; null when none is.
+  Future<void>? memorySortRunning;
+
   /// [memories] not already suggested for, in batches of [kGaiaSortBatch],
   /// each batch's suggestions shown as it's answered. A failure stops it,
   /// saying why.
@@ -3476,6 +3515,8 @@ class GaiaController extends ChangeNotifier {
     ];
     memorySorting = true;
     memorySortError = null;
+    final running = Completer<void>();
+    memorySortRunning = running.future;
     notifyListeners();
     try {
       for (var at = 0; at < left.length; at += kGaiaSortBatch) {
@@ -3505,6 +3546,8 @@ class GaiaController extends ChangeNotifier {
       }
     } finally {
       memorySorting = false;
+      memorySortRunning = null;
+      running.complete();
       notifyListeners();
     }
   }

@@ -937,6 +937,55 @@ class GaiaMemories {
     until: null,
   ));
 
+  /// [pinLater] undone: memory [id] can be suggested as a pin again.
+  Future<void> undoPinLater(String id) =>
+      _repository.deleteMemoryHint(GaiaMemoryHintKind.pinLater, id);
+
+  /// [keepApart] undone: topics [a] and [b] can be suggested for a merge
+  /// again.
+  Future<void> undoKeepApart(String a, String b) => _repository
+      .deleteMemoryHint(GaiaMemoryHintKind.keptApart, gaiaTopicPairKey(a, b));
+
+  /// [memories] and [topics] put back as they were before a decision in the
+  /// settings panel's review (GAIA_SETTINGS_HLD.md §6.2), in one write: a
+  /// memory's text, tags, status, project, topics, pin and offered topic; a
+  /// topic's name and parent; each out of the trash. One no longer stored
+  /// is left out. The memories written, for their cards in their chats.
+  Future<List<GaiaMemory>> revert({
+    List<GaiaMemory> memories = const [],
+    List<GaiaMemoryTopic> topics = const [],
+  }) async {
+    final changedTopics = [
+      for (final was in topics)
+        if (await _repository.getMemoryTopic(was.id) case final now?)
+          now.copyWith(
+            name: was.name,
+            parentId: was.parentId,
+            clearParentId: was.parentId == null,
+            clearDeletedAt: true,
+          ),
+    ];
+    final changedMemories = [
+      for (final was in memories)
+        if (await _repository.getMemory(was.id) case final now?)
+          now.copyWith(
+            text: was.text,
+            tags: was.tags,
+            status: was.status,
+            projectId: was.projectId,
+            clearProjectId: was.projectId == null,
+            topicIds: was.topicIds,
+            pinned: was.pinned,
+            suggestedTopic: was.suggestedTopic,
+            clearSuggestedTopic: was.suggestedTopic == null,
+            clearDeletedAt: true,
+          ),
+    ];
+    if (changedTopics.isEmpty && changedMemories.isEmpty) return const [];
+    await _repository.upsertMemoryTopics(changedTopics, changedMemories);
+    return changedMemories;
+  }
+
   /// Memory [memoryId] moved to topic [topicId] (§3.2): it replaces the
   /// memory's topics [within] (the selected topic's subtree), or every one
   /// it has for null.

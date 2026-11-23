@@ -1,6 +1,6 @@
 # Gaia — Settings Panel and Memory Review (HLD)
 
-Status: **Design (2026-11-20), open questions decided (§11). Phases 1 and 2 built and checked live 2026-11-22 (§10.1, §10.2); Phase 3 built and checked live the same day (§10.3); Phase 4 built and checked live 2026-11-23 (§10.4); Phases 5-7 not built.** Moves the Gaia page's management tabs
+Status: **Design (2026-11-20), open questions decided (§11). Phases 1 and 2 built and checked live 2026-11-22 (§10.1, §10.2); Phase 3 built and checked live the same day (§10.3); Phase 4 built and checked live 2026-11-23 (§10.4); Phase 5 built and checked live the same day (§10.5); Phases 6-7 not built.** Moves the Gaia page's management tabs
 (GAIA_HLD.md §17) into the companion, in Gaia's own look, so everything Gaia needs is
 reachable from the Gaia window. The Memories tab is redesigned rather than ported, and
 gains a new card-by-card review with an "Ask Gaia" chat about the memory in front of you.
@@ -380,7 +380,7 @@ that as a card (§11).
 | 2 | **Setup and Settings.** `putSettings`, the companion's own setup checks, every settings section. The inbox alert (§5.5): `memoryAlertAt`, the `inbox` event, the header chip. | Each setting saved in the panel, apart from `memoryAlertAt` (§5.5), shows on the Gaia page and takes effect (a rebound key works without a restart). With `memoryAlertAt` at 3, a third proposed memory brings the chip up at `3 memories to review`, and deciding one takes it away. |
 | 3 | **Status.** `watchStatus`, the `status` event, beacon and device actions. | Beacons and devices update live while the tab shows, and no Firestore listener is left running while it doesn't. |
 | 4 | **Memories list.** §5: the one-scroll page, breadcrumb and chips, cards, the topic picker, topic actions, drag. The recall chip opens the panel, and the `openMemory` request is retired (§2.1, §3.3). | Everything the page's Memories tab can do is doable here, without a tree, a dropdown, or a pane that scrolls on its own. Clicking a recall chip, in the Gaia window or a floater, opens Memories with that memory revealed, and Voyager's main window doesn't come forward. Clicking the inbox chip (§5.5) opens Memories the same way. |
-| 5 | **Review.** §6: decks, keys, animation, undo, the summary. | A 30-memory inbox can be cleared from the keyboard alone, and Ctrl+Z restores any decision. |
+| 5 | **Review.** §6: decks, keys, animation, undo, the summary. The review bar (§5.2 item 4). | A 30-memory inbox can be cleared from the keyboard alone, and Ctrl+Z restores any decision. |
 | 6 | **Ask Gaia.** `_ChatColumn`, `GaiaMemoryRefPart`, archived review chats, `memory_revise` and its card. | The three example questions in §7.1 work on Claude and on Codex, and an applied rewrite updates the card above. |
 | 7 | **Desktop page → link.** §9. | The Windows Gaia page shows only the link and tab buttons; Android's is unchanged. |
 
@@ -771,6 +771,94 @@ Assignments, the Latex snippets memory's sort suggestion skipped (nothing writte
   proposals answered live had no card (the curator found them). `setMemoryCards` is the
   page's call and is host-tested.
 - **Another device and the phone**, as before.
+
+### 10.5 Phase 5 as built (2026-11-23)
+
+**Built:** `companion/gaia_memory_review.dart`: `GaiaMemoryReview` (the deck, the card in
+front, outcomes, the undo stack) and `GaiaMemoryReviewView` (the card, its actions with
+their keys as tooltips, a key hint line, the decided card animating off, the summary). The
+Memories tab's review bar (§5.2 item 4): `7 in the inbox · 2 suggestions` with **Review**,
+and **Review these (n)** in a topic or Unsorted. The review takes the tab's place while it
+runs. On the host: `GaiaMemories.revert`, `undoPinLater` and `undoKeepApart`, and the
+repository's `deleteMemoryHint`. New requests: `revertMemories` {memories, topics},
+`undoPinLater` {memoryId}, `undoKeepApart` {topicId, intoId}. `rememberMemory` now gives
+back the id of the memory that stands.
+
+**Where it differs from the design above:**
+- **Undo is one snapshot request.** Before each write the companion keeps the memories (and,
+  for a merge, the topics) as its list has them, and Ctrl+Z sends them back to
+  `revertMemories`. The host puts back each one's text, tags, status, project, topics, pin
+  and offered topic (a topic's name and parent), takes it out of the trash, and reopens a
+  proposal's card in its chat. That covers Remember (with its pin, and the memory it merged
+  into), Decline, Archive, Delete, Pin, File there, Choose… and Merge. Not now and Keep
+  apart delete their hint. A topic made by accepting a new topic stays after an undo, empty.
+- **The review lives on the controller** (`GaiaController.review`), not in the tab, so it
+  survives a tab switch or closing the panel. A recall chip or the inbox chip ends it, since
+  they ask for the list.
+- **Skip and Keep are decisions**, so Ctrl+Z steps back over them too. **P** (pin) is
+  undoable but leaves the card in front.
+- **← goes back to a card you saw**, decided or not. A decided card shows what was done
+  ("Remembered · Ctrl+Z undoes it" on the last one) and → or Enter moves on. Ctrl+Z only
+  undoes the last decision, wherever you are.
+- **The card going off says what was done**, not its live state.
+- **Topics on a proposed card are written at once**, as on the list's cards, not held until
+  Remember (§6.2). Undoing Remember doesn't take them back off.
+- **The source line isn't a link yet.** "from *chat*, Nov 20" is text. The read-only split
+  under the card waits for Phase 6's `_ChatColumn`.
+- **Unsorted** takes remembered memories only (not archived). Placements are asked for this
+  batch and the next (`kGaiaSortBatch`) as the deck moves on, and each memory is asked about
+  only once. E edits there too.
+- **A held key doesn't repeat**, except ←, so a held Enter can't decide thirty cards.
+  Ctrl+F does nothing in a review (the shell's chat search would open over the panel).
+- **No Ask Gaia (/)** and no proposals joining an Inbox deck: Phase 6.
+- **The review bar's counts ignore the search.**
+
+**Tests:** `test/gaia_memory_review_test.dart` has 6, against a fake main instance that
+applies each write:
+- A 30-memory inbox plus a pin and a merge suggestion cleared by keys alone, with the
+  summary. Then Ctrl+Z undoes the merge, the pin, a skip, a decline and a remember in turn,
+  and Esc goes back to the list.
+- Shift+Enter remembers and pins. A proposal remembered elsewhere is skipped. ← shows the
+  decided cards. Undoing Remember and pin leaves it proposed and unpinned.
+- A refused write puts the card back with the host's reason as a toast.
+- A topic's deck: P, Keep, Archive, Ctrl+Backspace delete, then five undos.
+- E edits in place, and D and Enter go to the text box, not the deck.
+- Unsorted: a placement asked for ahead, File there, and its undo, which offers it again.
+
+`gaia_host_test.dart` has 1 more: `revertMemories` after a remember with a pin, a decline
+and a merge, then `undoPinLater` and `undoKeepApart` bringing their suggestions back. The
+full `test/gaia_*_test.dart` run had one failure the first time: a review test ended with
+the controller's 1 s drafts timer still pending. Each review test now pumps past it, and the
+full run is 2,045 passed, 25 skipped, none failed.
+
+**Checked live** on `gaiaqa` (qa-128), from the `vwt-run` build copy with this tree's bundle
+(no native change), real main instance and companion over the real pipe, all input in
+background mode. Before and after each deck, a fingerprint of the panel's list (a hash over
+every memory's id, status, pin, text, topics, tags, project and offered topic; 363 memories,
+36 topics) was taken by `ceval`:
+- **Inbox, the "done when":** 32 real proposals and a pin suggestion (33 cards) decided by
+  keys alone, Enter, Backspace and S in turn: the summary read "11 remembered · 11 skipped ·
+  10 declined · 1 put off", with 11 left proposed and the put-off pin gone from the list. 33
+  Ctrl+Z then stepped back to card 1 of 33, the pin card showing again, and the fingerprint
+  matched the one taken before.
+- **The decided card going off:** a frame grabbed right after S shows the skipped card
+  fading aside over the next, saying "Skipped · Ctrl+Z undoes it".
+- **A topic (Tea, 4):** P pinned the card in front (Pinned, Unpin), Enter kept it, D
+  archived the next, Ctrl+Backspace deleted the next, Enter kept the last: "2 kept · 1
+  archived · 1 deleted". Five Ctrl+Z, the pin among them, matched the fingerprint again.
+- **Unsorted (11):** a real utility-model call offered "File it in: Preferences" for the
+  first card; Enter filed it with its tags, and Ctrl+Z took both off (fingerprint matched)
+  and offered the placement again.
+- No error in the profile's `voyager_errors.log` from the run.
+
+Test data: none left; every decision made live was undone. A pin suggestion ("I am
+left-handed") appeared on the list mid-review as memories were remembered, and went again
+with the undos. It didn't join the deck (Phase 6).
+
+**Not checked live:** Shift+Enter, E, ←, Choose… and a refused write (widget-tested); a merge
+card (qa-128 has no merge suggestion; widget- and host-tested); a proposal's chat card
+reopening on undo (the proposals reviewed live came from the curator and had no card;
+host-tested); another device and the phone.
 
 ## 11. Decisions (2026-11-20)
 

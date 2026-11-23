@@ -2061,6 +2061,40 @@ class GaiaHost {
           params['intoId']! as String,
         );
         return null;
+      // The review's Ctrl+Z (GAIA_SETTINGS_HLD.md §6.2).
+      case 'undoPinLater':
+        await _memoriesOrThrow().undoPinLater(params['memoryId']! as String);
+        return null;
+      case 'undoKeepApart':
+        await _memoriesOrThrow().undoKeepApart(
+          params['topicId']! as String,
+          params['intoId']! as String,
+        );
+        return null;
+      case 'revertMemories':
+        final reverted = await _memoriesOrThrow().revert(
+          memories: [
+            for (final memory in params['memories'] as List? ?? const [])
+              gaiaMemoryFromJson(memory! as Map),
+          ],
+          topics: [
+            for (final topic in params['topics'] as List? ?? const [])
+              gaiaMemoryTopicFromJson(topic! as Map),
+          ],
+        );
+        // A proposal back in the inbox: its card in its chat is open again.
+        for (final memory in reverted) {
+          if (memory.status == GaiaMemoryStatus.proposed &&
+              memory.sourceChatId != null) {
+            await store.setMemoryCards(
+              memory.sourceChatId!,
+              memory.id,
+              GaiaCardState.open,
+              memory.text,
+            );
+          }
+        }
+        return null;
       case 'projectTool':
         final reads = _projectReads;
         if (reads == null) throw GaiaPipeException('Voyager data is not ready');

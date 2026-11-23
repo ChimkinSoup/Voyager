@@ -2669,6 +2669,83 @@ void main() {
         expect(m2.suggestedTopic, isNull);
       });
     });
+
+    test("the review's undo puts a remembered proposal, a merge, a pin put "
+        'off and a pair kept apart back', () {
+      final repository = DriftGaiaRepository(db);
+      run(show: true, memories: GaiaMemories(repository), (async, _) {
+        repository.upsertMemoryTopics(
+          [topic('a', 'Cooking'), topic('b', 'Cookings')],
+          [
+            memory('m1', 'Exam on Monday', status: GaiaMemoryStatus.proposed),
+            memory('m2', 'I like soup', topicIds: ['b']),
+          ],
+        );
+        repository.putMemoryHint((
+          kind: GaiaMemoryHintKind.pinCandidate,
+          subject: 'm2',
+          until: null,
+        ));
+        async.flushMicrotasks();
+        connect(async);
+        GaiaMemoryList list() =>
+            gaiaMemoryListFromJson(request(async, 'memories')! as Map);
+        final before = list();
+        GaiaMemory was(String id) =>
+            before.memories.singleWhere((m) => m.id == id);
+        Map<String, Object?> json(GaiaMemory memory) =>
+            gaiaMemoryToJson(memory);
+
+        // Remembered and pinned, then undone: proposed, unpinned.
+        request(async, 'decideMemory', {
+          'memoryId': 'm1',
+          'accept': true,
+          'text': 'Exam on Monday',
+          'pin': true,
+        });
+        request(async, 'revertMemories', {
+          'memories': [json(was('m1'))],
+        });
+        final m1 = list().memories.singleWhere((m) => m.id == 'm1');
+        expect(m1.status, GaiaMemoryStatus.proposed);
+        expect(m1.pinned, isFalse);
+
+        // Declined (to the trash), then undone.
+        request(async, 'decideMemory', {'memoryId': 'm1', 'accept': false});
+        expect(list().memories.map((m) => m.id), isNot(contains('m1')));
+        request(async, 'revertMemories', {
+          'memories': [json(was('m1'))],
+        });
+        expect(list().memories.map((m) => m.id), contains('m1'));
+
+        // Merged, then undone: the topic and its memory's filing are back.
+        request(async, 'mergeTopic', {'topicId': 'b', 'intoId': 'a'});
+        expect(list().topics.map((t) => t.id), ['a']);
+        request(async, 'revertMemories', {
+          'memories': [json(was('m2'))],
+          'topics': [
+            for (final topic in before.topics) gaiaMemoryTopicToJson(topic),
+          ],
+        });
+        expect(list().topics.map((t) => t.id), unorderedEquals(['a', 'b']));
+        expect(
+          list().memories.singleWhere((m) => m.id == 'm2').topicIds,
+          ['b'],
+        );
+
+        // Not now, and kept apart, each undone: suggested again.
+        expect(list().pins.map((p) => p.memory.id), ['m2']);
+        request(async, 'pinLater', {'memoryId': 'm2'});
+        expect(list().pins, isEmpty);
+        request(async, 'undoPinLater', {'memoryId': 'm2'});
+        expect(list().pins.map((p) => p.memory.id), ['m2']);
+        expect(list().merges, hasLength(1));
+        request(async, 'keepApart', {'topicId': 'b', 'intoId': 'a'});
+        expect(list().merges, isEmpty);
+        request(async, 'undoKeepApart', {'topicId': 'b', 'intoId': 'a'});
+        expect(list().merges, hasLength(1));
+      });
+    });
   });
 
   group('drain (§3.2)', () {

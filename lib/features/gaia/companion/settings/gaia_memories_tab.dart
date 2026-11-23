@@ -9,6 +9,7 @@ import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_card_text_field.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_memory_card.dart';
+import 'package:voyager/features/gaia/companion/gaia_memory_review.dart';
 import 'package:voyager/features/gaia/companion/gaia_notch.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
 import 'package:voyager/features/gaia/companion/gaia_settings_panel.dart';
@@ -251,6 +252,9 @@ class _GaiaMemoriesTabState extends State<GaiaMemoriesTab> {
         slivers: [SliverToBoxAdapter(child: SizedBox.shrink())],
       );
     }
+    if (_controller.review case final review?) {
+      return GaiaMemoryReviewView(controller: _controller, review: review);
+    }
     _takeReveal(list);
     final tree = GaiaTopicTree(list.topics);
     final topic =
@@ -452,6 +456,9 @@ class _GaiaMemoriesTabState extends State<GaiaMemoriesTab> {
                 moveWithin,
               ),
             ),
+            SliverToBoxAdapter(
+              child: _reviewBar(list, tree, topic, scope, unsorted),
+            ),
             if (inbox.isNotEmpty || pins.isNotEmpty || merges.isNotEmpty) ...[
               SliverToBoxAdapter(
                 child: GaiaPanelHeading(
@@ -599,6 +606,80 @@ class _GaiaMemoriesTabState extends State<GaiaMemoriesTab> {
             ],
           ],
         ),
+      ),
+    );
+  }
+
+  /// The review bar (GAIA_SETTINGS_HLD.md §5.2 item 4): what's waiting in
+  /// the inbox with Review, and Review these for the topic in view's
+  /// remembered memories, or Unsorted's. Counted without the search.
+  Widget _reviewBar(
+    GaiaMemoryList list,
+    GaiaTopicTree tree,
+    String? topic,
+    Set<String>? scope,
+    bool Function(GaiaMemory memory) unsorted,
+  ) {
+    final waiting = list.memories
+        .where((memory) => memory.status == GaiaMemoryStatus.proposed)
+        .length;
+    final suggestions = list.pins.length + list.merges.length;
+    final here = topic == null
+        ? 0
+        : list.memories
+              .where(
+                (memory) =>
+                    memory.status == GaiaMemoryStatus.active &&
+                    (topic == _unsorted
+                        ? unsorted(memory)
+                        : memory.topicIds.any(scope!.contains)),
+              )
+              .length;
+    if (waiting + suggestions == 0 && here == 0) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 10, 4, 0),
+      child: Wrap(
+        spacing: 10,
+        runSpacing: 6,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          if (waiting + suggestions > 0) ...[
+            Text(
+              [
+                if (waiting > 0) '$waiting in the inbox',
+                if (suggestions > 0)
+                  '$suggestions ${suggestions == 1 ? 'suggestion' : 'suggestions'}',
+              ].join(' · '),
+              style: GaiaType.row.copyWith(color: GaiaInk.dim),
+            ),
+            GaiaButton(
+              label: 'Review',
+              icon: Icons.style_outlined,
+              size: 30,
+              padding: 12,
+              onPressed: () =>
+                  _controller.startReview(GaiaMemoryReview.inbox(_controller)),
+            ),
+          ],
+          if (here > 0)
+            GaiaButton(
+              label: 'Review these ($here)',
+              size: 30,
+              padding: 12,
+              color: GaiaInk.muted,
+              onPressed: () => _controller.startReview(
+                topic == _unsorted
+                    ? GaiaMemoryReview.unsorted(_controller)
+                    : GaiaMemoryReview.topic(
+                        _controller,
+                        scope!,
+                        tree.path(topic!).join(' › '),
+                      ),
+              ),
+            ),
+        ],
       ),
     );
   }
