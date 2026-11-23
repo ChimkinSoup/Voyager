@@ -65,7 +65,8 @@ const kGaiaNotificationBtwSeparator = '#btw:';
 /// [GaiaRepository] the app [attach]es.
 ///
 /// The pipe protocol, companion to main: `hello` (returns `{aborted, accent,
-/// deviceId, settings}`), `chats`, `putChat {chat}` (a new chat), `setSession
+/// deviceId, settings, inbox}`), `putSettings {changes}` (the settings
+/// panel's save), `voyagerHotkeys` (Voyager's own hotkeys by name), `chats`, `putChat {chat}` (a new chat), `setSession
 /// {chatId, adapter, account, sessionId, lastSeq, project}`, `setTier {chatId, tier}`,
 /// `setLastTier {tier}`, `setTitle {chatId, title, from}`, `setPinned {chatId,
 /// pinned}`, `setArchived {chatId, archived}`, `projects`, `putProject {project}`, `renameProject {projectId,
@@ -103,7 +104,7 @@ const kGaiaNotificationBtwSeparator = '#btw:';
 /// body, btwId?}`, `toasted {title, body}` and `drained` events. Main to companion: the `abort`, `stop
 /// {chatId}` and `drain` requests, and the `hotkey {key}`, `openChat
 /// {chatId, btwId?}`, `split {left, top, width, height}`, `accent {argb}`, `settings
-/// {..}`, `tokens {rows}` and `changed` events.
+/// {..}`, `tokens {rows}`, `inbox {count}` and `changed` events.
 class GaiaHost {
   /// The app uses [instance]. Tests pass a fake [pipe], their own
   /// [abortFlag] file, and a [killCompanion] that kills nothing real.
@@ -271,6 +272,14 @@ class GaiaHost {
   StreamSubscription<void>? _queueChanges;
   StreamSubscription<void>? _btwChanges;
   StreamSubscription<void>? _chapterChanges;
+  StreamSubscription<List<GaiaMemory>>? _memoryChanges;
+
+  /// Proposed memories in the inbox, as last counted; null before the first
+  /// count (GAIA_SETTINGS_HLD.md §5.5).
+  int? _inbox;
+
+  /// Voyager's own hotkeys by name, which Gaia's can't take.
+  Map<String, String> Function()? _voyagerHotkeys;
   Timer? _changedSoon;
   var _settings = GaiaSettings.initial();
 
@@ -360,8 +369,10 @@ class GaiaHost {
     GaiaPower? power,
     bool Function()? vaultUnlocked,
     GaiaTokenCounter? tokens,
+    Map<String, String> Function()? voyagerHotkeys,
   }) {
     if (_attached.isCompleted) return;
+    _voyagerHotkeys = voyagerHotkeys;
     _tokens = tokens
       ?..totals.addListener(() {
         if (_pipe.connected) _pipe.notify('tokens', {'rows': _tokenTotals});
@@ -430,6 +441,13 @@ class GaiaHost {
       };
       if (changed.isNotEmpty) _pipe.notify('chapters', changed);
     });
+    // The header's inbox chip, whether or not the panel is open.
+    _memoryChanges = repository.watchMemories().listen((memories) {
+      final count = gaiaInboxCount(memories);
+      if (count == _inbox) return;
+      _inbox = count;
+      if (_pipe.connected) _pipe.notify('inbox', {'count': count});
+    });
     _settingsChanges = repository.watchSettings().listen((settings) {
       _settings = settings;
       unawaited(_applyHotkeys(settings.keybinds));
@@ -487,6 +505,7 @@ class GaiaHost {
     _changedSoon?.cancel();
     unawaited(_changes?.cancel());
     unawaited(_settingsChanges?.cancel());
+    unawaited(_memoryChanges?.cancel());
     unawaited(_draftChanges?.cancel());
     unawaited(_queueChanges?.cancel());
     unawaited(_btwChanges?.cancel());
@@ -1286,6 +1305,7 @@ class GaiaHost {
           'accent': _accent,
           'deviceId': store.deviceId,
           'settings': _settings.toJson(),
+          'inbox': _inbox ??= await store.inboxCount(),
           'text': _text.toJson(),
           'tokens': _tokenTotals,
         };
@@ -1475,6 +1495,11 @@ class GaiaHost {
           });
         }
         return null;
+      case 'putSettings':
+        await store.putSettings(_map(params['changes']));
+        return null;
+      case 'voyagerHotkeys':
+        return _voyagerHotkeys?.call() ?? const <String, String>{};
       case 'setLastTier':
         if (gaiaTierFromName(params['tier']) case final tier?) {
           await store.setLastTier(tier);

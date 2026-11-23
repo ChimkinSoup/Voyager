@@ -971,6 +971,25 @@ void main() {
     },
   );
 
+  test('202→203 adds the inbox alert, at 100 at first', () async {
+    final seed = AppDatabase(NativeDatabase(file));
+    await DriftGaiaRepository(seed).upsertSettings(GaiaSettings.initial());
+    await seed.customStatement(
+      'ALTER TABLE gaia_settings_table DROP COLUMN memory_alert_at',
+    );
+    await seed.customStatement('PRAGMA user_version = 202');
+    await seed.close();
+
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+    final repo = DriftGaiaRepository(upgraded);
+    final settings = await repo.getSettings();
+    expect(settings.memoryAlertAt, 100);
+
+    await repo.upsertSettings(settings.copyWith(memoryAlertAt: 3));
+    expect((await repo.getSettings()).memoryAlertAt, 3);
+  });
+
   test('197→198 adds your name, none at first', () async {
     final seed = AppDatabase(NativeDatabase(file));
     await DriftGaiaRepository(seed).upsertSettings(GaiaSettings.initial());

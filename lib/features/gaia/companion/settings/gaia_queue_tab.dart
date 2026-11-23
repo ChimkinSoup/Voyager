@@ -9,6 +9,7 @@ import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_settings_panel.dart';
 import 'package:voyager/features/gaia/companion/gaia_style.dart';
 import 'package:voyager/features/gaia/companion/gaia_toast.dart';
+import 'package:voyager/features/gaia/gaia_pipe.dart';
 
 /// The settings panel's Queue tab (GAIA_SETTINGS_HLD.md §4): each chat's
 /// waiting prompts and the global queue, as the Gaia page shows them
@@ -171,10 +172,12 @@ class _QueueRowState extends State<_QueueRow> {
     super.dispose();
   }
 
-  void _startEdit() {
+  void _startEdit([String? text]) {
+    text ??= widget.item.text;
     setState(
-      () => _editing = TextEditingController(text: widget.item.text)
-        ..selection = TextSelection.collapsed(offset: widget.item.text.length),
+      () =>
+          _editing = TextEditingController(text: text)
+            ..selection = TextSelection.collapsed(offset: text!.length),
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _editFocus.requestFocus();
@@ -189,9 +192,35 @@ class _QueueRowState extends State<_QueueRow> {
     // After the field it's attached to is gone.
     WidgetsBinding.instance.addPostFrameCallback((_) => editing?.dispose());
     if (save && text.isNotEmpty && text != widget.item.text) {
-      unawaited(widget.controller.editQueued(widget.item.id, text));
+      unawaited(_saveEdit(text));
     }
   }
+
+  /// Saves [text]; on failure says why and reopens the edit with it.
+  Future<void> _saveEdit(String text) async {
+    try {
+      await widget.controller.editQueued(widget.item.id, text);
+    } on GaiaPipeException catch (error) {
+      if (!mounted) return;
+      _notSaved(error);
+      if (_editing == null) _startEdit(text);
+    }
+  }
+
+  Future<void> _delete() async {
+    try {
+      await widget.controller.deleteQueued(widget.item.id);
+    } on GaiaPipeException catch (error) {
+      if (mounted) _notSaved(error);
+    }
+  }
+
+  void _notSaved(GaiaPipeException error) => showGaiaToast(
+    context,
+    mark: GaiaToastMark.error,
+    title: 'Not saved',
+    body: error.message,
+  );
 
   /// Enter saves (Shift+Enter is a newline), Esc cancels.
   KeyEventResult _onEditKey(FocusNode node, KeyEvent event) {
@@ -312,8 +341,7 @@ class _QueueRowState extends State<_QueueRow> {
                       label: 'Delete',
                       icon: Icons.delete_outline,
                       compact: true,
-                      onPressed: () =>
-                          widget.controller.deleteQueued(widget.item.id),
+                      onPressed: _delete,
                     ),
                   ],
                 ),

@@ -28,6 +28,7 @@ import 'package:voyager/features/gaia/adapters/codex/codex_events.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_runner.dart';
 import 'package:voyager/features/gaia/companion/gaia_card_view.dart';
 import 'package:voyager/features/gaia/companion/gaia_commands.dart';
+import 'package:voyager/features/gaia/companion/gaia_settings_panel.dart';
 import 'package:voyager/features/gaia/companion/gaia_spinner.dart';
 import 'package:voyager/features/gaia/gaia_keybinds.dart';
 import 'package:voyager/features/gaia/host/gaia_chat_store.dart';
@@ -4067,10 +4068,7 @@ class _UtilitySectionState extends ConsumerState<_UtilitySection> {
 }
 
 /// Names Gaia's own commands take (§9.2), which a user command can't.
-final _reservedCommandNames = {
-  for (final builtin in GaiaBuiltin.values) ...builtin.names,
-  for (final tier in GaiaTier.values) tier.command.substring(1),
-};
+final _reservedCommandNames = kGaiaReservedCommandNames;
 
 /// The user's slash commands (§9.2): templates `/name args` expands to on
 /// send.
@@ -4326,7 +4324,11 @@ class _KeysSection extends ConsumerWidget {
     }
     // Send only works inside Gaia, so it can't take a system-wide hotkey.
     final voyager = ref.read(settingsProvider).valueOrNull;
-    final voyagerClash = !keybind.global || voyager == null
+    final voyagerClash = !keybind.global
+        ? gaiaFixedKeyClash(stored, [
+            for (final tab in GaiaPanelTab.values) tab.label,
+          ])
+        : voyager == null
         ? null
         : gaiaHotkeyClash(stored, {
             'Quick journal entry': voyager.journalHotkey,

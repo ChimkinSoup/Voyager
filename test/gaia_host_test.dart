@@ -368,12 +368,14 @@ void main() {
     Future<void> Function(String word)? addWord,
     GaiaBeaconService? beacon,
     bool vaultUnlocked = false,
+    Map<String, String> Function()? voyagerHotkeys,
   }) {
     fakeAsync((async) {
       final host = newHost();
       host.start(registerHotkeys: false, show: show);
       host.attach(
         vaultUnlocked: () => vaultUnlocked,
+        voyagerHotkeys: voyagerHotkeys,
         repository: DriftGaiaRepository(db),
         deviceId: 'laptop',
         toast: (chatId, title, body, {btwId}) =>
@@ -2026,6 +2028,101 @@ void main() {
         request(async, 'queueEdit', {'id': id, 'text': 'too late'});
         request(async, 'queueDelete', {'id': id});
         expect(queued(async), isEmpty);
+      });
+    });
+  });
+
+  group("the settings panel's settings (GAIA_SETTINGS_HLD.md §3.4, §5.5)", () {
+    test('putSettings changes only the fields it sends, and they come back '
+        'as the settings event', () {
+      run(show: true, (async, _) {
+        connect(async);
+        final repository = DriftGaiaRepository(db);
+        repository.getSettings().then(
+          (settings) => repository.upsertSettings(
+            settings.copyWith(lastTier: GaiaTier.deep, gaiaMd: 'Be brief.'),
+          ),
+        );
+        async.flushMicrotasks();
+
+        request(async, 'putSettings', {
+          'changes': {
+            'notifyOnDone': false,
+            'userName': 'Juno',
+            'defaultTier': 'quick',
+            'memoryAlertAt': 0,
+            'keybinds': {'settings': 'Ctrl+Shift+O'},
+          },
+        });
+        async.elapse(const Duration(seconds: 1));
+        late GaiaSettings saved;
+        repository.getSettings().then((settings) => saved = settings);
+        async.flushMicrotasks();
+        expect(saved.notifyOnDone, isFalse);
+        expect(saved.userName, 'Juno');
+        expect(saved.defaultTier, GaiaTier.quick);
+        // At least 1: there's no off.
+        expect(saved.memoryAlertAt, 1);
+        expect(saved.keybinds, {'settings': 'Ctrl+Shift+O'});
+        // Not sent, so as they were.
+        expect(saved.lastTier, GaiaTier.deep);
+        expect(saved.gaiaMd, 'Be brief.');
+        expect(
+          companions.single.events.where((e) => e.startsWith('settings')),
+          isNotEmpty,
+        );
+
+        request(async, 'putSettings', {
+          'changes': {'defaultTier': null},
+        });
+        repository.getSettings().then((settings) => saved = settings);
+        async.flushMicrotasks();
+        expect(saved.defaultTier, isNull);
+        expect(saved.userName, 'Juno');
+      });
+    });
+
+    test("voyagerHotkeys answers with Voyager's own hotkeys", () {
+      run(show: true, voyagerHotkeys: () => {'Quick note': 'Ctrl+Alt+N'}, (
+        async,
+        _,
+      ) {
+        connect(async);
+        expect(request(async, 'voyagerHotkeys'), {'Quick note': 'Ctrl+Alt+N'});
+      });
+    });
+
+    test('the inbox count comes with hello and as an event when it changes, '
+        'not on other changes', () {
+      final repository = DriftGaiaRepository(db);
+      final now = DateTime.utc(2026, 11, 22);
+      GaiaMemory memory(String id, GaiaMemoryStatus status) => GaiaMemory(
+        id: id,
+        createdAt: now,
+        updatedAt: now,
+        text: 'Memory $id',
+        status: status,
+      );
+      run(show: true, (async, _) {
+        repository.upsertMemory(memory('m1', GaiaMemoryStatus.proposed));
+        async.elapse(const Duration(seconds: 1));
+        expect(connect(async)['inbox'], 1);
+        List<String> inbox() => [
+          ...companions.single.events.where((e) => e.startsWith('inbox')),
+        ];
+
+        repository.upsertMemory(memory('m2', GaiaMemoryStatus.proposed));
+        async.elapse(const Duration(seconds: 1));
+        expect(inbox(), ['inbox 2']);
+
+        // Remembered, not proposed: the count is the same.
+        repository.upsertMemory(memory('m3', GaiaMemoryStatus.active));
+        async.elapse(const Duration(seconds: 1));
+        expect(inbox(), ['inbox 2']);
+
+        repository.upsertMemory(memory('m1', GaiaMemoryStatus.active));
+        async.elapse(const Duration(seconds: 1));
+        expect(inbox(), ['inbox 2', 'inbox 1']);
       });
     });
   });

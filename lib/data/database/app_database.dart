@@ -2406,6 +2406,7 @@ class GaiaSettingsTable extends Table {
   BoolColumn get splitGaiaRight =>
       boolean().withDefault(const Constant(false))();
   TextColumn get userName => text().withDefault(const Constant(''))();
+  IntColumn get memoryAlertAt => integer().withDefault(const Constant(100))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -2608,7 +2609,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 202;
+  int get schemaVersion => 203;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4906,6 +4907,15 @@ class AppDatabase extends _$AppDatabase {
       if (from < 202) {
         // Pin and merge suggestions (GAIA_MEMORY_TOPICS_HLD.md §23).
         await migrator.createTable(gaiaMemoryHintsTable);
+      }
+      if (from >= 169 && from < 203) {
+        // The inbox alert's threshold (GAIA_SETTINGS_HLD.md §5.5).
+        await _addColumnIfNotExists(
+          migrator,
+          'gaia_settings_table',
+          gaiaSettingsTable,
+          gaiaSettingsTable.memoryAlertAt,
+        );
       }
     },
   );

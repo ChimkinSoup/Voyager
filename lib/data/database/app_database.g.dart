@@ -60675,6 +60675,18 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
     requiredDuringInsert: false,
     defaultValue: const Constant(''),
   );
+  static const VerificationMeta _memoryAlertAtMeta = const VerificationMeta(
+    'memoryAlertAt',
+  );
+  @override
+  late final GeneratedColumn<int> memoryAlertAt = GeneratedColumn<int>(
+    'memory_alert_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(100),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -60742,6 +60754,7 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
     autoAcceptCurator,
     splitGaiaRight,
     userName,
+    memoryAlertAt,
     createdAt,
     updatedAt,
     version,
@@ -60917,6 +60930,15 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
         userName.isAcceptableOrUnknown(data['user_name']!, _userNameMeta),
       );
     }
+    if (data.containsKey('memory_alert_at')) {
+      context.handle(
+        _memoryAlertAtMeta,
+        memoryAlertAt.isAcceptableOrUnknown(
+          data['memory_alert_at']!,
+          _memoryAlertAtMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -61034,6 +61056,10 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
         DriftSqlType.string,
         data['${effectivePrefix}user_name'],
       )!,
+      memoryAlertAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}memory_alert_at'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -61097,6 +61123,7 @@ class GaiaSettingsTableData extends DataClass
   final bool autoAcceptCurator;
   final bool splitGaiaRight;
   final String userName;
+  final int memoryAlertAt;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -61122,6 +61149,7 @@ class GaiaSettingsTableData extends DataClass
     required this.autoAcceptCurator,
     required this.splitGaiaRight,
     required this.userName,
+    required this.memoryAlertAt,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -61158,6 +61186,7 @@ class GaiaSettingsTableData extends DataClass
     map['auto_accept_curator'] = Variable<bool>(autoAcceptCurator);
     map['split_gaia_right'] = Variable<bool>(splitGaiaRight);
     map['user_name'] = Variable<String>(userName);
+    map['memory_alert_at'] = Variable<int>(memoryAlertAt);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['version'] = Variable<int>(version);
@@ -61197,6 +61226,7 @@ class GaiaSettingsTableData extends DataClass
       autoAcceptCurator: Value(autoAcceptCurator),
       splitGaiaRight: Value(splitGaiaRight),
       userName: Value(userName),
+      memoryAlertAt: Value(memoryAlertAt),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -61236,6 +61266,7 @@ class GaiaSettingsTableData extends DataClass
       autoAcceptCurator: serializer.fromJson<bool>(json['autoAcceptCurator']),
       splitGaiaRight: serializer.fromJson<bool>(json['splitGaiaRight']),
       userName: serializer.fromJson<String>(json['userName']),
+      memoryAlertAt: serializer.fromJson<int>(json['memoryAlertAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -61268,6 +61299,7 @@ class GaiaSettingsTableData extends DataClass
       'autoAcceptCurator': serializer.toJson<bool>(autoAcceptCurator),
       'splitGaiaRight': serializer.toJson<bool>(splitGaiaRight),
       'userName': serializer.toJson<String>(userName),
+      'memoryAlertAt': serializer.toJson<int>(memoryAlertAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -61296,6 +61328,7 @@ class GaiaSettingsTableData extends DataClass
     bool? autoAcceptCurator,
     bool? splitGaiaRight,
     String? userName,
+    int? memoryAlertAt,
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -61323,6 +61356,7 @@ class GaiaSettingsTableData extends DataClass
     autoAcceptCurator: autoAcceptCurator ?? this.autoAcceptCurator,
     splitGaiaRight: splitGaiaRight ?? this.splitGaiaRight,
     userName: userName ?? this.userName,
+    memoryAlertAt: memoryAlertAt ?? this.memoryAlertAt,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -61378,6 +61412,9 @@ class GaiaSettingsTableData extends DataClass
           ? data.splitGaiaRight.value
           : this.splitGaiaRight,
       userName: data.userName.present ? data.userName.value : this.userName,
+      memoryAlertAt: data.memoryAlertAt.present
+          ? data.memoryAlertAt.value
+          : this.memoryAlertAt,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -61408,6 +61445,7 @@ class GaiaSettingsTableData extends DataClass
           ..write('autoAcceptCurator: $autoAcceptCurator, ')
           ..write('splitGaiaRight: $splitGaiaRight, ')
           ..write('userName: $userName, ')
+          ..write('memoryAlertAt: $memoryAlertAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -61438,6 +61476,7 @@ class GaiaSettingsTableData extends DataClass
     autoAcceptCurator,
     splitGaiaRight,
     userName,
+    memoryAlertAt,
     createdAt,
     updatedAt,
     version,
@@ -61467,6 +61506,7 @@ class GaiaSettingsTableData extends DataClass
           other.autoAcceptCurator == this.autoAcceptCurator &&
           other.splitGaiaRight == this.splitGaiaRight &&
           other.userName == this.userName &&
+          other.memoryAlertAt == this.memoryAlertAt &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -61495,6 +61535,7 @@ class GaiaSettingsTableCompanion
   final Value<bool> autoAcceptCurator;
   final Value<bool> splitGaiaRight;
   final Value<String> userName;
+  final Value<int> memoryAlertAt;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -61521,6 +61562,7 @@ class GaiaSettingsTableCompanion
     this.autoAcceptCurator = const Value.absent(),
     this.splitGaiaRight = const Value.absent(),
     this.userName = const Value.absent(),
+    this.memoryAlertAt = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -61548,6 +61590,7 @@ class GaiaSettingsTableCompanion
     this.autoAcceptCurator = const Value.absent(),
     this.splitGaiaRight = const Value.absent(),
     this.userName = const Value.absent(),
+    this.memoryAlertAt = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -61577,6 +61620,7 @@ class GaiaSettingsTableCompanion
     Expression<bool>? autoAcceptCurator,
     Expression<bool>? splitGaiaRight,
     Expression<String>? userName,
+    Expression<int>? memoryAlertAt,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -61606,6 +61650,7 @@ class GaiaSettingsTableCompanion
       if (autoAcceptCurator != null) 'auto_accept_curator': autoAcceptCurator,
       if (splitGaiaRight != null) 'split_gaia_right': splitGaiaRight,
       if (userName != null) 'user_name': userName,
+      if (memoryAlertAt != null) 'memory_alert_at': memoryAlertAt,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -61635,6 +61680,7 @@ class GaiaSettingsTableCompanion
     Value<bool>? autoAcceptCurator,
     Value<bool>? splitGaiaRight,
     Value<String>? userName,
+    Value<int>? memoryAlertAt,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -61663,6 +61709,7 @@ class GaiaSettingsTableCompanion
       autoAcceptCurator: autoAcceptCurator ?? this.autoAcceptCurator,
       splitGaiaRight: splitGaiaRight ?? this.splitGaiaRight,
       userName: userName ?? this.userName,
+      memoryAlertAt: memoryAlertAt ?? this.memoryAlertAt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -61738,6 +61785,9 @@ class GaiaSettingsTableCompanion
     if (userName.present) {
       map['user_name'] = Variable<String>(userName.value);
     }
+    if (memoryAlertAt.present) {
+      map['memory_alert_at'] = Variable<int>(memoryAlertAt.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -61779,6 +61829,7 @@ class GaiaSettingsTableCompanion
           ..write('autoAcceptCurator: $autoAcceptCurator, ')
           ..write('splitGaiaRight: $splitGaiaRight, ')
           ..write('userName: $userName, ')
+          ..write('memoryAlertAt: $memoryAlertAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -95437,6 +95488,7 @@ typedef $$GaiaSettingsTableTableCreateCompanionBuilder =
       Value<bool> autoAcceptCurator,
       Value<bool> splitGaiaRight,
       Value<String> userName,
+      Value<int> memoryAlertAt,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -95465,6 +95517,7 @@ typedef $$GaiaSettingsTableTableUpdateCompanionBuilder =
       Value<bool> autoAcceptCurator,
       Value<bool> splitGaiaRight,
       Value<String> userName,
+      Value<int> memoryAlertAt,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -95578,6 +95631,11 @@ class $$GaiaSettingsTableTableFilterComposer
 
   ColumnFilters<String> get userName => $composableBuilder(
     column: $table.userName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get memoryAlertAt => $composableBuilder(
+    column: $table.memoryAlertAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -95711,6 +95769,11 @@ class $$GaiaSettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get memoryAlertAt => $composableBuilder(
+    column: $table.memoryAlertAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -95829,6 +95892,11 @@ class $$GaiaSettingsTableTableAnnotationComposer
   GeneratedColumn<String> get userName =>
       $composableBuilder(column: $table.userName, builder: (column) => column);
 
+  GeneratedColumn<int> get memoryAlertAt => $composableBuilder(
+    column: $table.memoryAlertAt,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -95902,6 +95970,7 @@ class $$GaiaSettingsTableTableTableManager
                 Value<bool> autoAcceptCurator = const Value.absent(),
                 Value<bool> splitGaiaRight = const Value.absent(),
                 Value<String> userName = const Value.absent(),
+                Value<int> memoryAlertAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -95928,6 +95997,7 @@ class $$GaiaSettingsTableTableTableManager
                 autoAcceptCurator: autoAcceptCurator,
                 splitGaiaRight: splitGaiaRight,
                 userName: userName,
+                memoryAlertAt: memoryAlertAt,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -95956,6 +96026,7 @@ class $$GaiaSettingsTableTableTableManager
                 Value<bool> autoAcceptCurator = const Value.absent(),
                 Value<bool> splitGaiaRight = const Value.absent(),
                 Value<String> userName = const Value.absent(),
+                Value<int> memoryAlertAt = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -95982,6 +96053,7 @@ class $$GaiaSettingsTableTableTableManager
                 autoAcceptCurator: autoAcceptCurator,
                 splitGaiaRight: splitGaiaRight,
                 userName: userName,
+                memoryAlertAt: memoryAlertAt,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,

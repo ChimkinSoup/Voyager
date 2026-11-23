@@ -1,6 +1,6 @@
 # Gaia — Settings Panel and Memory Review (HLD)
 
-Status: **Design (2026-11-20), open questions decided (§11). Phase 1 built and checked live 2026-11-22 (§10.1); Phases 2-7 not built.** Moves the Gaia page's management tabs
+Status: **Design (2026-11-20), open questions decided (§11). Phases 1 and 2 built and checked live 2026-11-22 (§10.1, §10.2); Phases 3-7 not built.** Moves the Gaia page's management tabs
 (GAIA_HLD.md §17) into the companion, in Gaia's own look, so everything Gaia needs is
 reachable from the Gaia window. The Memories tab is redesigned rather than ported, and
 gains a new card-by-card review with an "Ask Gaia" chat about the memory in front of you.
@@ -466,6 +466,99 @@ first left out:
 **Not checked live:**
 - **The phone.** The second desktop stood in for "another device"; the Android Gaia
   page wasn't opened.
+
+### 10.2 Phase 2 as built (2026-11-22)
+
+**Built:** `companion/settings/gaia_setup_tab.dart` and `gaia_settings_tab.dart`;
+shared panel pieces in `gaia_settings_panel.dart` (`GaiaPanelNote`, `GaiaPanelSwitch`,
+`GaiaPanelField` over `GaiaTextField`, `GaiaPanelChoice`). `GaiaSettings.memoryAlertAt`
+(default 100, schema 203, synced), the host's `inbox` event and `hello.inbox`, the
+header's `_InboxChip` in `gaia_app.dart`. New requests: `putSettings {changes}` and
+`voyagerHotkeys`. The reserved command names and the name check moved to
+`gaia_commands.dart` (`kGaiaReservedCommandNames`, `gaiaCommandNameError`); the page
+uses the former.
+
+**Where it differs from the design above:**
+- **`putSettings` takes only the changed fields** (`GaiaSettings.patched`), applied by
+  the host to what's stored, not a whole `GaiaSettings` from the companion (§3.4). The
+  companion only has `toJson`'s share, so a whole copy would have reset what it never
+  sees (`lastTier`, `currentAccounts`, the timestamps), and a panel save can't undo a
+  field changed meanwhile on the page. `toJson` now also carries `splitGaiaRight` and
+  `memoryAlertAt`.
+- **Hotkey clashes with Voyager's own hotkeys** are asked of the main instance
+  (`voyagerHotkeys`, from `attach`'s new `voyagerHotkeys:`), since the companion can't
+  read Voyager's settings. The rest of the key editor is the page's: same clash rules,
+  the capture overlay drawn as a `gaiaFloating` card.
+- **Every text saves on its own** with its own Save (Enter in a one-line box): the
+  utility model and the router rubric no longer save together.
+- **No dropdowns:** a tier's agent is picked from a `GaiaMenu` on its row; the default
+  tier, a new agent's CLI, model and effort are pills (`GaiaPanelChoice`). Add agent and
+  each command open an editor in place of the row (§4).
+- **Section order** is §4's list, not the page's.
+- **Setup** checks run when the tab shows, on Check again, and for an account that
+  appears while it shows (found missing live, fixed). The login checks are the page's
+  probes (`probeClaudeCode`, `probeCodex`) behind `GaiaController.checkAccount`. Usage
+  bars are `gaiaUsageBars` as on the page, not restyled.
+- **The inbox chip isn't clickable yet** (Phase 4, §5.5).
+
+**Tests:** `test/gaia_settings_tabs_test.dart` (12: a switch, a text with Save and
+Enter and a change from elsewhere kept off an unsaved edit, the tier menu, add and
+remove an agent with pill widths, command name checks and edit, key capture with Gaia
+and Voyager clashes and the no-modifier refusal and reset, the alert's number field;
+Setup's checks and Check again, not logged in, add/rename/alias an account with its
+login checked as it appears; the chip at, above and below the threshold, over the
+panel and in a floater, and "1 memory"). Host tests for `putSettings` (only the sent
+fields; at least 1), `voyagerHotkeys` and the `inbox` count (hello, change, not on
+other changes); a 202→203 migration test; a sync mapper test for `memoryAlertAt`.
+All 1,997 `test/gaia_*_test.dart` and the mapper tests pass.
+
+**Checked live** on `gaiaqa` (qa-128), from the scratch copy of the Debug build with
+this tree's bundle, real main instance and companion, all input in background mode:
+- **Every setting saved from the panel** was read back from the main instance's
+  database and showed on the Gaia page's Settings tab: notify, name (Enter), GAIA.md,
+  window context, Never read (a new line), each tier's agent from its menu, a new Codex
+  agent with model and effort, the utility model, the router switch, the default tier,
+  the rubric, a command, the Settings panel key and the split switch. Setup's new
+  account and its alias showed on the page's Setup tab.
+- **Taking effect:** the rebound Settings key (Ctrl+Shift+O) toggled the panel at once
+  and Ctrl+, stopped; a new chat started on Deep · Opus 5.5 from the default tier and
+  tier agent; `/expl` offered the new `/explain` in the composer's palette.
+- **Refusals:** `stop` as a command name or alias ("Already a command"); Ctrl+Alt+T
+  for the Gaia window ("already Quick to-do", Voyager's); Ctrl+Alt+S ("Screenshot a
+  region").
+- **Setup:** Claude Code 2.1.330 tested; Codex 0.170.0 untested (amber); real logins
+  with emails, usage bars for both Claude logins, the Codex sandbox row.
+- **The inbox alert:** the profile already had 33 waiting, so the alert was set to 35
+  in the panel rather than the plan's 3 (same edge, without declining 31). Two new
+  proposed memories brought up `35 memories to review` in gold; declining one took it
+  away at 34, and a new one brought it back at 35.
+- **The other way:** settings written by the main instance (the restore afterwards)
+  reached the companion and reloaded the open panel's fields.
+- **Two bugs found live and fixed** (each with a widget test): the choice pills
+  stretched to the editor's full width in a `Wrap`; a newly added account showed its
+  usage but no login line until Check again. The new-account hint was cut off and is
+  now just "New account".
+
+**Not checked live:**
+- **The phone.** The Android Gaia page wasn't opened, so a panel setting showing on the
+  phone (§12) is unchecked; it rides the same settings sync as the page's own edits.
+- **Another desktop** (`qb`) pulling `memoryAlertAt` over Firestore: covered by the
+  mapper test only.
+- **The chip in a live floater:** opening a floater takes the user's focus, so it was
+  left to the widget test (the header is shared).
+- **Hover-only actions** (remove an agent or command, reorder or remove an account):
+  background input can't hover, so these ran in widget tests only. Accounts were
+  removed for the cleanup by the main instance.
+- **Codex's sandbox Set up button** (needs Juno's UAC) and **a global hotkey rebound
+  from the panel firing** (qa registers no hotkeys); the Settings panel key, which is
+  in-app, was the rebound key checked.
+- **Notify, GAIA.md, window context, Never read and the name** were checked as saved
+  and shown on the page; their effect on a run (a toast, the system prompt, the context
+  chip, the greeting) wasn't exercised, as it's the same `settings` event path the page
+  already drives.
+
+Seen, not changed: the Codex usage row says Gaia's usage reader no longer matches
+OpenAI's endpoint (Codex 0.170.0), on the page too.
 
 ## 11. Decisions (2026-11-20)
 

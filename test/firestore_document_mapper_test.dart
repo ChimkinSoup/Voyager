@@ -466,6 +466,27 @@ void main() {
     );
   });
 
+  test("the Gaia inbox alert syncs, and an older build's write keeps the "
+      'local one', () {
+    final local = GaiaSettings.initial().copyWith(memoryAlertAt: 3);
+    final written = gaiaSettingsToFirestore(local);
+    expect(written['memoryAlertAt'], 3);
+    expect(mergeGaiaSettingsFromRemote(written).memoryAlertAt, 3);
+    expect(
+      mergeGaiaSettingsFromRemote(
+        {...written, 'version': local.version + 1}..remove('memoryAlertAt'),
+        local: local,
+      ).memoryAlertAt,
+      3,
+    );
+    expect(
+      mergeGaiaSettingsFromRemote(
+        {...written}..remove('memoryAlertAt'),
+      ).memoryAlertAt,
+      kGaiaDefaultMemoryAlertAt,
+    );
+  });
+
   group('job application seasons', () {
     final now = DateTime.utc(2026, 8, 20);
 

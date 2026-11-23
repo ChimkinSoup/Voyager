@@ -440,21 +440,12 @@ class _GaiaShell extends StatelessWidget {
           },
         // The chat's, so not while it's under the panel.
         if (!panelShown) ...{
-          const SingleActivator(LogicalKeyboardKey.keyN, control: true):
-              controller.newChat,
-          const SingleActivator(
-            LogicalKeyboardKey.keyN,
-            control: true,
-            shift: true,
-          ): controller.moveDraftToNewChat,
+          GaiaFixedKey.newChat.activator: controller.newChat,
+          GaiaFixedKey.draftToNewChat.activator: controller.moveDraftToNewChat,
         },
-        const SingleActivator(LogicalKeyboardKey.keyF, control: true): () =>
+        GaiaFixedKey.search.activator: () =>
             showGaiaSearch(context, controller),
-        const SingleActivator(
-          LogicalKeyboardKey.keyD,
-          control: true,
-          shift: true,
-        ): () =>
+        GaiaFixedKey.debugMenu.activator: () =>
             showGaiaDebugMenu(context, controller),
         if (parseGaiaCombo(
               gaiaComboFor(GaiaKeybind.settings, controller.keybinds),
@@ -892,6 +883,10 @@ class _Header extends StatelessWidget {
                         onRetry: () => unawaited(connectivity.retryNow()),
                       ),
               ),
+            if (controller.inboxCount >= controller.memoryAlertAt) ...[
+              _InboxChip(count: controller.inboxCount),
+              const SizedBox(width: 10),
+            ],
             if (chip != null) ...[
               // A warning, in the status lines' rose, in a context chip's
               // shape.
@@ -958,6 +953,41 @@ class _Header extends StatelessWidget {
             const SizedBox(width: 12),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// The header's inbox alert (GAIA_SETTINGS_HLD.md §5.5): how many memories
+/// wait for a decision, once there are at least the number set. The
+/// untested-CLI chip's shape, in gold rather than rose, as it isn't urgent.
+class _InboxChip extends StatelessWidget {
+  const _InboxChip({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final gold = theme.brightness == Brightness.light
+        ? kGaiaAstralGoldOnLight
+        : kGaiaAstralGold;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: gold.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(GaiaRadius.chip),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.inbox_outlined, size: 12, color: gold),
+          const SizedBox(width: 4),
+          Text(
+            count == 1 ? '1 memory to review' : '$count memories to review',
+            style: theme.textTheme.labelSmall?.copyWith(color: gold),
+          ),
+        ],
       ),
     );
   }
@@ -6103,13 +6133,9 @@ class _ComposerState extends State<_Composer> {
           child: CallbackShortcuts(
             bindings: {
               send.activator: _send,
-              const SingleActivator(LogicalKeyboardKey.keyV, control: true):
-                  _paste,
+              GaiaFixedKey.paste.activator: _paste,
               // Queues the draft for later rather than sending it (§13).
-              const SingleActivator(
-                LogicalKeyboardKey.keyQ,
-                control: true,
-              ): () {
+              GaiaFixedKey.queue.activator: () {
                 final text = _text.text.trim();
                 if (text.isEmpty) return;
                 _text.clear();

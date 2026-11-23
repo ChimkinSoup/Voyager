@@ -5,6 +5,24 @@ import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/features/gaia/adapters/gaia_clis.dart';
 import 'package:voyager/features/gaia/companion/gaia_tier_commands.dart';
 
+/// Names Gaia's own commands take (§9.2), which a user command or an
+/// account's alias can't.
+final kGaiaReservedCommandNames = {
+  for (final builtin in GaiaBuiltin.values) ...builtin.names,
+  for (final tier in GaiaTier.values) tier.command.substring(1),
+};
+
+/// Why [name] can't be a command or alias, or null if it can: an empty one
+/// isn't refused, only not yet a name.
+String? gaiaCommandNameError(String name, Set<String> taken) {
+  if (name.isEmpty) return null;
+  if (!RegExp(r'^[\w-]+$').hasMatch(name)) {
+    return 'Letters, digits, - and _ only';
+  }
+  if (taken.contains(name)) return 'Already a command';
+  return null;
+}
+
 /// Gaia's own commands (GAIA_HLD.md §9.2) that run rather than expand. The
 /// others the HLD lists come with their phases.
 enum GaiaBuiltin {

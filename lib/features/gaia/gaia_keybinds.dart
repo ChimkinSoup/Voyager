@@ -46,6 +46,53 @@ String? gaiaHotkeyClash(String combo, Map<String, String> hotkeys) => hotkeys
     .firstOrNull
     ?.key;
 
+/// Gaia's fixed keys, which a rebindable key inside Gaia (send, settings)
+/// mustn't take. The shortcuts are bound from here.
+enum GaiaFixedKey {
+  newChat('New chat', 'Ctrl+N'),
+  draftToNewChat('Move the draft to a new chat', 'Ctrl+Shift+N'),
+  search('Search', 'Ctrl+F'),
+  debugMenu('Debug menu', 'Ctrl+Shift+D'),
+  paste('Paste', 'Ctrl+V'),
+  queue('Queue the draft', 'Ctrl+Q');
+
+  const GaiaFixedKey(this.label, this.combo);
+
+  final String label;
+  final String combo;
+
+  SingleActivator get activator => _fixedActivator(combo);
+}
+
+/// The settings panel's key for its tab at [index]: Ctrl+1 for the first.
+SingleActivator gaiaPanelTabActivator(int index) =>
+    _fixedActivator(_panelTabCombo(index));
+
+String _panelTabCombo(int index) => 'Ctrl+${index + 1}';
+
+SingleActivator _fixedActivator(String combo) {
+  final parsed = parseGaiaCombo(combo)!;
+  return SingleActivator(
+    parsed.logical,
+    control: parsed.control,
+    shift: parsed.shift,
+    alt: parsed.alt,
+    meta: parsed.meta,
+  );
+}
+
+/// What already holds [combo] of Gaia's fixed keys, the settings panel's
+/// [panelTabs] (their labels, in order) among them; null for none.
+String? gaiaFixedKeyClash(String combo, List<String> panelTabs) =>
+    GaiaFixedKey.values
+        .where((key) => '${parseGaiaCombo(key.combo)}' == combo)
+        .firstOrNull
+        ?.label ??
+    [
+      for (final (i, tab) in panelTabs.indexed)
+        if ('${parseGaiaCombo(_panelTabCombo(i))}' == combo) 'the $tab tab',
+    ].firstOrNull;
+
 /// A parsed combo such as `Ctrl+Alt+Space`.
 class GaiaCombo {
   const GaiaCombo({

@@ -645,22 +645,34 @@ class GaiaChatStore {
   Future<void> restoreChat(String chatId) => _repository.restoreChat(chatId);
 
   /// The account [adapter]'s next messages run on (§6.5).
-  Future<void> setCurrentAccount(String adapter, String account) async {
+  Future<void> setCurrentAccount(String adapter, String account) =>
+      _serial(() async {
+        final settings = await _repository.getSettings();
+        if (settings.currentAccounts[adapter] == account) return;
+        await _repository.upsertSettings(
+          settings.copyWith(
+            currentAccounts: {...settings.currentAccounts, adapter: account},
+          ),
+        );
+      });
+
+  /// The settings panel's save (GAIA_SETTINGS_HLD.md §3.4): [changes] made
+  /// to what's stored now.
+  Future<void> putSettings(Map<String, Object?> changes) => _serial(() async {
     final settings = await _repository.getSettings();
-    if (settings.currentAccounts[adapter] == account) return;
-    await _repository.upsertSettings(
-      settings.copyWith(
-        currentAccounts: {...settings.currentAccounts, adapter: account},
-      ),
-    );
-  }
+    await _repository.upsertSettings(settings.patched(changes));
+  });
+
+  /// Proposed memories waiting in the inbox (GAIA_SETTINGS_HLD.md §5.5).
+  Future<int> inboxCount() async =>
+      gaiaInboxCount(await _repository.listMemories());
 
   /// The tier a new chat starts on (§7.2).
-  Future<void> setLastTier(GaiaTier tier) async {
+  Future<void> setLastTier(GaiaTier tier) => _serial(() async {
     final settings = await _repository.getSettings();
     if (settings.lastTier == tier) return;
     await _repository.upsertSettings(settings.copyWith(lastTier: tier));
-  }
+  });
 
   /// Each chat's draft (§9.3), as this device or another left it. Deleted
   /// ones too: the companion takes one as emptied.

@@ -51,6 +51,21 @@ void main() {
     expect(gaiaHotkeyClash('Ctrl+Alt+G', voyager), isNull);
   });
 
+  test("a clash with Gaia's fixed keys and the panel's tab keys", () {
+    const tabs = ['Memories', 'Actions'];
+    expect(gaiaFixedKeyClash('Ctrl+F', tabs), 'Search');
+    expect(
+      gaiaFixedKeyClash('Ctrl+Shift+N', tabs),
+      'Move the draft to a new chat',
+    );
+    expect(gaiaFixedKeyClash('Ctrl+2', tabs), 'the Actions tab');
+    expect(gaiaFixedKeyClash('Ctrl+3', tabs), isNull);
+    // The in-Gaia defaults are free.
+    for (final keybind in GaiaKeybind.values.where((k) => !k.global)) {
+      expect(gaiaFixedKeyClash(keybind.defaultCombo, tabs), isNull);
+    }
+  });
+
   test('send is Ctrl+Enter, so Enter and Shift+Enter stay newlines', () {
     final send = parseGaiaCombo(GaiaKeybind.send.defaultCombo)!;
     expect(send.activator.trigger, LogicalKeyboardKey.enter);

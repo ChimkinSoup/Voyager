@@ -10188,6 +10188,7 @@ class DriftGaiaRepository implements GaiaRepository {
             autoAcceptCurator: Value(settings.autoAcceptCurator),
             splitGaiaRight: Value(settings.splitGaiaRight),
             userName: Value(settings.userName),
+            memoryAlertAt: Value(settings.memoryAlertAt),
             commandsJson: Value(
               jsonEncode([
                 for (final command in settings.commands) command.toJson(),
@@ -10926,6 +10927,7 @@ GaiaSettings _mapGaiaSettings(GaiaSettingsTableData row) => GaiaSettings(
   autoAcceptCurator: row.autoAcceptCurator,
   splitGaiaRight: row.splitGaiaRight,
   userName: row.userName,
+  memoryAlertAt: row.memoryAlertAt,
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
   version: row.version,

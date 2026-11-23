@@ -4815,6 +4815,7 @@ Map<String, dynamic> gaiaSettingsToFirestore(GaiaSettings settings) => {
   'autoAcceptCurator': settings.autoAcceptCurator,
   'splitGaiaRight': settings.splitGaiaRight,
   'userName': settings.userName,
+  'memoryAlertAt': settings.memoryAlertAt,
   'createdAt': _dateToFirestoreRequired(settings.createdAt),
   'updatedAt': _dateToFirestoreRequired(settings.updatedAt),
   'version': settings.version,
@@ -4883,6 +4884,10 @@ GaiaSettings mergeGaiaSettingsFromRemote(
     splitGaiaRight:
         data['splitGaiaRight'] as bool? ?? local?.splitGaiaRight ?? false,
     userName: data['userName'] as String? ?? local?.userName ?? '',
+    memoryAlertAt:
+        (data['memoryAlertAt'] as num?)?.toInt() ??
+        local?.memoryAlertAt ??
+        kGaiaDefaultMemoryAlertAt,
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??

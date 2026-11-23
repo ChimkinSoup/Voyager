@@ -2629,6 +2629,7 @@ class GaiaSettings extends SoftDeletable {
     this.autoAcceptCurator = false,
     this.splitGaiaRight = false,
     this.userName = '',
+    this.memoryAlertAt = kGaiaDefaultMemoryAlertAt,
   }) : super(id: singletonId);
 
   factory GaiaSettings.initial() {
@@ -2709,6 +2710,10 @@ class GaiaSettings extends SoftDeletable {
   /// for none.
   final String userName;
 
+  /// The inbox count the companion's header chip shows from
+  /// (GAIA_SETTINGS_HLD.md §5.5); at least 1.
+  final int memoryAlertAt;
+
   /// [tier]'s agent; null when the tier has none, or its agent was removed.
   GaiaAgent? agentFor(GaiaTier tier) =>
       agents.where((agent) => agent.id == tiers[tier]).firstOrNull;
@@ -2734,6 +2739,7 @@ class GaiaSettings extends SoftDeletable {
     bool? autoAcceptCurator,
     bool? splitGaiaRight,
     String? userName,
+    int? memoryAlertAt,
   }) => GaiaSettings(
     createdAt: createdAt,
     updatedAt: utcNow(),
@@ -2757,6 +2763,47 @@ class GaiaSettings extends SoftDeletable {
     autoAcceptCurator: autoAcceptCurator ?? this.autoAcceptCurator,
     splitGaiaRight: splitGaiaRight ?? this.splitGaiaRight,
     userName: userName ?? this.userName,
+    memoryAlertAt: memoryAlertAt ?? this.memoryAlertAt,
+  );
+
+  /// These with [changes] made: the settings panel's fields, as [toJson]
+  /// writes them (GAIA_SETTINGS_HLD.md §3.4). A field not in [changes] keeps
+  /// what's stored, so a save from the panel can't undo a change it hadn't
+  /// seen to another field.
+  GaiaSettings patched(Map<String, Object?> changes) => copyWith(
+    gaiaMd: changes['gaiaMd'] as String?,
+    notifyOnDone: changes['notifyOnDone'] as bool?,
+    agents: changes.containsKey('agents')
+        ? gaiaAgentsFromJson(changes['agents'])
+        : null,
+    tiers: changes.containsKey('tiers')
+        ? gaiaTiersFromJson(changes['tiers'])
+        : null,
+    defaultTier: gaiaTierFromName(changes['defaultTier']),
+    clearDefaultTier:
+        changes.containsKey('defaultTier') && changes['defaultTier'] == null,
+    accounts: changes.containsKey('accounts')
+        ? gaiaAccountsFromJson(changes['accounts'])
+        : null,
+    utilityModel: changes['utilityModel'] as String?,
+    autoRoute: changes['autoRoute'] as bool?,
+    routerRubric: changes['routerRubric'] as String?,
+    commands: changes.containsKey('commands')
+        ? gaiaCommandsFromJson(changes['commands'])
+        : null,
+    keybinds: changes.containsKey('keybinds')
+        ? gaiaKeybindsFromJson(changes['keybinds'])
+        : null,
+    windowContext: changes['windowContext'] as bool?,
+    contextExclusions: changes.containsKey('contextExclusions')
+        ? gaiaContextExclusionsFromJson(changes['contextExclusions'])
+        : null,
+    splitGaiaRight: changes['splitGaiaRight'] as bool?,
+    userName: changes['userName'] as String?,
+    memoryAlertAt: switch (changes['memoryAlertAt']) {
+      final num at => max(1, at.toInt()),
+      _ => null,
+    },
   );
 
   /// What the companion needs of them.
@@ -2778,9 +2825,14 @@ class GaiaSettings extends SoftDeletable {
     'windowContext': windowContext,
     'contextExclusions': contextExclusions,
     'autoAcceptCurator': autoAcceptCurator,
+    'splitGaiaRight': splitGaiaRight,
     'userName': userName,
+    'memoryAlertAt': memoryAlertAt,
   };
 }
+
+/// [GaiaSettings.memoryAlertAt] until it's set.
+const kGaiaDefaultMemoryAlertAt = 100;
 
 /// Password managers, which [GaiaSettings.windowContext] never reads.
 const kGaiaDefaultContextExclusions = [
@@ -2799,6 +2851,12 @@ List<String> gaiaContextExclusionsFromJson(Object? json) =>
 /// A memory's place (§11): waiting in the inbox, in every new chat's index,
 /// or kept out of it.
 enum GaiaMemoryStatus { proposed, active, archived }
+
+/// How many of [memories] wait in the inbox for a decision
+/// (GAIA_SETTINGS_HLD.md §5.5).
+int gaiaInboxCount(Iterable<GaiaMemory> memories) => memories
+    .where((memory) => memory.status == GaiaMemoryStatus.proposed)
+    .length;
 
 /// One short, self-contained fact Gaia keeps about the user (GAIA_HLD.md
 /// §11), shared by every agent.

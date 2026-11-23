@@ -7,8 +7,12 @@ import 'package:flutter/services.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_style.dart';
+import 'package:voyager/features/gaia/companion/gaia_text_field.dart';
 import 'package:voyager/features/gaia/companion/settings/gaia_actions_tab.dart';
 import 'package:voyager/features/gaia/companion/settings/gaia_queue_tab.dart';
+import 'package:voyager/features/gaia/companion/settings/gaia_settings_tab.dart';
+import 'package:voyager/features/gaia/companion/settings/gaia_setup_tab.dart';
+import 'package:voyager/features/gaia/gaia_keybinds.dart';
 
 /// The settings panel's tabs (GAIA_SETTINGS_HLD.md §1), in the strip's order.
 enum GaiaPanelTab {
@@ -96,11 +100,7 @@ class GaiaSettingsPanelView extends StatelessWidget {
           }
         },
         for (final (i, tab) in GaiaPanelTab.values.indexed)
-          SingleActivator(
-            LogicalKeyboardKey(LogicalKeyboardKey.digit1.keyId + i),
-            control: true,
-          ): () =>
-              controller.showPanelTab(tab),
+          gaiaPanelTabActivator(i): () => controller.showPanelTab(tab),
       },
       child: FocusScope(
         autofocus: true,
@@ -119,6 +119,10 @@ class GaiaSettingsPanelView extends StatelessWidget {
                       controller: controller,
                     ),
                     GaiaPanelTab.queue => GaiaQueueTab(controller: controller),
+                    GaiaPanelTab.setup => GaiaSetupTab(controller: controller),
+                    GaiaPanelTab.settings => GaiaSettingsTab(
+                      controller: controller,
+                    ),
                     _ => const _NotYet(),
                   },
                 ),
@@ -309,5 +313,176 @@ class GaiaPanelHeading extends StatelessWidget {
         ],
       ),
     ),
+  );
+}
+
+/// What a section is for, muted, under its heading.
+class GaiaPanelNote extends StatelessWidget {
+  const GaiaPanelNote(this.text, {super.key});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+    child: Text(
+      text,
+      style: GaiaType.row.copyWith(
+        color: GaiaInk.muted,
+        fontWeight: FontWeight.w400,
+      ),
+    ),
+  );
+}
+
+/// A setting that's on or off, as a Gaia row: its [title] and what it does,
+/// the switch at the right. A click anywhere on the row flips it.
+class GaiaPanelSwitch extends StatefulWidget {
+  const GaiaPanelSwitch({
+    super.key,
+    required this.title,
+    required this.value,
+    required this.onChanged,
+    this.subtitle,
+  });
+
+  final String title;
+  final String? subtitle;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  State<GaiaPanelSwitch> createState() => _GaiaPanelSwitchState();
+}
+
+class _GaiaPanelSwitchState extends State<GaiaPanelSwitch> {
+  var _hovered = false;
+
+  @override
+  Widget build(BuildContext context) => MouseRegion(
+    cursor: SystemMouseCursors.click,
+    onEnter: (_) => setState(() => _hovered = true),
+    onExit: (_) => setState(() => _hovered = false),
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => widget.onChanged(!widget.value),
+      child: AnimatedContainer(
+        duration: GaiaMotion.quick,
+        padding: const EdgeInsets.fromLTRB(10, 8, 4, 8),
+        decoration: BoxDecoration(
+          color: _hovered ? GaiaInk.hover : GaiaInk.hover.withValues(alpha: 0),
+          borderRadius: BorderRadius.circular(GaiaRadius.row),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.title,
+                    style: GaiaType.row.copyWith(
+                      color: _hovered ? GaiaInk.bright : GaiaInk.dim,
+                    ),
+                  ),
+                  if (widget.subtitle case final subtitle?)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        subtitle,
+                        style: GaiaType.label.copyWith(
+                          color: GaiaInk.muted,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Transform.scale(
+              scale: 0.75,
+              child: Switch(value: widget.value, onChanged: widget.onChanged),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+/// A text box in the panel: [GaiaTextField], with its own focus node.
+/// Enter calls [onSubmitted] in a one-line box (Shift+Enter is a newline in
+/// a taller one, where Enter is too).
+class GaiaPanelField extends StatefulWidget {
+  const GaiaPanelField({
+    super.key,
+    required this.controller,
+    this.hintText,
+    this.minLines,
+    this.maxLines = 1,
+    this.onSubmitted,
+  });
+
+  final TextEditingController controller;
+  final String? hintText;
+  final int? minLines;
+  final int maxLines;
+  final VoidCallback? onSubmitted;
+
+  @override
+  State<GaiaPanelField> createState() => _GaiaPanelFieldState();
+}
+
+class _GaiaPanelFieldState extends State<GaiaPanelField> {
+  late final _focus = FocusNode(
+    debugLabel: 'gaia panel field',
+    onKeyEvent: (node, event) {
+      final submit = widget.onSubmitted;
+      if (submit == null ||
+          widget.maxLines != 1 ||
+          event is! KeyDownEvent ||
+          (event.logicalKey != LogicalKeyboardKey.enter &&
+              event.logicalKey != LogicalKeyboardKey.numpadEnter)) {
+        return KeyEventResult.ignored;
+      }
+      submit();
+      return KeyEventResult.handled;
+    },
+  );
+
+  @override
+  void dispose() {
+    _focus.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => GaiaTextField(
+    controller: widget.controller,
+    focusNode: _focus,
+    hintText: widget.hintText,
+    minLines: widget.minLines,
+    maxLines: widget.maxLines,
+  );
+}
+
+/// One of a few choices, as a pill in the tab strip's look: dim, lit under
+/// the cursor, and the chosen one filled and edged.
+class GaiaPanelChoice extends StatelessWidget {
+  const GaiaPanelChoice({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  // As wide as its label: the tab label's centring fills a Wrap's width.
+  Widget build(BuildContext context) => IntrinsicWidth(
+    child: _TabLabel(label: label, selected: selected, onTap: onTap),
   );
 }

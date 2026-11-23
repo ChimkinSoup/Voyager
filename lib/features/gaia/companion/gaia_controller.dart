@@ -13,6 +13,10 @@ import 'package:uuid/uuid.dart';
 import 'package:voyager/core/sync/connectivity_status.dart';
 import 'package:voyager/core/text/merge_aware_undo.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/features/gaia/adapters/claude_code/claude_code_setup.dart';
+import 'package:voyager/features/gaia/adapters/codex/codex_runner.dart'
+    as codex;
+import 'package:voyager/features/gaia/adapters/codex/codex_setup.dart';
 import 'package:voyager/features/gaia/adapters/gaia_clis.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:flutter/services.dart';
@@ -91,6 +95,15 @@ typedef _Draft = ({
   List<GaiaFilePart> files,
 });
 
+/// An account's login as the Setup tab checks it (GAIA_SETTINGS_HLD.md
+/// §4): logged in or not (null: unreadable), as whom, and for Codex whether
+/// Gaia's home has its Windows sandbox set up (null: not asked).
+typedef GaiaAccountCheck = ({
+  bool? loggedIn,
+  String? email,
+  bool? sandboxReady,
+});
+
 /// A retry under a streaming reply, and when its attempt is due; null when
 /// the backend didn't say.
 typedef GaiaRetry = ({GaiaRetrying retry, DateTime? due});
@@ -104,6 +117,7 @@ class GaiaController extends ChangeNotifier {
     required this._window,
     required this._runners,
     Map<String, Future<GaiaCliVersion?> Function()>? cliVersions,
+    Future<GaiaAccountCheck> Function(GaiaAccount account)? checkAccount,
     this._exit = exit,
     GaiaDebug? debug,
     GaiaSidebar? sidebar,
@@ -123,7 +137,8 @@ class GaiaController extends ChangeNotifier {
     @visibleForTesting this._runWorkedFor = const Duration(hours: 1),
     @visibleForTesting this._cardHold = kGaiaCardHold,
     @visibleForTesting this._curateAfter = kGaiaCurateAfter,
-  }) : _clipboard = clipboard ?? _readClipboard,
+  }) : _checkAccount = checkAccount ?? _probeAccount,
+       _clipboard = clipboard ?? _readClipboard,
        _copyPng = copyPng ?? _writeClipboardPng,
        _draftDirectory = draftDirectory ?? Directory.systemTemp.path,
        _cliVersions =
@@ -2037,6 +2052,7 @@ class GaiaController extends ChangeNotifier {
     if (hello['tokens'] case final List rows) {
       tokens.value = _tokenRows(rows);
     }
+    inboxCount = hello['inbox'] as int? ?? 0;
     await _applySettings((hello['settings']! as Map).cast<String, Object?>());
     if (_usageSources.isNotEmpty) {
       _usageTimer ??= Timer.periodic(_usageEvery, (_) {
@@ -2073,7 +2089,87 @@ class GaiaController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Each account's login by [GaiaAccount.key], as the Setup tab last
+  /// checked it; absent until its check is back.
+  final accountChecks = <String, GaiaAccountCheck>{};
+
+  /// Whether the Setup tab's checks are running.
+  var checkingSetup = false;
+  final Future<GaiaAccountCheck> Function(GaiaAccount account) _checkAccount;
+
+  static Future<GaiaAccountCheck> _probeAccount(GaiaAccount account) async {
+    if (account.adapter == kGaiaCodexAdapter) {
+      final setup = await probeCodex(account);
+      return (
+        loggedIn: setup.loggedIn,
+        email: null,
+        sandboxReady: setup.sandboxReady,
+      );
+    }
+    final setup = await probeClaudeCode(configDir: account.dir);
+    return (loggedIn: setup.loggedIn, email: setup.email, sandboxReady: null);
+  }
+
+  /// The Setup tab's checks (GAIA_SETTINGS_HLD.md §4), run here since the
+  /// companion runs the CLIs: each CLI's version, then each account's
+  /// login. A login found where the last usage read was signed out reads
+  /// the usage again, which would otherwise stand until the next read.
+  Future<void> checkSetup() async {
+    if (checkingSetup) return;
+    checkingSetup = true;
+    notifyListeners();
+    try {
+      await _checkCli();
+      await _checkAccounts((_) => true);
+      // Accounts added while that ran, which _applySettings left to it.
+      await _checkAccounts(
+        (account) => !accountChecks.containsKey(account.key),
+      );
+    } finally {
+      checkingSetup = false;
+      notifyListeners();
+    }
+  }
+
+  /// The logins of every installed CLI's accounts that [which] picks.
+  Future<void> _checkAccounts(bool Function(GaiaAccount account) which) =>
+      Future.wait([
+        for (final adapter in _cliVersions.keys)
+          if (cliVersions[adapter] != null)
+            for (final account in accountsFor(adapter))
+              if (which(account))
+                _checkAccount(account).then((check) {
+                  accountChecks[account.key] = check;
+                  notifyListeners();
+                  if (check.loggedIn == true &&
+                      usageHealth[account.key] == GaiaUsageHealth.signedOut) {
+                    unawaited(_readUsage(account));
+                  }
+                }),
+      ]);
+
+  /// Sets up Codex's Windows sandbox for [account]'s home in Gaia, which
+  /// Windows asks the user to approve, then checks it again.
+  Future<void> setUpCodexSandbox(GaiaAccount account) async {
+    if (!settingUpSandbox.add(account.key)) return;
+    notifyListeners();
+    try {
+      await codex.setUpCodexSandbox(
+        codexHome: p.join(await codex.gaiaCodexHomesRoot(), account.id),
+        loginHome: codex.codexLoginHome(account),
+      );
+      accountChecks[account.key] = await _checkAccount(account);
+    } finally {
+      settingUpSandbox.remove(account.key);
+      notifyListeners();
+    }
+  }
+
+  /// Accounts whose sandbox [setUpCodexSandbox] is setting up now.
+  final settingUpSandbox = <String>{};
+
   Future<void> _applySettings(Map<String, Object?> settings) async {
+    this.settings = settings;
     _notifyOnDone = settings['notifyOnDone'] != false;
     _utility?.apply(settings);
     agents = gaiaAgentsFromJson(settings['agents']);
@@ -2104,9 +2200,17 @@ class GaiaController extends ChangeNotifier {
       _runAuth.remove(key);
       _runWorkedAt.remove(key);
       _limitHits.remove(key);
+      accountChecks.remove(key);
     }
     _usageDirs = dirs;
     _settingsApplied = true;
+    // An account added, or moved to another folder, while the Setup tab
+    // shows: its login is checked as it appears.
+    if (panel.open && panel.tab == GaiaPanelTab.setup && !checkingSetup) {
+      unawaited(
+        _checkAccounts((account) => !accountChecks.containsKey(account.key)),
+      );
+    }
     notifyListeners();
     _readMissingUsage();
     for (final MapEntry(key: adapter, value: runner) in _runners.entries) {
@@ -2123,6 +2227,37 @@ class GaiaController extends ChangeNotifier {
         runner.setInstructions(instructions),
     ]);
   }
+
+  /// The synced settings as the main instance last sent them
+  /// (`GaiaSettings.toJson`), for the settings panel's Settings tab.
+  var settings = const <String, Object?>{};
+
+  /// The settings panel's save (GAIA_SETTINGS_HLD.md §3.4): [changes], in
+  /// `GaiaSettings.toJson`'s shape, made to what the main instance has
+  /// stored. They come back as the `settings` event. Throws a
+  /// [GaiaPipeException] when it couldn't save.
+  Future<void> putSettings(Map<String, Object?> changes) =>
+      _pipe.request('putSettings', {'changes': changes});
+
+  /// Voyager's own hotkeys by name, which a Gaia hotkey can't take.
+  Future<Map<String, String>> voyagerHotkeys() async {
+    try {
+      return gaiaKeybindsFromJson(await _pipe.request('voyagerHotkeys'));
+    } on GaiaPipeException catch (error) {
+      debugPrint('[gaia] Voyager hotkeys not read: $error');
+      return const {};
+    }
+  }
+
+  /// Proposed memories waiting in the inbox, as the main instance counts
+  /// them (GAIA_SETTINGS_HLD.md §5.5).
+  var inboxCount = 0;
+
+  /// The inbox count the header's chip shows from.
+  int get memoryAlertAt => max(
+    1,
+    (settings['memoryAlertAt'] as num?)?.toInt() ?? kGaiaDefaultMemoryAlertAt,
+  );
 
   /// Every adapter's stored accounts; read through [accountsFor].
   var accounts = const <GaiaAccount>[];
@@ -2695,6 +2830,9 @@ class GaiaController extends ChangeNotifier {
         textSettings.value = GaiaTextSettings.fromJson(params);
       case 'settings':
         unawaited(_applySettings(params));
+      case 'inbox':
+        inboxCount = params['count']! as int;
+        notifyListeners();
       case 'changed':
         unawaited(_refresh().then((_) => _drainIdle()));
         // The tab in view asks again; one out of view does when it shows
@@ -3040,7 +3178,8 @@ class GaiaController extends ChangeNotifier {
 
   /// What the panel's tab in view shows, fetched as it shows
   /// (GAIA_SETTINGS_HLD.md §3.1). The Queue tab's is [queue], which the
-  /// `queue` event keeps fresh already.
+  /// `queue` event keeps fresh already, and the Settings tab's is
+  /// [settings], which the `settings` event does.
   Future<void> _loadPanelTab() async {
     if (!panel.open) return;
     switch (panel.tab) {
@@ -3048,6 +3187,8 @@ class GaiaController extends ChangeNotifier {
         await _loadActions();
       case GaiaPanelTab.queue:
         await _loadQueue();
+      case GaiaPanelTab.setup:
+        await checkSetup();
       default:
     }
   }
@@ -5349,11 +5490,13 @@ class GaiaController extends ChangeNotifier {
 
   /// The settings panel's Queue tab (GAIA_SETTINGS_HLD.md §4): waiting
   /// prompt [id] rewritten as [text]. The `queue` event brings it back.
+  /// Throws [GaiaPipeException] when it couldn't save.
   Future<void> editQueued(String id, String text) =>
-      _request('queueEdit', {'id': id, 'text': text});
+      _pipe.request('queueEdit', {'id': id, 'text': text});
 
-  /// The Queue tab's delete.
-  Future<void> deleteQueued(String id) => _request('queueDelete', {'id': id});
+  /// The Queue tab's delete. Throws [GaiaPipeException] when it couldn't.
+  Future<void> deleteQueued(String id) =>
+      _pipe.request('queueDelete', {'id': id});
 
   /// The Queue tab's drag: [id] moved to [order] (`GaiaQueueItem.order`).
   Future<void> reorderQueued(String id, double order) async {

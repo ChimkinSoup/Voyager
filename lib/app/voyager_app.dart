@@ -263,6 +263,17 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
     );
     GaiaHost.instance.attach(
       tokens: tokens,
+      voyagerHotkeys: () => switch (ref.read(settingsProvider).valueOrNull) {
+        final voyager? => {
+          'Quick journal entry': voyager.journalHotkey,
+          'Quick to-do': voyager.todoHotkey,
+          'Quick transaction': voyager.financeHotkey,
+          'Scheduled reminder': voyager.reminderHotkey,
+          'Quick note': voyager.noteHotkey,
+          'Quick event': voyager.calendarHotkey,
+        },
+        null => const {},
+      },
       vaultUnlocked: () => ref.read(secureVaultSessionProvider) != null,
       beacon: beacon,
       power: _gaiaPower,
