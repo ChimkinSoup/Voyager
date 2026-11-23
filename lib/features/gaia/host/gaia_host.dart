@@ -1073,6 +1073,7 @@ class GaiaHost {
     _osControl.stop('Gaia went away.');
     _osControl.endTurn();
     _cropping = false;
+    _watchStatus(false);
     runs.value = const [];
     usage.value = const {};
     // Its runs died with it: the phone stops showing them and their leases
@@ -1998,6 +1999,31 @@ class GaiaHost {
       case 'rearm':
         await _rearm();
         return null;
+      case 'watchStatus':
+        final on = params['on'] == true;
+        _watchStatus(on);
+        return on ? _statusJson() : null;
+      case 'pairDevice':
+        final device = _device(params);
+        if (_beacon!.refuses(device)) {
+          throw GaiaPipeException(
+            "This desktop turned down that device's key. Remove the request, "
+            'and pair again from the device.',
+          );
+        }
+        await _beacon!.trustDevice(device);
+        return null;
+      case 'revokeDevice':
+        await _beacon?.revokeDevice(_device(params));
+        return null;
+      case 'forgetDevice':
+        await _beacon?.forgetDevice(_device(params));
+        return null;
+      case 'setBeaconMode':
+        await (_power ??
+                (throw GaiaPipeException('This desktop has no beacon mode.')))
+            .setBeaconMode(params['on'] == true);
+        return null;
       case 'takeLease':
         return {
           'heldBy': await _beacon?.takeLease(params['chatId']! as String),
@@ -2237,6 +2263,72 @@ class GaiaHost {
     on: _power?.beaconMode.value ?? false,
     onBattery: _power?.onBattery ?? false,
   );
+
+  /// Whether the companion's Status tab shows (GAIA_SETTINGS_HLD.md §3.3).
+  /// While it does, each change to the beacon service's beacons and devices,
+  /// and to this desktop's beacon mode, goes to it as `status`. The service
+  /// listens to Firestore for itself, for trust and revokes, so watching
+  /// opens no listener of its own: it only follows the service's.
+  @visibleForTesting
+  bool get statusWatched => _statusWatched;
+  var _statusWatched = false;
+
+  void _watchStatus(bool on) {
+    if (on == _statusWatched) return;
+    _statusWatched = on;
+    for (final listenable in <Listenable>[
+      ?_beacon?.beacons,
+      ?_beacon?.devices,
+      ?_power?.beaconMode,
+    ]) {
+      on
+          ? listenable.addListener(_sendStatus)
+          : listenable.removeListener(_sendStatus);
+    }
+  }
+
+  void _sendStatus() {
+    if (_pipe.connected) _pipe.notify('status', _statusJson());
+  }
+
+  /// The Status tab's content (`GaiaStatus`).
+  Map<String, Object?> _statusJson() {
+    final beacon = _beacon;
+    return GaiaStatus(
+      signedIn: beacon?.signedIn ?? false,
+      thisDevice: beacon?.deviceId,
+      beacons: beacon?.beacons.value ?? const [],
+      devices: [
+        for (final device in beacon?.devices.value ?? const <GaiaDevice>[])
+          (
+            device: device,
+            trusted: beacon!.trusts(device),
+            refused: beacon.refuses(device),
+          ),
+      ],
+      beaconMode: _power?.beaconMode.value,
+    ).toJson();
+  }
+
+  /// The device the Status tab acted on, as the service has it now. With
+  /// [publicKey], only while it still asks with that key: a pairing code the
+  /// user checked is for that key, not one a new request brought meanwhile.
+  GaiaDevice _device(Map<String, Object?> params) {
+    final beacon =
+        _beacon ?? (throw GaiaPipeException('Sign in to Voyager first.'));
+    final device =
+        beacon.devices.value
+            .where((d) => d.deviceId == params['deviceId'])
+            .firstOrNull ??
+        (throw GaiaPipeException('That device is gone.'));
+    if (params['publicKey'] case final String key
+        when key != device.publicKey) {
+      throw GaiaPipeException(
+        'That device asked again with a new code. Check it again.',
+      );
+    }
+    return device;
+  }
 
   /// Launches the companion if it's down, and waits until it's connected.
   Future<void> _companionUp() async {

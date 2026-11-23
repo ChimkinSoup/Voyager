@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
+import 'package:intl/intl.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 
 /// How often a beacon says it's up, and how long without one counts as
@@ -250,6 +251,21 @@ class GaiaBeacon {
 
   bool isRunning(String chatId) => runs.any((run) => run.chatId == chatId);
 
+  /// [fromFirestore]'s shape, for the pipe to the companion.
+  Map<String, Object?> toJson() => {
+    'name': name,
+    'heartbeatAt': heartbeatAt,
+    'adapters': adapters,
+    'runs': [
+      for (final run in runs) {'chatId': run.chatId, 'title': run.title},
+    ],
+    'aborted': aborted,
+    'beaconMode': beaconMode,
+    'onBattery': onBattery,
+    'livePaused': livePaused,
+    'power': power == null ? null : {'kind': power!.kind, 'at': power!.at},
+  };
+
   static GaiaBeacon fromFirestore(String id, Map<String, Object?> data) =>
       GaiaBeacon(
         deviceId: id,
@@ -307,6 +323,17 @@ class GaiaDevice {
 
   String get code => gaiaPairingCode(publicKey);
 
+  /// [fromFirestore]'s shape, for the pipe to the companion, which has no
+  /// use for the push token.
+  Map<String, Object?> toJson() => {
+    'name': name,
+    'publicKey': publicKey,
+    'platform': platform,
+    'requestedAt': requestedAt,
+    'trustedBy': trustedBy,
+    'revokedAt': revokedAt,
+  };
+
   static GaiaDevice? fromFirestore(String id, Map<String, Object?> data) {
     final key = data['publicKey'];
     if (key is! String || key.isEmpty) return null;
@@ -325,6 +352,68 @@ class GaiaDevice {
       fcmToken: data['fcmToken'] as String?,
     );
   }
+}
+
+/// What the settings panel's Status tab shows (GAIA_SETTINGS_HLD.md §3.3,
+/// §4), as the main instance sends it to the companion: every desktop's
+/// heartbeat, every device that asked to pair with whether this desktop
+/// trusts or refuses its key, and this desktop's beacon mode, null where it
+/// can't have one. [signedIn] is false with no account, and nothing else.
+class GaiaStatus {
+  const GaiaStatus({
+    required this.signedIn,
+    this.thisDevice,
+    this.beacons = const [],
+    this.devices = const [],
+    this.beaconMode,
+  });
+
+  final bool signedIn;
+  final String? thisDevice;
+  final List<GaiaBeacon> beacons;
+  final List<({GaiaDevice device, bool trusted, bool refused})> devices;
+  final bool? beaconMode;
+
+  Map<String, Object?> toJson() => {
+    'signedIn': signedIn,
+    'thisDevice': thisDevice,
+    'beacons': [
+      for (final beacon in beacons)
+        {'deviceId': beacon.deviceId, ...beacon.toJson()},
+    ],
+    'devices': [
+      for (final (:device, :trusted, :refused) in devices)
+        {
+          'deviceId': device.deviceId,
+          ...device.toJson(),
+          'trusted': trusted,
+          'refused': refused,
+        },
+    ],
+    'beaconMode': beaconMode,
+  };
+
+  static GaiaStatus fromJson(Map<Object?, Object?> json) => GaiaStatus(
+    signedIn: json['signedIn'] == true,
+    thisDevice: json['thisDevice'] as String?,
+    beacons: [
+      for (final beacon in (json['beacons'] as List?) ?? const [])
+        if (beacon case {'deviceId': final String id})
+          GaiaBeacon.fromFirestore(id, beacon.cast<String, Object?>()),
+    ],
+    devices: [
+      for (final row in (json['devices'] as List?) ?? const [])
+        if (row case {'deviceId': final String id})
+          if (GaiaDevice.fromFirestore(id, row.cast<String, Object?>())
+              case final device?)
+            (
+              device: device,
+              trusted: row['trusted'] == true,
+              refused: row['refused'] == true,
+            ),
+    ],
+    beaconMode: json['beaconMode'] as bool?,
+  );
 }
 
 /// A watched run's text so far (§8.1), from `gaia_live/{chatId}`.
@@ -389,4 +478,15 @@ GaiaBeacon? gaiaBeaconFor(
     }
   }
   return online.first;
+}
+
+/// "3:15 PM" today, else "Oct 30".
+String gaiaWhen(DateTime at) {
+  final now = DateTime.now();
+  if (at.year == now.year && at.month == now.month && at.day == now.day) {
+    return DateFormat.jm().format(at);
+  }
+  return at.year == now.year
+      ? DateFormat.MMMd().format(at)
+      : DateFormat.yMMMd().format(at);
 }

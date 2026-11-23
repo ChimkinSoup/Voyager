@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io' show Directory, File, pid;
 
+import 'package:cloud_firestore/cloud_firestore.dart' show DocumentReference;
 import 'package:fake_async/fake_async.dart';
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:file/memory.dart';
@@ -25,6 +27,8 @@ import 'package:voyager/features/gaia/host/gaia_selection.dart';
 import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
 import 'package:voyager/features/gaia/remote/gaia_beacon_service.dart';
 import 'package:voyager/features/gaia/remote/gaia_device_keys.dart';
+import 'package:voyager/features/gaia/remote/gaia_power.dart';
+import 'package:voyager/features/gaia/remote/gaia_remote.dart';
 import 'package:voyager/features/gaia/tools/gaia_proposals.dart';
 import 'package:voyager/features/gaia/host/gaia_window_context.dart';
 
@@ -367,6 +371,7 @@ void main() {
     GaiaMemories? memories,
     Future<void> Function(String word)? addWord,
     GaiaBeaconService? beacon,
+    GaiaPower? power,
     bool vaultUnlocked = false,
     Map<String, String> Function()? voyagerHotkeys,
   }) {
@@ -385,6 +390,7 @@ void main() {
         memories: memories,
         addWord: addWord,
         beacon: beacon,
+        power: power,
       );
       async.flushMicrotasks();
       body(async, host);
@@ -656,6 +662,193 @@ void main() {
         host.shutdown();
         async.elapse(const Duration(seconds: 3));
         expect(read(async, 'gaia_beacons/laptop')!['heartbeatAt'], 0);
+      });
+    });
+  });
+
+  group('the Status tab (GAIA_SETTINGS_HLD.md §3.3)', () {
+    late FakeFirebaseFirestore firestore;
+    late GaiaBeaconService beacon;
+    late GaiaPower power;
+    final phoneKey = base64Encode(List.filled(32, 7));
+
+    setUp(() async {
+      final dir = await Directory.systemTemp.createTemp('gaia_host');
+      addTearDown(() => dir.delete(recursive: true));
+      firestore = FakeFirebaseFirestore();
+      beacon = GaiaBeaconService(
+        firestore: firestore,
+        deviceId: 'laptop',
+        name: 'LAPTOP',
+        adapters: const [],
+        trust: GaiaTrustStore(fs.file('trusted.json')),
+        commandLog: await GaiaCommandLog.load(
+          file: File(p.join(dir.path, 'commands.log')),
+        ),
+      );
+      power = GaiaPower(
+        stateFile: () async => fs.file('mode.json'),
+        readLidAc: () async => 1,
+        writeLidAc: (_) async {},
+        onBattery: () => false,
+        dryRun: true,
+      );
+    });
+
+    DocumentReference<Map<String, dynamic>> deviceDoc() =>
+        firestore.doc('users/u/gaia_devices/phone');
+
+    Map<String, dynamic>? read(FakeAsync async) {
+      Map<String, dynamic>? data;
+      deviceDoc().get().then((doc) => data = doc.data());
+      async.flushMicrotasks();
+      return data;
+    }
+
+    void signIn(FakeAsync async) {
+      unawaited(beacon.setUser('u'));
+      async.flushMicrotasks();
+      deviceDoc().set({
+        'name': 'Pixel',
+        'publicKey': phoneKey,
+        'platform': 'android',
+        'requestedAt': 1,
+      });
+      async.flushMicrotasks();
+    }
+
+    int statusEvents() =>
+        companions.last.events.where((e) => e.startsWith('status')).length;
+
+    test('watching answers with the beacons, devices and beacon mode, then '
+        'sends each change, until it stops', () {
+      run(show: true, beacon: beacon, power: power, (async, host) {
+        signIn(async);
+        connect(async);
+        // Nothing is sent before the tab shows.
+        deviceDoc().update({'name': 'Pixel 9'});
+        async.flushMicrotasks();
+        expect(statusEvents(), 0);
+
+        final status = GaiaStatus.fromJson(
+          request(async, 'watchStatus', {'on': true})! as Map,
+        );
+        expect(host.statusWatched, isTrue);
+        expect(status.signedIn, isTrue);
+        expect(status.thisDevice, 'laptop');
+        expect(status.beacons.single.name, 'LAPTOP');
+        expect(status.devices.single.device.name, 'Pixel 9');
+        expect(status.devices.single.trusted, isFalse);
+        expect(status.beaconMode, isFalse);
+
+        deviceDoc().update({'name': 'Pixel 10'});
+        async.flushMicrotasks();
+        expect(statusEvents(), 1);
+        request(async, 'setBeaconMode', {'on': true});
+        async.flushMicrotasks();
+        expect(power.beaconMode.value, isTrue);
+        expect(statusEvents(), greaterThan(1));
+        final sent = statusEvents();
+
+        expect(request(async, 'watchStatus', {'on': false}), isNull);
+        expect(host.statusWatched, isFalse);
+        deviceDoc().update({'name': 'Pixel 11'});
+        request(async, 'setBeaconMode', {'on': false});
+        async.flushMicrotasks();
+        expect(statusEvents(), sent);
+        host.shutdown();
+        async.elapse(const Duration(seconds: 3));
+      });
+    });
+
+    test('a companion that goes stops the watch', () {
+      run(show: true, beacon: beacon, (async, host) {
+        signIn(async);
+        connect(async);
+        request(async, 'watchStatus', {'on': true});
+        companions.last.pipe.disconnect();
+        async.flushMicrotasks();
+        expect(host.statusWatched, isFalse);
+        host.shutdown();
+        async.elapse(const Duration(seconds: 3));
+      });
+    });
+
+    test('signed out, it says so; with no power, no beacon mode', () {
+      run(show: true, beacon: beacon, (async, host) {
+        connect(async);
+        final status = GaiaStatus.fromJson(
+          request(async, 'watchStatus', {'on': true})! as Map,
+        );
+        expect(status.signedIn, isFalse);
+        expect(status.beacons, isEmpty);
+        expect(status.beaconMode, isNull);
+        expect(
+          () => request(async, 'setBeaconMode', {'on': true}),
+          throwsA(isA<GaiaPipeException>()),
+        );
+        host.shutdown();
+        async.elapse(const Duration(seconds: 3));
+      });
+    });
+
+    test('pair, only with the key whose code was checked; revoke; remove', () {
+      run(show: true, beacon: beacon, (async, host) {
+        signIn(async);
+        connect(async);
+        request(async, 'watchStatus', {'on': true});
+        // The device asked again meanwhile, with another key.
+        expect(
+          () => request(async, 'pairDevice', {
+            'deviceId': 'phone',
+            'publicKey': base64Encode(List.filled(32, 8)),
+          }),
+          throwsA(
+            isA<GaiaPipeException>().having(
+              (e) => e.message,
+              'message',
+              contains('new code'),
+            ),
+          ),
+        );
+        expect(read(async)!['trustedBy'], isNull);
+
+        request(async, 'pairDevice', {
+          'deviceId': 'phone',
+          'publicKey': phoneKey,
+        });
+        async.flushMicrotasks();
+        expect((read(async)!['trustedBy'] as Map).keys, ['laptop']);
+        expect(beacon.trusts(beacon.devices.value.single), isTrue);
+        expect(statusEvents(), greaterThan(0));
+
+        request(async, 'revokeDevice', {'deviceId': 'phone'});
+        async.flushMicrotasks();
+        expect(read(async)!['revokedAt'], isNotNull);
+        // Revoked for good: pairing it again is refused.
+        expect(
+          () => request(async, 'pairDevice', {
+            'deviceId': 'phone',
+            'publicKey': phoneKey,
+          }),
+          throwsA(isA<GaiaPipeException>()),
+        );
+
+        request(async, 'forgetDevice', {'deviceId': 'phone'});
+        async.flushMicrotasks();
+        expect(read(async), isNull);
+        expect(
+          () => request(async, 'revokeDevice', {'deviceId': 'phone'}),
+          throwsA(
+            isA<GaiaPipeException>().having(
+              (e) => e.message,
+              'message',
+              'That device is gone.',
+            ),
+          ),
+        );
+        host.shutdown();
+        async.elapse(const Duration(seconds: 3));
       });
     });
   });

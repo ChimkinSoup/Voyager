@@ -12,6 +12,7 @@ import 'package:voyager/features/gaia/companion/settings/gaia_actions_tab.dart';
 import 'package:voyager/features/gaia/companion/settings/gaia_queue_tab.dart';
 import 'package:voyager/features/gaia/companion/settings/gaia_settings_tab.dart';
 import 'package:voyager/features/gaia/companion/settings/gaia_setup_tab.dart';
+import 'package:voyager/features/gaia/companion/settings/gaia_status_tab.dart';
 import 'package:voyager/features/gaia/gaia_keybinds.dart';
 
 /// The settings panel's tabs (GAIA_SETTINGS_HLD.md §1), in the strip's order.
@@ -119,6 +120,9 @@ class GaiaSettingsPanelView extends StatelessWidget {
                       controller: controller,
                     ),
                     GaiaPanelTab.queue => GaiaQueueTab(controller: controller),
+                    GaiaPanelTab.status => GaiaStatusTab(
+                      controller: controller,
+                    ),
                     GaiaPanelTab.setup => GaiaSetupTab(controller: controller),
                     GaiaPanelTab.settings => GaiaSettingsTab(
                       controller: controller,

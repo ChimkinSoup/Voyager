@@ -41,6 +41,7 @@ import 'package:voyager/features/gaia/gaia_pipe.dart';
 import 'package:win32/win32.dart' show AllowSetForegroundWindow;
 import 'package:voyager/features/gaia/gaia_text_settings.dart';
 import 'package:voyager/features/gaia/host/gaia_actions.dart';
+import 'package:voyager/features/gaia/remote/gaia_remote.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 import 'package:voyager/features/gaia/tools/gaia_proposals.dart';
 import 'package:voyager/features/gaia/usage/gaia_stats_model.dart';
@@ -2043,6 +2044,8 @@ class GaiaController extends ChangeNotifier {
     focused.addListener(() {
       if (!focused.value) _sendMeteors();
     });
+    panel.addListener(_syncStatusWatch);
+    onScreen.addListener(_syncStatusWatch);
     _pipe
       ..onEvent = _onEvent
       ..onRequest = _onRequest
@@ -2085,6 +2088,7 @@ class GaiaController extends ChangeNotifier {
     await _loadDrafts();
     unawaited(_loadQueue());
     unawaited(_curateMissed());
+    _syncStatusWatch();
   }
 
   Future<void> _checkCli() async {
@@ -2906,6 +2910,10 @@ class GaiaController extends ChangeNotifier {
       case 'inbox':
         inboxCount = params['count']! as int;
         notifyListeners();
+      case 'status':
+        if (!_watchingStatus) return;
+        status = GaiaStatus.fromJson(params);
+        notifyListeners();
       case 'changed':
         unawaited(_refresh().then((_) => _drainIdle()));
         // The tab in view asks again; one out of view does when it shows
@@ -3308,6 +3316,63 @@ class GaiaController extends ChangeNotifier {
     });
     await _loadActions();
   }
+
+  /// The Status tab's content (GAIA_SETTINGS_HLD.md §4), as the main
+  /// instance last sent it; null until it's first read.
+  GaiaStatus? status;
+
+  /// Whether the main instance sends `status`: only while the Status tab
+  /// shows, open in a window that's on screen (§3.3).
+  var _watchingStatus = false;
+
+  void _syncStatusWatch() {
+    final showing =
+        panel.open &&
+        panel.tab == GaiaPanelTab.status &&
+        onScreen.value &&
+        _pipe.connected;
+    if (showing == _watchingStatus) return;
+    _watchingStatus = showing;
+    // Out of view it goes stale: the tab shows nothing until it's read again.
+    if (!showing) status = null;
+    unawaited(_watchStatus(showing));
+  }
+
+  Future<void> _watchStatus(bool on) async {
+    try {
+      final answer = await _pipe.request('watchStatus', {'on': on});
+      if (answer is Map && _watchingStatus) {
+        status = GaiaStatus.fromJson(answer);
+        notifyListeners();
+      }
+    } on GaiaPipeException catch (error) {
+      debugPrint('[gaia] status not watched: $error');
+      // So the next panel or screen change asks again.
+      if (on) _watchingStatus = false;
+    }
+  }
+
+  /// The Status tab's Pair, once the user has checked [device]'s code. The
+  /// main instance refuses it if the device has asked again since, with a
+  /// new key. These throw a [GaiaPipeException] saying why they couldn't.
+  Future<void> pairDevice(GaiaDevice device) => _pipe.request('pairDevice', {
+    'deviceId': device.deviceId,
+    'publicKey': device.publicKey,
+  });
+
+  Future<void> revokeDevice(GaiaDevice device) =>
+      _pipe.request('revokeDevice', {'deviceId': device.deviceId});
+
+  /// A request turned down, or a revoked device cleared from the list. A
+  /// decline is for the key the user saw, as a Pair is.
+  Future<void> forgetDevice(GaiaDevice device) =>
+      _pipe.request('forgetDevice', {
+        'deviceId': device.deviceId,
+        if (!device.revoked) 'publicKey': device.publicKey,
+      });
+
+  Future<void> setBeaconMode(bool on) =>
+      _pipe.request('setBeaconMode', {'on': on});
 
   /// A notification clicked, or a chat picked on the Gaia page.
   Future<void> openChat(String chatId, {String? btwId}) async {

@@ -1,6 +1,6 @@
 # Gaia — Settings Panel and Memory Review (HLD)
 
-Status: **Design (2026-11-20), open questions decided (§11). Phases 1 and 2 built and checked live 2026-11-22 (§10.1, §10.2); Phases 3-7 not built.** Moves the Gaia page's management tabs
+Status: **Design (2026-11-20), open questions decided (§11). Phases 1 and 2 built and checked live 2026-11-22 (§10.1, §10.2); Phase 3 built and checked live the same day (§10.3); Phases 4-7 not built.** Moves the Gaia page's management tabs
 (GAIA_HLD.md §17) into the companion, in Gaia's own look, so everything Gaia needs is
 reachable from the Gaia window. The Memories tab is redesigned rather than ported, and
 gains a new card-by-card review with an "Ask Gaia" chat about the memory in front of you.
@@ -559,6 +559,76 @@ this tree's bundle, real main instance and companion, all input in background mo
 
 Seen, not changed: the Codex usage row says Gaia's usage reader no longer matches
 OpenAI's endpoint (Codex 0.170.0), on the page too.
+
+### 10.3 Phase 3 as built (2026-11-22)
+
+**Built:** `companion/settings/gaia_status_tab.dart` (Desktops, This desktop's beacon
+mode, Paired devices with Pair, Revoke, Decline/Remove); `GaiaStatus` in
+`remote/gaia_remote.dart`, with `toJson` on `GaiaBeacon` and `GaiaDevice`; `gaiaWhen`
+moved there from `gaia_remote_chat.dart` so the companion can use it. New requests:
+`watchStatus {on}` (answers with the snapshot), `pairDevice {deviceId, publicKey}`,
+`revokeDevice`, `forgetDevice`, `setBeaconMode {on}`. New event: `status`.
+
+**Where it differs from the design above:**
+- **No Firestore listener of its own.** `GaiaBeaconService` already listens to
+  `gaia_beacons` and `gaia_devices` all the time, since it needs them for trust and revokes.
+  So `watchStatus` only adds listeners to the service's `beacons`/`devices` notifiers and to
+  `GaiaPower.beaconMode`. It removes them when the tab stops showing or the companion goes
+  (`GaiaHost.statusWatched`). The companion watches while the panel is open on Status, in a
+  window that's on screen.
+- **No Abort, Rearm or Power on beacon rows.** §3.2's `beaconAbort`/`beaconRearm`/
+  `beaconPower` are dropped. The desktop page doesn't have them either, because only a
+  paired phone can sign those commands.
+- **Pair names the key whose code was checked.** The host refuses it if the device asked
+  again since, with another key ("That device asked again with a new code").
+- Signing out now clears the beacon service's lists, so another account's desktops don't stay.
+- Row actions are always shown, not only on hover.
+
+**Tests:** `test/gaia_status_tab_test.dart` has 5. They cover: watching only while the tab
+shows (tab switch, close, hidden window); rows as on the page, with live updates and late
+events dropped; the Pair dialog, the refusal toast, Revoke/Decline/Remove and beacon mode;
+signed out; and a JSON round trip. `gaia_host_test.dart` has 4 host tests: the watch answers
+and forwards until it's turned off; a lost companion stops it; signed out with no power;
+pair only with the checked key, then revoke and remove. The first full `test/gaia_*_test.dart`
+run had one timer flake, in the new watch test (it ended with a timer pending). It was fixed,
+and the full run is now 2,014 passed, 25 skipped, none failed.
+
+**Checked live** on `gaiaqa` (qa-128), from the `vwt-run` build copy with this tree's bundle,
+all input in background mode:
+- Ctrl+, then Ctrl+4 opened Status: 14 desktops (this one online, "(this desktop)"), the
+  beacon mode switch, and the 3 real device requests, matching what the host held.
+- A pairing request written to Firestore ("QA-P3 Tablet", fake key) appeared at once.
+- Pair showed the code. Re-keying the request while the dialog was open, then "They match",
+  was refused with the toast, and the row's code changed live. Pair again trusted it:
+  `trustedBy` was written, and the row showed "Paired with this desktop" with Revoke.
+- Revoke, then ×: `gaia_revoked` got the key, the device document was deleted, and the
+  host's list went back to 3. A second request ("QA-P3 Reader") paired then revoked showed
+  "Revoked" with only ×, and its document had `revokedAt` and `trustedBy`. × removed it.
+- **The Gaia page side by side** (main window, Status tab): the same desktops in the same
+  order with the same statuses, the same devices (the revoked Reader included), and the
+  same beacon mode.
+- **Beacon mode, both ways:** switched on in the panel, it reached `GaiaPower`, the
+  heartbeat (`beaconMode: true` in Firestore) and the page's switch, and this desktop's row
+  read "Online · Beacon mode". Switched off on the page, the panel's row went back to
+  "Online" without a refetch. The profile is a dev profile, so the lid setting is dry-run.
+- **The countdown row:** a dry-run sleep countdown (`power.startCountdown('sleep')` by
+  eval, only after checking `devProfile`) showed "Online · Sleeping in 29 s", then 25 s,
+  ticking by the second. Cancelling it put the row back to "Online".
+- **Another desktop going online and offline**, with the tab open throughout:
+  - Starting `qb` (also qa-128) turned its row, last seen 2:52 AM, to Online within 25 s.
+  - Killed hard (`stop.ps1`), it stayed Online until the 5-minute heartbeat timeout. Then
+    the tab's 30 s clock showed "Offline · last seen 11:47 PM" with no refetch.
+  - Started again and quit cleanly (the scoped `Voyager.Quit.qb` message), it showed
+    "Offline" within 6 s: the beacon's `heartbeatAt: 0` on the way out.
+- **The watch stopping:** `statusWatched` went false on hiding the window, true on showing
+  it again, false on Esc, true on Ctrl+, (back at Status), and false on Ctrl+2.
+
+Test data: the two fake keys stay in qa-128's `gaia_revoked`, which is harmless. Both
+device documents are gone.
+
+**Not checked live:**
+- **The phone**, as before. Its own pairing UI (`_ThisPhone`) is unchanged and isn't in
+  the panel.
 
 ## 11. Decisions (2026-11-20)
 

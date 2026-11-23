@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:uuid/uuid.dart';
 import 'package:voyager/app/providers.dart';
@@ -931,17 +930,6 @@ class _GaiaPageImageState extends ConsumerState<GaiaPageImage> {
       },
     );
   }
-}
-
-/// "3:15 PM" today, else "Oct 30".
-String gaiaWhen(DateTime at) {
-  final now = DateTime.now();
-  if (at.year == now.year && at.month == now.month && at.day == now.day) {
-    return DateFormat.jm().format(at);
-  }
-  return at.year == now.year
-      ? DateFormat.MMMd().format(at)
-      : DateFormat.yMMMd().format(at);
 }
 
 /// The chat's project before its title (GAIA_PROJECTS_HLD.md §7.4), as on

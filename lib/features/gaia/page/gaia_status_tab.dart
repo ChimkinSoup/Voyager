@@ -9,7 +9,6 @@ import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/features/gaia/host/gaia_host.dart';
 import 'package:voyager/features/gaia/page/gaia_providers.dart';
-import 'package:voyager/features/gaia/page/gaia_remote_chat.dart';
 import 'package:voyager/features/gaia/remote/gaia_device_keys.dart';
 import 'package:voyager/features/gaia/remote/gaia_remote.dart';
 import 'package:voyager/features/gaia/remote/gaia_remote_client.dart';

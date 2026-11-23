@@ -96,6 +96,8 @@ class GaiaBeaconService {
   static const kLiveWriteBudget = 15000;
   bool get livePaused => _writes >= kLiveWriteBudget;
 
+  bool get signedIn => _uid != null;
+
   String get _root => 'users/$_uid';
 
   CollectionReference<Map<String, dynamic>> _collection(String name) =>
@@ -106,6 +108,11 @@ class GaiaBeaconService {
     if (uid == _uid) return;
     await _stop(goingOffline: _uid != null);
     _uid = uid;
+    // The last account's desktops and devices aren't this one's. New lists,
+    // not const, so listeners hear of it even when both were empty: the
+    // host's Status tab reads signedIn then.
+    beacons.value = [];
+    devices.value = [];
     if (uid == null) return;
     _subscriptions
       ..add(
@@ -267,6 +274,7 @@ class GaiaBeaconService {
   // Devices and pairing.
 
   Future<void> _onDevices(QuerySnapshot<Map<String, dynamic>> snapshot) async {
+    final uid = _uid;
     final list = [
       for (final doc in snapshot.docs)
         ?GaiaDevice.fromFirestore(doc.id, doc.data()),
@@ -280,6 +288,8 @@ class GaiaBeaconService {
       }
       await trust.revoke(device.publicKey);
     }
+    // The account changed while it revoked: this list is the last one's.
+    if (uid != _uid) return;
     devices.value = list;
   }
 
