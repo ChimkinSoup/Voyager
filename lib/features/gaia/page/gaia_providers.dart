@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,8 +15,6 @@ import 'package:voyager/features/gaia/adapters/codex/codex_runner.dart';
 import 'package:voyager/features/gaia/adapters/codex/codex_setup.dart';
 import 'package:voyager/features/gaia/host/gaia_actions.dart';
 import 'package:voyager/features/gaia/host/gaia_host.dart';
-import 'package:voyager/features/gaia/host/gaia_memories.dart';
-import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
 import 'package:voyager/features/gaia/remote/gaia_device_keys.dart';
 import 'package:voyager/features/gaia/remote/gaia_remote.dart';
 import 'package:voyager/features/gaia/remote/gaia_remote_client.dart';
@@ -112,104 +109,6 @@ final gaiaRecallHistoryProvider = StreamProvider<List<GaiaRecallRow>>(
 final gaiaMemoryHintsProvider = StreamProvider<List<GaiaMemoryHint>>(
   (ref) => ref.watch(gaiaRepositoryProvider).watchMemoryHints(),
 );
-
-/// Where the utility model would file a batch of memories: the host's, which
-/// asks the companion; tests give their own.
-final gaiaSortMemoriesProvider =
-    Provider<Future<Map<String, GaiaPlacement>> Function(List<GaiaMemory>)>(
-      (ref) => GaiaHost.instance.sortMemories,
-    );
-
-/// The Gaia page's Sort these (GAIA_MEMORY_TOPICS_HLD.md §6): where the
-/// utility model would file each Unsorted memory, by memory id, until
-/// it's accepted or skipped; whether a batch is out; and why the last one
-/// failed. Kept while the page is closed, not across a restart.
-typedef GaiaSortState = ({
-  Map<String, GaiaPlacement> suggested,
-  bool running,
-  String? error,
-});
-
-final gaiaSortProvider = NotifierProvider<GaiaSortNotifier, GaiaSortState>(
-  GaiaSortNotifier.new,
-);
-
-class GaiaSortNotifier extends Notifier<GaiaSortState> {
-  @override
-  GaiaSortState build() {
-    // A memory filed some other way, or deleted, loses its suggestion, so
-    // none is left to show if it's ever Unsorted again.
-    ref.listen(gaiaMemoriesProvider, (_, next) {
-      final memories = next.valueOrNull;
-      if (memories == null || state.suggested.isEmpty) return;
-      final tree = GaiaTopicTree(
-        ref.read(gaiaMemoryTopicsProvider).valueOrNull ?? const [],
-      );
-      final unsorted = {
-        for (final memory in memories)
-          if (!memory.isDeleted &&
-              memory.topicIds.every((id) => tree.path(id).isEmpty))
-            memory.id,
-      };
-      final kept = {
-        for (final MapEntry(:key, :value) in state.suggested.entries)
-          if (unsorted.contains(key)) key: value,
-      };
-      if (kept.length == state.suggested.length) return;
-      state = (suggested: kept, running: state.running, error: state.error);
-    });
-    return (suggested: const {}, running: false, error: null);
-  }
-
-  /// [memories] not already suggested for, sent in batches of
-  /// [kGaiaSortBatch], each batch's suggestions shown as it's answered. A
-  /// failure stops it, saying why.
-  Future<void> sort(List<GaiaMemory> memories) async {
-    if (state.running) return;
-    final left = [
-      for (final memory in memories)
-        if (!state.suggested.containsKey(memory.id)) memory,
-    ];
-    state = (suggested: state.suggested, running: true, error: null);
-    String? error;
-    final ask = ref.read(gaiaSortMemoriesProvider);
-    try {
-      for (var at = 0; at < left.length; at += kGaiaSortBatch) {
-        try {
-          final placed = await ask(
-            left.sublist(at, min(at + kGaiaSortBatch, left.length)),
-          );
-          state = (
-            suggested: {...state.suggested, ...placed},
-            running: true,
-            error: null,
-          );
-        } on GaiaReadException catch (failed) {
-          error = failed.message;
-          break;
-        }
-      }
-    } finally {
-      state = (suggested: state.suggested, running: false, error: error);
-    }
-  }
-
-  /// Memory [id]'s suggestion as [placement]; dropped once it places
-  /// nothing.
-  void change(String id, GaiaPlacement placement) {
-    final suggested = {...state.suggested};
-    if (placement.topicIds.isEmpty && placement.suggested == null) {
-      suggested.remove(id);
-    } else {
-      suggested[id] = placement;
-    }
-    state = (suggested: suggested, running: state.running, error: state.error);
-  }
-
-  /// Memory [id]'s suggestion dropped: skipped, or accepted.
-  void drop(String id) =>
-      change(id, (topicIds: const [], suggested: null, tags: const []));
-}
 
 /// A memory to show on the Gaia page's Memories tab, from a recall chip
 /// (GAIA_MEMORY_TOPICS_HLD.md §4.5); null for none.

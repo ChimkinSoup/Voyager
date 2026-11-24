@@ -981,9 +981,11 @@ tab closes an Ask Gaia chat first, as the tab strip does. The phone's page is un
 **Where it differs from the design above:**
 - **`openPanel` has no `memoryId`** (§3.3). Nothing on the desktop sends one: the recall chip
   opens the panel in the companion itself, and the phone's reveal stays on its own page.
-- **The page's Windows-only code stays, unreachable:** memory and topic drags, F2, Sort these,
-  the Setup tab, run rows, Undo in Actions, and the rest of its `isWindows` branches. Left for a
-  later clean-up pass, so this phase stays small.
+- **The page's Windows-only code was removed in a clean-up after this phase** (2026-11-23):
+  memory and topic drags, the F2 hint, Sort these and its `gaiaSortProvider`, Suggest topics,
+  the Setup tab with `GaiaUsageRow` (and `gaia_usage_row_test.dart`), run rows, Undo in Actions,
+  the Keys and Context sections, and the rest of its `isWindows` branches. The page is the
+  phone's alone. `GaiaHost.sortMemories` and `suggestTopics`, which only the page called, stay.
 - **No inbox count** on the Memories button. The header's inbox chip (§5.5) is the desktop's.
 
 **Tests:** `gaia_page_desktop_test.dart` (new): on Windows, Open in Gaia and a button per tab,

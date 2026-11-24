@@ -6,14 +6,12 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:path/path.dart' as p;
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:uuid/uuid.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
-import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
@@ -23,27 +21,21 @@ import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/core/widgets/voyager_toast.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
-import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
-import 'package:voyager/features/gaia/adapters/codex/codex_events.dart';
-import 'package:voyager/features/gaia/adapters/codex/codex_runner.dart';
 import 'package:voyager/features/gaia/companion/gaia_card_view.dart';
 import 'package:voyager/features/gaia/companion/gaia_commands.dart';
 import 'package:voyager/features/gaia/companion/gaia_settings_panel.dart';
 import 'package:voyager/features/gaia/companion/gaia_spinner.dart';
-import 'package:voyager/features/gaia/gaia_keybinds.dart';
 import 'package:voyager/features/gaia/host/gaia_chat_store.dart';
 import 'package:voyager/features/gaia/host/gaia_host.dart';
 import 'package:voyager/features/gaia/host/gaia_memories.dart';
 import 'package:voyager/features/gaia/host/gaia_voyager_reads.dart';
 import 'package:voyager/features/gaia/page/gaia_providers.dart';
-import 'package:voyager/features/gaia/usage/gaia_usage.dart';
-import 'package:voyager/features/gaia/usage/gaia_usage_bar.dart';
 import 'package:voyager/features/gaia/page/gaia_remote_chat.dart';
 import 'package:voyager/features/gaia/page/gaia_queue_tab.dart';
 import 'package:voyager/features/gaia/page/gaia_status_tab.dart';
 import 'package:voyager/features/gaia/tools/gaia_proposals.dart';
 
-enum _GaiaTab { chats, actions, memories, queue, status, setup, settings }
+enum _GaiaTab { chats, actions, memories, queue, status, settings }
 
 /// The Gaia page (GAIA_HLD.md §17): chats with search, the action log,
 /// memories and their inbox, desktops and paired devices, the setup
@@ -104,20 +96,7 @@ class _GaiaPageState extends ConsumerState<GaiaPage> {
           return ListView(
             padding: EdgeInsets.fromLTRB(side, 20, side, 24),
             children: [
-              Row(
-                children: [
-                  Text('Gaia', style: theme.textTheme.headlineSmall),
-                  const Spacer(),
-                  if (isWindows)
-                    GlassButton(
-                      onPressed: () =>
-                          GaiaHost.instance.onHotkey(GaiaHotkey.window),
-                      icon: const Icon(PhosphorIconsRegular.planet, size: 13),
-                      label: 'Open Gaia',
-                      dense: true,
-                    ),
-                ],
-              ),
+              Text('Gaia', style: theme.textTheme.headlineSmall),
               const SizedBox(height: 12),
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
@@ -156,13 +135,6 @@ class _GaiaPageState extends ConsumerState<GaiaPage> {
                       icon: Icon(PhosphorIconsRegular.broadcast, size: 15),
                       label: Text('Status'),
                     ),
-                    // The CLIs run on the desktop only.
-                    if (isWindows)
-                      const ButtonSegment(
-                        value: _GaiaTab.setup,
-                        icon: Icon(PhosphorIconsRegular.wrench, size: 15),
-                        label: Text('Setup'),
-                      ),
                     const ButtonSegment(
                       value: _GaiaTab.settings,
                       icon: Icon(PhosphorIconsRegular.gear, size: 15),
@@ -180,7 +152,6 @@ class _GaiaPageState extends ConsumerState<GaiaPage> {
                 _GaiaTab.memories => _MemoriesTab(focus: _revealed),
                 _GaiaTab.queue => const GaiaQueueTab(),
                 _GaiaTab.status => const GaiaStatusTab(),
-                _GaiaTab.setup => const _SetupTab(),
                 _GaiaTab.settings => const _SettingsTab(),
               },
             ],
@@ -283,7 +254,6 @@ class _ChatsTabState extends ConsumerState<_ChatsTab> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final chats = ref.watch(gaiaChatsProvider).valueOrNull ?? const [];
-    final runs = isWindows ? ref.watch(gaiaRunsProvider) : const <GaiaRun>[];
     final running = ref.watch(gaiaRunningChatsProvider);
     // A new fork shows its group again (GAIA_FORKING_HLD.md §7).
     final forks = {
@@ -350,29 +320,6 @@ class _ChatsTabState extends ConsumerState<_ChatsTab> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (runs.isNotEmpty) ...[
-          _SectionLabel(
-            runs.length == 1 ? 'In progress' : 'In progress (${runs.length})',
-          ),
-          for (final run in runs)
-            ListTile(
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-              leading: const GaiaSpinner(size: 20, label: 'Running'),
-              title: Text(
-                run.title.isEmpty ? 'New chat' : run.title,
-                overflow: TextOverflow.ellipsis,
-              ),
-              trailing: GlassButton(
-                onPressed: () => GaiaHost.instance.stop(run.chatId),
-                icon: const Icon(PhosphorIconsRegular.stop, size: 13),
-                label: 'Stop',
-                dense: true,
-              ),
-              onTap: () => GaiaHost.instance.openChat(run.chatId),
-            ),
-          const SizedBox(height: 16),
-        ],
         Row(
           children: [
             Expanded(
@@ -397,20 +344,17 @@ class _ChatsTabState extends ConsumerState<_ChatsTab> {
               onPressed: () => _newProject(context),
             ),
             // On the phone a chat starts here and runs on a desktop.
-            if (!isWindows) ...[
-              const SizedBox(width: 8),
-              GlassButton(
-                dense: true,
-                label: 'New chat',
-                icon: const Icon(PhosphorIconsRegular.plus, size: 13),
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) =>
-                        GaiaRemoteChatPage(chatId: const Uuid().v4()),
-                  ),
+            const SizedBox(width: 8),
+            GlassButton(
+              dense: true,
+              label: 'New chat',
+              icon: const Icon(PhosphorIconsRegular.plus, size: 13),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => GaiaRemoteChatPage(chatId: const Uuid().v4()),
                 ),
               ),
-            ],
+            ),
           ],
         ),
         const SizedBox(height: 12),
@@ -418,9 +362,7 @@ class _ChatsTabState extends ConsumerState<_ChatsTab> {
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 24),
             child: Text(
-              isWindows
-                  ? 'No chats yet. Open Gaia to start one.'
-                  : 'No chats yet. Start one, and it runs on your desktop.',
+              'No chats yet. Start one, and it runs on your desktop.',
               style: muted,
             ),
           )
@@ -686,18 +628,17 @@ class _ProjectRow extends ConsumerWidget {
         onSelected: (action) => action(),
         itemBuilder: (_) => [
           // On the phone a chat starts here and runs on a desktop.
-          if (!isWindows)
-            PopupMenuItem(
-              value: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => GaiaRemoteChatPage(
-                    chatId: const Uuid().v4(),
-                    projectId: section.project.id,
-                  ),
+          PopupMenuItem(
+            value: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => GaiaRemoteChatPage(
+                  chatId: const Uuid().v4(),
+                  projectId: section.project.id,
                 ),
               ),
-              child: const Text('New chat'),
             ),
+            child: const Text('New chat'),
+          ),
           PopupMenuItem(
             value: () => _rename(context),
             child: const Text('Rename'),
@@ -741,39 +682,16 @@ class _ActionsTab extends ConsumerWidget {
   }
 }
 
-class _ActionRow extends StatefulWidget {
+class _ActionRow extends StatelessWidget {
   const _ActionRow({required this.action});
 
   final GaiaAction action;
 
   @override
-  State<_ActionRow> createState() => _ActionRowState();
-}
-
-class _ActionRowState extends State<_ActionRow> {
-  var _undoing = false;
-
-  Future<void> _undo() async {
-    setState(() => _undoing = true);
-    try {
-      await GaiaHost.instance.undoProposal(
-        widget.action.message,
-        widget.action.card.id,
-      );
-    } on GaiaReadException catch (error) {
-      if (mounted) {
-        showVoyagerToast(context, message: "Couldn't undo: ${error.message}");
-      }
-    } finally {
-      if (mounted) setState(() => _undoing = false);
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final (:chat, :message, :card) = widget.action;
-    // Input can't be taken back, so no Undo (§15.6). The chat has every step.
+    final (:chat, :message, :card) = action;
+    // The chat has every step.
     if (card.kind == GaiaCardKind.control) {
       final steps = card.input['steps'] as List? ?? const [];
       final ran = (card.answer?['ran'] as num?)?.toInt() ?? 0;
@@ -829,14 +747,6 @@ class _ActionRowState extends State<_ActionRow> {
         overflow: TextOverflow.ellipsis,
         style: theme.textTheme.bodySmall,
       ),
-      trailing: isWindows && !undone
-          ? GlassButton(
-              onPressed: _undoing ? null : _undo,
-              icon: const Icon(PhosphorIconsRegular.arrowCounterClockwise),
-              label: 'Undo',
-              dense: true,
-            )
-          : null,
     );
   }
 }
@@ -955,7 +865,6 @@ class _MemoriesTabState extends ConsumerState<_MemoriesTab> {
               return _TopicTree(
                 tree: tree,
                 selected: _validSelected(tree),
-                moveWithin: null,
                 onSelect: (id) {
                   _select(id);
                   Navigator.of(dialogContext).pop();
@@ -1037,7 +946,6 @@ class _MemoriesTabState extends ConsumerState<_MemoriesTab> {
         }
       }
     }
-    final sort = ref.watch(gaiaSortProvider);
     if (_scrollPending) {
       _scrollPending = false;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1047,14 +955,12 @@ class _MemoriesTabState extends ConsumerState<_MemoriesTab> {
         }
       });
     }
-    Widget row(GaiaMemory memory, bool narrow) => _MemoryRow(
+    Widget row(GaiaMemory memory) => _MemoryRow(
       key: memory.id == widget.focus ? _focusKey : null,
       memory: memory,
       tree: tree,
       moveWithin: moveWithin,
-      narrow: narrow,
       highlighted: memory.id == widget.focus,
-      sorted: sort.suggested[memory.id],
     );
     final inbox = withStatus(GaiaMemoryStatus.proposed);
     final active = withStatus(GaiaMemoryStatus.active);
@@ -1083,29 +989,19 @@ class _MemoriesTabState extends ConsumerState<_MemoriesTab> {
           merge,
     ];
     final suggestions = pins.length + merges.length;
-    // Unsorted's memories still to be sorted, and those suggested for
-    // (§6). A memory filed meanwhile drops out of both.
-    final unsorted = selected == _unsorted
-        ? [...active, ...archived]
-        : const <GaiaMemory>[];
-    final sortedHere = [
-      for (final memory in unsorted)
-        if (sort.suggested[memory.id] case final placement?)
-          (memory.id, placement),
-    ];
     final title = switch (selected) {
       null => 'All memories',
       _unsorted => 'Unsorted',
       _ => tree.path(selected).join(' › '),
     };
-    Widget list(bool narrow) => Column(
+    Widget list() => Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (inbox.isNotEmpty || suggestions > 0) ...[
           _SectionLabel('Inbox (${inbox.length + suggestions})'),
           for (final merge in merges) _MergeSuggestionRow(merge, tree: tree),
           for (final pin in pins) _PinSuggestionRow(pin),
-          for (final memory in inbox) row(memory, narrow),
+          for (final memory in inbox) row(memory),
           const SizedBox(height: 16),
         ],
         Row(
@@ -1129,43 +1025,6 @@ class _MemoriesTabState extends ConsumerState<_MemoriesTab> {
             ],
           ],
         ),
-        // The utility model, which only the desktop's companion runs,
-        // suggests where each goes; nothing moves until accepted (§6).
-        if (isWindows && unsorted.isNotEmpty) ...[
-          const SizedBox(height: 4),
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              GlassButton(
-                onPressed: sort.running
-                    ? null
-                    : () => ref.read(gaiaSortProvider.notifier).sort(unsorted),
-                icon: sort.running
-                    ? const SizedBox.square(
-                        dimension: 12,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(PhosphorIconsRegular.sparkle, size: 13),
-                label: sort.running ? 'Sorting…' : 'Sort these',
-                dense: true,
-              ),
-              if (sortedHere.isNotEmpty)
-                GlassButton(
-                  onPressed: () async {
-                    for (final (id, placement) in sortedHere) {
-                      await _acceptSorted(ref, id, placement);
-                    }
-                  },
-                  icon: const Icon(PhosphorIconsRegular.checks, size: 13),
-                  label: 'Accept all (${sortedHere.length})',
-                  dense: true,
-                ),
-              if (sort.error case final error?) Text(error, style: muted),
-            ],
-          ),
-        ],
         const SizedBox(height: 4),
         _SectionLabel(
           active.isEmpty ? 'Remembered' : 'Remembered (${active.length})',
@@ -1175,11 +1034,11 @@ class _MemoriesTabState extends ConsumerState<_MemoriesTab> {
             padding: const EdgeInsets.symmetric(vertical: 12),
             child: Text('Nothing yet.', style: muted),
           ),
-        for (final memory in active) row(memory, narrow),
+        for (final memory in active) row(memory),
         if (archived.isNotEmpty) ...[
           const SizedBox(height: 16),
           _SectionLabel('Archived (${archived.length})'),
-          for (final memory in archived) row(memory, narrow),
+          for (final memory in archived) row(memory),
         ],
       ],
     );
@@ -1218,8 +1077,7 @@ class _MemoriesTabState extends ConsumerState<_MemoriesTab> {
         LayoutBuilder(
           builder: (context, constraints) {
             // Each pane scrolls on its own, filling the page below the
-            // search, so a memory far down the list can still be dragged
-            // onto any topic.
+            // search.
             if (constraints.maxWidth >= 640) {
               // Again as the window resizes, or the text above rewraps.
               MediaQuery.sizeOf(context);
@@ -1239,13 +1097,12 @@ class _MemoriesTabState extends ConsumerState<_MemoriesTab> {
                           tree: tree,
                           selected: selected,
                           visible: visible,
-                          moveWithin: moveWithin,
                           onSelect: _select,
                         ),
                       ),
                     ),
                     const SizedBox(width: 24),
-                    Expanded(child: SingleChildScrollView(child: list(false))),
+                    Expanded(child: SingleChildScrollView(child: list())),
                   ],
                 ),
               );
@@ -1263,7 +1120,7 @@ class _MemoriesTabState extends ConsumerState<_MemoriesTab> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                list(true),
+                list(),
               ],
             );
           },
@@ -1271,49 +1128,6 @@ class _MemoriesTabState extends ConsumerState<_MemoriesTab> {
       ],
     );
   }
-}
-
-/// What's dragged on the Memories tab (GAIA_MEMORY_TOPICS_HLD.md §3.2): a
-/// memory onto a topic, or a topic onto another or the tree's root.
-sealed class _Dragged {
-  const _Dragged(this.id);
-
-  final String id;
-}
-
-class _DraggedMemory extends _Dragged {
-  const _DraggedMemory(super.id);
-}
-
-class _DraggedTopic extends _Dragged {
-  const _DraggedTopic(super.id);
-}
-
-/// What follows the pointer while [text]'s row is dragged.
-Widget _dragLabel(BuildContext context, String text) {
-  final theme = Theme.of(context);
-  // Beside the pointer (pointerDragAnchorStrategy puts the origin at it),
-  // whichever part of the row was grabbed, without hiding the topic under it.
-  return Transform.translate(
-    offset: const Offset(14, -12),
-    child: Material(
-      elevation: 4,
-      borderRadius: BorderRadius.circular(8),
-      color: theme.colorScheme.surfaceContainerHigh,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 260),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          child: Text(
-            text,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.bodySmall,
-          ),
-        ),
-      ),
-    ),
-  );
 }
 
 /// [tree]'s topics in the order shown, each with its depth.
@@ -1363,16 +1177,11 @@ Future<String?> _pickTopic(
 );
 
 /// The Memories tab's topic tree (GAIA_MEMORY_TOPICS_HLD.md §3.2): All
-/// memories, every topic, and Unsorted. On the desktop a memory dragged
-/// onto a topic moves there ([moveWithin] says which of its topics it
-/// leaves) or, with Ctrl, is added; a topic dragged onto another goes under
-/// it, or onto All memories, to the root. Right-click or F2 for the rest.
-/// On the phone each topic has a menu instead.
+/// memories, every topic, and Unsorted. Each topic has a menu.
 class _TopicTree extends ConsumerStatefulWidget {
   const _TopicTree({
     required this.tree,
     required this.selected,
-    required this.moveWithin,
     required this.onSelect,
     this.visible,
   });
@@ -1382,7 +1191,6 @@ class _TopicTree extends ConsumerStatefulWidget {
 
   /// The topics a search keeps; null for every one.
   final Set<String>? visible;
-  final Set<String>? moveWithin;
   final ValueChanged<String?> onSelect;
 
   @override
@@ -1497,38 +1305,12 @@ class _TopicTreeState extends ConsumerState<_TopicTree> {
     }
   }
 
-  void _drop(_Dragged dragged, String? onto) => unawaited(
-    _run(() async {
-      switch (dragged) {
-        case _DraggedMemory(:final id) when onto != null:
-          if (HardwareKeyboard.instance.isControlPressed) {
-            await _memories.addMemoryTopic(id, onto);
-          } else {
-            await _memories.moveMemory(id, onto, within: widget.moveWithin);
-          }
-        case _DraggedTopic(:final id):
-          await _memories.moveTopic(id, onto);
-        default:
-      }
-    }),
-  );
-
-  /// Whether [dragged] can go onto [onto] (null for the root): a topic not
-  /// under itself or where it already is (§3.1).
-  bool _accepts(_Dragged dragged, String? onto) => switch (dragged) {
-    _DraggedMemory() => onto != null,
-    _DraggedTopic(:final id) =>
-      widget.tree[id]?.parentId != onto &&
-          (onto == null || !widget.tree.subtree(id).contains(onto)),
-  };
-
   List<ContextMenuItem> _menu(GaiaMemoryTopic topic, Set<String> projects) {
     final linked = projects.contains(topic.projectId);
     return [
       ContextMenuItem(
         label: 'Rename',
         icon: PhosphorIconsRegular.pencilSimple,
-        trailing: isWindows ? const Text('F2') : null,
         onTap: () => _rename(topic),
       ),
       ContextMenuItem(
@@ -1536,13 +1318,11 @@ class _TopicTreeState extends ConsumerState<_TopicTree> {
         icon: PhosphorIconsRegular.plus,
         onTap: () => _newTopic(parentId: topic.id),
       ),
-      // The desktop drags it instead.
-      if (!isWindows)
-        ContextMenuItem(
-          label: 'Move under…',
-          icon: PhosphorIconsRegular.arrowElbowDownRight,
-          onTap: () => _moveUnder(topic),
-        ),
+      ContextMenuItem(
+        label: 'Move under…',
+        icon: PhosphorIconsRegular.arrowElbowDownRight,
+        onTap: () => _moveUnder(topic),
+      ),
       // A project's topic can be kept in a merge, not merged away (§3.2).
       ContextMenuItem(
         label: linked ? "Merge into… (a project's topic stays)" : 'Merge into…',
@@ -1560,33 +1340,23 @@ class _TopicTreeState extends ConsumerState<_TopicTree> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final projects = <String>{
       for (final project
           in ref.watch(gaiaProjectsProvider).valueOrNull ?? const [])
         project.id,
     };
     final tree = widget.tree;
-    final drags = isWindows;
 
     Widget tile({
       required String? id,
       required String label,
       required int depth,
       required IconData icon,
-      bool hovered = false,
-      bool refused = false,
       Widget? trailing,
     }) => Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(
-          color: refused
-              ? theme.colorScheme.error
-              : hovered
-              ? theme.colorScheme.primary
-              : Colors.transparent,
-        ),
+        border: Border.all(color: Colors.transparent),
       ),
       child: ListTile(
         dense: true,
@@ -1606,57 +1376,20 @@ class _TopicTreeState extends ConsumerState<_TopicTree> {
       ),
     );
 
-    Widget topicRow(GaiaMemoryTopic topic, int depth) {
-      final menu = _menu(topic, projects);
-      if (!drags) {
-        return tile(
-          id: topic.id,
-          label: topic.name,
-          depth: depth,
-          icon: PhosphorIconsRegular.folderSimple,
-          trailing: ContextMenuButton(items: menu),
-        );
-      }
-      return DragTarget<_Dragged>(
-        onWillAcceptWithDetails: (details) => _accepts(details.data, topic.id),
-        onAcceptWithDetails: (details) => _drop(details.data, topic.id),
-        builder: (context, candidates, rejected) => Draggable<_Dragged>(
-          data: _DraggedTopic(topic.id),
-          dragAnchorStrategy: pointerDragAnchorStrategy,
-          feedback: _dragLabel(context, topic.name),
-          child: ContextMenuRegion(
-            items: menu,
-            child: tile(
-              id: topic.id,
-              label: topic.name,
-              depth: depth,
-              icon: PhosphorIconsRegular.folderSimple,
-              hovered: candidates.isNotEmpty,
-              refused: rejected.isNotEmpty,
-            ),
-          ),
-        ),
-      );
-    }
+    Widget topicRow(GaiaMemoryTopic topic, int depth) => tile(
+      id: topic.id,
+      label: topic.name,
+      depth: depth,
+      icon: PhosphorIconsRegular.folderSimple,
+      trailing: ContextMenuButton(items: _menu(topic, projects)),
+    );
 
-    final all = drags
-        ? DragTarget<_Dragged>(
-            onWillAcceptWithDetails: (details) => _accepts(details.data, null),
-            onAcceptWithDetails: (details) => _drop(details.data, null),
-            builder: (context, candidates, _) => tile(
-              id: null,
-              label: 'All memories',
-              depth: 0,
-              icon: PhosphorIconsRegular.stack,
-              hovered: candidates.isNotEmpty,
-            ),
-          )
-        : tile(
-            id: null,
-            label: 'All memories',
-            depth: 0,
-            icon: PhosphorIconsRegular.stack,
-          );
+    final all = tile(
+      id: null,
+      label: 'All memories',
+      depth: 0,
+      icon: PhosphorIconsRegular.stack,
+    );
     final selected = widget.selected;
     return Focus(
       focusNode: _focus,
@@ -1701,79 +1434,17 @@ class _TopicTreeState extends ConsumerState<_TopicTree> {
   }
 }
 
-/// Memory [memory] filed by Gaia's utility model, through the companion
-/// (GAIA_MEMORY_TOPICS_HLD.md §5): into topics there already, and any new
-/// topic offered as a chip to accept. Busy, and not pressed again, until
-/// it's answered.
-class _SuggestButton extends StatefulWidget {
-  const _SuggestButton({required this.memory});
-
-  final GaiaMemory memory;
-
-  @override
-  State<_SuggestButton> createState() => _SuggestButtonState();
-}
-
-class _SuggestButtonState extends State<_SuggestButton> {
-  var _busy = false;
-
-  Future<void> _suggest() async {
-    setState(() => _busy = true);
-    String? said;
-    try {
-      final filed = await GaiaHost.instance.suggestTopics(
-        widget.memory.id,
-        widget.memory.text,
-      );
-      if (!filed) said = 'No topic fits it yet.';
-    } on GaiaReadException catch (error) {
-      said = error.message;
-    }
-    if (!mounted) return;
-    setState(() => _busy = false);
-    if (said != null) {
-      showVoyagerToast(
-        context,
-        message: said,
-        icon: PhosphorIconsRegular.warning,
-        dwell: const Duration(seconds: 4),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => IconButton(
-    tooltip: _busy ? 'Suggesting topics…' : 'Suggest topics',
-    icon: _busy
-        ? const SizedBox.square(
-            dimension: 16,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          )
-        : const Icon(PhosphorIconsRegular.sparkle, size: 16),
-    onPressed: _busy ? null : _suggest,
-  );
-}
-
 class _MemoryRow extends ConsumerWidget {
   const _MemoryRow({
     super.key,
     required this.memory,
     required this.tree,
     required this.moveWithin,
-    required this.narrow,
     this.highlighted = false,
-    this.sorted,
   });
 
   final GaiaMemory memory;
   final GaiaTopicTree tree;
-
-  /// Where Sort these would file it, to accept or change
-  /// (GAIA_MEMORY_TOPICS_HLD.md §6); null for none.
-  final GaiaPlacement? sorted;
-
-  /// The tree is in a dialog, so there's nothing to drag a memory onto.
-  final bool narrow;
 
   /// The topics a move takes it out of (GAIA_MEMORY_TOPICS_HLD.md §3.2);
   /// null for every one.
@@ -1807,9 +1478,8 @@ class _MemoryRow extends ConsumerWidget {
     }
   }
 
-  /// Moved to a topic picked in a dialog, or with [add] added to one, for
-  /// the phone, which has no dragging (GAIA_MEMORY_TOPICS_HLD.md §3.2), and
-  /// a [narrow] desktop window.
+  /// Moved to a topic picked in a dialog, or with [add] added to one
+  /// (GAIA_MEMORY_TOPICS_HLD.md §3.2).
   Future<void> _file(
     BuildContext context,
     WidgetRef ref, {
@@ -1952,8 +1622,6 @@ class _MemoryRow extends ConsumerWidget {
     final suggested = memory.suggestedTopic == null
         ? null
         : gaiaSuggestedTopicLabel(memory.suggestedTopic!, tree);
-    // Sort these's suggestion, while it's still Unsorted (§6).
-    final sorted = topics.isEmpty ? this.sorted : null;
     final (icon, label, onPressed) = switch (memory.status) {
       GaiaMemoryStatus.proposed => (
         PhosphorIconsRegular.check,
@@ -1976,7 +1644,7 @@ class _MemoryRow extends ConsumerWidget {
         },
       ),
     };
-    final tile = ListTile(
+    return ListTile(
       contentPadding: EdgeInsets.zero,
       selected: highlighted,
       title: Text(memory.text),
@@ -2021,23 +1689,12 @@ class _MemoryRow extends ConsumerWidget {
               ],
             ),
           ],
-          if (sorted != null) ...[
-            const SizedBox(height: 4),
-            _SortedLine(memory: memory, placement: sorted, tree: tree),
-          ],
         ],
       ),
       onTap: () => _edit(context, ref),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Unsorted, with nothing offered: the utility model, which only
-          // the desktop's companion runs, can file it (§5).
-          if (isWindows &&
-              topics.isEmpty &&
-              suggested == null &&
-              sorted == null)
-            _SuggestButton(memory: memory),
           // In every chat's system prompt (GAIA_MEMORY_TOPICS_HLD.md §3.3).
           if (memory.status == GaiaMemoryStatus.active || memory.pinned)
             IconButton(
@@ -2067,9 +1724,7 @@ class _MemoryRow extends ConsumerWidget {
             ),
             onPressed: () => _delete(context),
           ),
-          // The phone has no dragging (§3.2), and a narrow window no tree
-          // to drag onto.
-          if ((!isWindows || narrow) && tree.childrenOf(null).isNotEmpty)
+          if (tree.childrenOf(null).isNotEmpty)
             ContextMenuButton(
               items: [
                 ContextMenuItem(
@@ -2086,92 +1741,6 @@ class _MemoryRow extends ConsumerWidget {
             ),
         ],
       ),
-    );
-    if (!isWindows) return tile;
-    return Draggable<_Dragged>(
-      data: _DraggedMemory(memory.id),
-      dragAnchorStrategy: pointerDragAnchorStrategy,
-      feedback: _dragLabel(context, memory.text),
-      childWhenDragging: Opacity(opacity: 0.5, child: tile),
-      child: tile,
-    );
-  }
-}
-
-/// Sort these's [placement] for Unsorted memory [id] accepted
-/// (GAIA_MEMORY_TOPICS_HLD.md §6): filed in its topics with its tags, and
-/// its new topic, if any, made and filed in too, since accepting it is
-/// asking for it.
-Future<void> _acceptSorted(
-  WidgetRef ref,
-  String id,
-  GaiaPlacement placement,
-) async {
-  ref.read(gaiaSortProvider.notifier).drop(id);
-  final memories = GaiaMemories(ref.read(gaiaRepositoryProvider));
-  await memories.place(id, placement);
-  if (placement.suggested != null) await memories.acceptSuggestedTopic(id);
-}
-
-/// Where Sort these would file [memory] (§6): each topic and any new one,
-/// with × to leave it out, and Accept or Skip. Nothing is filed until
-/// it's accepted; a drag files it as usual instead.
-class _SortedLine extends ConsumerWidget {
-  const _SortedLine({
-    required this.memory,
-    required this.placement,
-    required this.tree,
-  });
-
-  final GaiaMemory memory;
-  final GaiaPlacement placement;
-  final GaiaTopicTree tree;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final sort = ref.read(gaiaSortProvider.notifier);
-    return Wrap(
-      spacing: 4,
-      runSpacing: 4,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        Text('Suggested:', style: theme.textTheme.bodySmall),
-        for (final id in placement.topicIds)
-          if (tree.path(id) case final path when path.isNotEmpty)
-            _TopicChip(
-              label: path.join(' › '),
-              removeTooltip: 'Leave this topic out',
-              onRemove: () => sort.change(memory.id, (
-                topicIds: [
-                  for (final other in placement.topicIds)
-                    if (other != id) other,
-                ],
-                suggested: placement.suggested,
-                tags: placement.tags,
-              )),
-            ),
-        if (placement.suggested case final offer?)
-          _TopicChip(
-            label: '+ New topic: ${gaiaSuggestedTopicLabel(offer, tree)}',
-            removeTooltip: "Don't make it",
-            onRemove: () => sort.change(memory.id, (
-              topicIds: placement.topicIds,
-              suggested: null,
-              tags: placement.tags,
-            )),
-          ),
-        TextButton(
-          style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-          onPressed: () => _acceptSorted(ref, memory.id, placement),
-          child: const Text('Accept'),
-        ),
-        TextButton(
-          style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-          onPressed: () => sort.drop(memory.id),
-          child: const Text('Skip'),
-        ),
-      ],
     );
   }
 }
@@ -2538,15 +2107,11 @@ class _ChatRow extends ConsumerWidget {
   }
 
   void _open(BuildContext context) {
-    if (isWindows) {
-      GaiaHost.instance.openChat(chat.id);
-    } else {
-      Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => GaiaRemoteChatPage(chatId: chat.id),
-        ),
-      );
-    }
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => GaiaRemoteChatPage(chatId: chat.id),
+      ),
+    );
   }
 
   @override
@@ -2692,733 +2257,6 @@ class _ChatRow extends ConsumerWidget {
   }
 }
 
-/// The CLI checklist (§5.1): installed, version, logged in, each with the
-/// command that fixes it.
-class _SetupTab extends StatelessWidget {
-  const _SetupTab();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [_ClaudeSetup(), SizedBox(height: 24), _CodexSetup()],
-    );
-  }
-}
-
-class _ClaudeSetup extends ConsumerWidget {
-  const _ClaudeSetup();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final setup = ref.watch(gaiaClaudeSetupProvider);
-    final (low, high) = kClaudeCodeTestedVersions;
-    String v((int, int, int) version) =>
-        '${version.$1}.${version.$2}.${version.$3}';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            Text('Claude Code', style: theme.textTheme.titleMedium),
-            const Spacer(),
-            GlassButton(
-              onPressed: setup.isLoading
-                  ? null
-                  : () => ref
-                      ..invalidate(gaiaClaudeSetupProvider)
-                      ..invalidate(gaiaClaudeAccountProvider),
-              icon: const Icon(PhosphorIconsRegular.arrowClockwise, size: 13),
-              label: 'Check again',
-              dense: true,
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        switch (setup) {
-          AsyncData(:final value) => Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _CheckRow(
-                ok: value.installed,
-                label: value.installed
-                    ? 'Installed: ${v(value.version!)}'
-                    : 'Not installed',
-                fix: value.installed
-                    ? null
-                    : 'npm install -g @anthropic-ai/claude-code',
-              ),
-              if (value.installed) ...[
-                _CheckRow(
-                  ok: value.tested,
-                  warnOnly: true,
-                  label: value.tested
-                      ? 'A tested version'
-                      : 'Untested version: Gaia is tested with '
-                            '${v(low)} up to ${v(high)}. Chats still run.',
-                ),
-              ],
-            ],
-          ),
-          AsyncError() => const _CheckRow(
-            ok: false,
-            label: "Couldn't run the check",
-          ),
-          _ => const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: LinearProgressIndicator(),
-          ),
-        },
-        if (setup.valueOrNull?.installed ?? false)
-          const _Accounts(adapter: kGaiaClaudeCodeAdapter),
-      ],
-    );
-  }
-}
-
-class _CodexSetup extends ConsumerWidget {
-  const _CodexSetup();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final setup = ref.watch(gaiaCodexSetupProvider);
-    final (low, high) = kCodexTestedVersions;
-    String v((int, int, int) version) =>
-        '${version.$1}.${version.$2}.${version.$3}';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            Text('Codex', style: theme.textTheme.titleMedium),
-            const Spacer(),
-            GlassButton(
-              onPressed: setup.isLoading
-                  ? null
-                  : () => ref
-                      ..invalidate(gaiaCodexSetupProvider)
-                      ..invalidate(gaiaCodexAccountProvider),
-              icon: const Icon(PhosphorIconsRegular.arrowClockwise, size: 13),
-              label: 'Check again',
-              dense: true,
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        switch (setup) {
-          AsyncData(:final value) => Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _CheckRow(
-                ok: value.installed,
-                label: value.installed
-                    ? 'Installed: ${v(value.version!)}'
-                    : 'Not installed',
-                fix: value.installed ? null : 'npm install -g @openai/codex',
-              ),
-              if (value.installed) ...[
-                _CheckRow(
-                  ok: value.tested,
-                  warnOnly: true,
-                  label: value.tested
-                      ? 'A tested version'
-                      : 'Untested version: Gaia is tested with '
-                            '${v(low)} up to ${v(high)}. Chats still run.',
-                ),
-              ],
-            ],
-          ),
-          AsyncError() => const _CheckRow(
-            ok: false,
-            label: "Couldn't run the check",
-          ),
-          _ => const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: LinearProgressIndicator(),
-          ),
-        },
-        if (setup.valueOrNull?.installed ?? false)
-          const _Accounts(adapter: kGaiaCodexAdapter),
-      ],
-    );
-  }
-}
-
-/// An adapter's accounts in order (§6.1), the first being the default, each
-/// with its login and usage. Switching between them is the composer's (§6.5).
-class _Accounts extends ConsumerWidget {
-  const _Accounts({required this.adapter});
-
-  final String adapter;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final settings = ref.watch(gaiaSettingsProvider).valueOrNull;
-    if (settings == null) return const SizedBox.shrink();
-    final accounts = settings.accountsFor(adapter);
-    Future<void> save(List<GaiaAccount> list) => ref
-        .read(gaiaRepositoryProvider)
-        .upsertSettings(
-          settings.copyWith(
-            accounts: [
-              for (final account in settings.accounts)
-                if (account.adapter != adapter) account,
-              ...list,
-            ],
-          ),
-        );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (final (index, account) in accounts.indexed)
-          _AccountRow(
-            key: ValueKey(account.id),
-            account: account,
-            several: accounts.length > 1,
-            // Every adapter's accounts share the composer's `/` palette.
-            takenAliases: {
-              ..._reservedCommandNames,
-              for (final command in settings.commands) command.name,
-              for (final other in settings.accounts)
-                if (other.id != account.id || other.adapter != adapter)
-                  other.alias,
-            },
-            onSave: (label, alias) => save([
-              for (final other in accounts)
-                other == account
-                    ? other.copyWith(label: label, alias: alias)
-                    : other,
-            ]),
-            onUp: index == 0
-                ? null
-                : () => save(
-                    [...accounts]
-                      ..removeAt(index)
-                      ..insert(index - 1, account),
-                  ),
-            onDown: index == accounts.length - 1
-                ? null
-                : () => save(
-                    [...accounts]
-                      ..removeAt(index)
-                      ..insert(index + 1, account),
-                  ),
-            onRemove: accounts.length == 1
-                ? null
-                : () => save([...accounts]..removeAt(index)),
-          ),
-        const SizedBox(height: 12),
-        _AddAccount(
-          adapter: adapter,
-          onAdd: (label, dir) => save([
-            ...accounts,
-            GaiaAccount(
-              id: const Uuid().v4(),
-              label: label,
-              adapter: adapter,
-              dir: dir,
-            ),
-          ]),
-          taken: {for (final account in accounts) account.dir},
-        ),
-      ],
-    );
-  }
-}
-
-class _AccountRow extends ConsumerStatefulWidget {
-  const _AccountRow({
-    super.key,
-    required this.account,
-    required this.several,
-    required this.takenAliases,
-    required this.onSave,
-    required this.onUp,
-    required this.onDown,
-    required this.onRemove,
-  });
-
-  final GaiaAccount account;
-  final bool several;
-
-  /// Names its alias can't take.
-  final Set<String> takenAliases;
-  final void Function(String label, String alias) onSave;
-  final VoidCallback? onUp;
-  final VoidCallback? onDown;
-  final VoidCallback? onRemove;
-
-  @override
-  ConsumerState<_AccountRow> createState() => _AccountRowState();
-}
-
-class _AccountRowState extends ConsumerState<_AccountRow> {
-  late final _label = TextEditingController(text: widget.account.label);
-  late final _alias = TextEditingController(text: widget.account.alias);
-
-  @override
-  void didUpdateWidget(_AccountRow old) {
-    super.didUpdateWidget(old);
-    // Renamed on another device, while nothing here is unsaved.
-    if (_label.text == old.account.label) _label.text = widget.account.label;
-    if (_alias.text == old.account.alias) _alias.text = widget.account.alias;
-  }
-
-  @override
-  void dispose() {
-    _label.dispose();
-    _alias.dispose();
-    super.dispose();
-  }
-
-  String? get _aliasError {
-    final alias = _alias.text.trim();
-    if (alias.isEmpty) return null;
-    if (!RegExp(r'^[\w-]+$').hasMatch(alias)) {
-      return 'Letters, digits, - and _ only';
-    }
-    if (widget.takenAliases.contains(alias)) return 'Already a command';
-    return null;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final account = widget.account;
-    final label = _label.text.trim();
-    final alias = _alias.text.trim();
-    return Padding(
-      padding: const EdgeInsets.only(top: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              SizedBox(
-                width: 160,
-                child: VoyagerTextField(
-                  controller: _label,
-                  decoration: const InputDecoration(
-                    labelText: 'Account',
-                    isDense: true,
-                  ),
-                  onChanged: (_) => setState(() {}),
-                ),
-              ),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 150,
-                child: VoyagerTextField(
-                  controller: _alias,
-                  decoration: InputDecoration(
-                    labelText: 'Alias',
-                    prefixText: '/',
-                    isDense: true,
-                    errorText: _aliasError,
-                    errorMaxLines: 2,
-                  ),
-                  onChanged: (_) => setState(() {}),
-                ),
-              ),
-              if (label.isNotEmpty &&
-                  _aliasError == null &&
-                  (label != account.label || alias != account.alias)) ...[
-                const SizedBox(width: 8),
-                GlassButton(
-                  onPressed: () => widget.onSave(label, alias),
-                  label: 'Save',
-                  dense: true,
-                ),
-              ],
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  account.dir.isEmpty
-                      ? 'The folder Voyager was started with'
-                      : account.dir,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (widget.several) ...[
-                IconButton(
-                  tooltip: 'Move up',
-                  onPressed: widget.onUp,
-                  icon: const Icon(PhosphorIconsRegular.arrowUp, size: 14),
-                ),
-                IconButton(
-                  tooltip: 'Move down',
-                  onPressed: widget.onDown,
-                  icon: const Icon(PhosphorIconsRegular.arrowDown, size: 14),
-                ),
-                IconButton(
-                  tooltip: 'Remove',
-                  onPressed: widget.onRemove,
-                  icon: const Icon(PhosphorIconsRegular.trash, size: 14),
-                ),
-              ],
-            ],
-          ),
-          if (account.adapter == kGaiaCodexAdapter)
-            _CodexAccountChecks(account: account)
-          else
-            _ClaudeAccountChecks(account: account),
-          GaiaUsageRow(account: account),
-        ],
-      ),
-    );
-  }
-}
-
-/// A login's check, once there's an answer: a CLI that hasn't said shouldn't
-/// hold the page up.
-class _ClaudeAccountChecks extends ConsumerWidget {
-  const _ClaudeAccountChecks({required this.account});
-
-  final GaiaAccount account;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final value = ref.watch(gaiaClaudeAccountProvider(account.dir)).valueOrNull;
-    if (value == null) return const SizedBox.shrink();
-    return _CheckRow(
-      ok: value.loggedIn == true,
-      label: switch (value.loggedIn) {
-        true => 'Logged in${value.email == null ? '' : ' as ${value.email}'}',
-        false => 'Not logged in',
-        null => "Couldn't read the login status",
-      },
-      fix: value.loggedIn == true
-          ? null
-          : account.dir.isEmpty
-          ? 'claude auth login'
-          : '\$env:CLAUDE_CONFIG_DIR="${account.dir}"; claude auth login',
-    );
-  }
-}
-
-class _CodexAccountChecks extends ConsumerWidget {
-  const _CodexAccountChecks({required this.account});
-
-  final GaiaAccount account;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final value = ref.watch(gaiaCodexAccountProvider(account)).valueOrNull;
-    if (value == null) return const SizedBox.shrink();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _CheckRow(
-          ok: value.loggedIn == true,
-          label: switch (value.loggedIn) {
-            true => 'Logged in',
-            false => 'Not logged in',
-            null => "Couldn't read the login status",
-          },
-          fix: value.loggedIn == true
-              ? null
-              : account.dir.isEmpty
-              ? 'codex login'
-              : '\$env:CODEX_HOME="${account.dir}"; codex login',
-        ),
-        if (value.sandboxReady case final ready?)
-          _CheckRow(
-            ok: ready,
-            label: ready
-                ? 'Sandbox set up for Gaia'
-                : "Codex's Windows sandbox needs setting up once for this "
-                      'account. Windows will ask you to approve it.',
-            action: ready
-                ? null
-                : GlassButton(
-                    onPressed: () async {
-                      await setUpCodexSandbox(
-                        codexHome: p.join(
-                          await gaiaCodexHomesRoot(),
-                          account.id,
-                        ),
-                        loginHome: codexLoginHome(account),
-                      );
-                      ref.invalidate(gaiaCodexAccountProvider(account));
-                    },
-                    label: 'Set up',
-                    dense: true,
-                  ),
-          ),
-      ],
-    );
-  }
-}
-
-/// A new account's name and folder (§6.1). A folder is fixed once it's added:
-/// its sessions, and a Codex account's home, belong to that login.
-class _AddAccount extends StatefulWidget {
-  const _AddAccount({
-    required this.adapter,
-    required this.onAdd,
-    required this.taken,
-  });
-
-  final String adapter;
-  final void Function(String label, String dir) onAdd;
-  final Set<String> taken;
-
-  @override
-  State<_AddAccount> createState() => _AddAccountState();
-}
-
-class _AddAccountState extends State<_AddAccount> {
-  final _label = TextEditingController();
-  final _dir = TextEditingController();
-
-  @override
-  void dispose() {
-    _label.dispose();
-    _dir.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final codex = widget.adapter == kGaiaCodexAdapter;
-    final label = _label.text.trim();
-    // Explorer's "Copy as path" wraps the path in quotes, which can't be part
-    // of a Windows path.
-    final dir = _dir.text.replaceAll('"', '').trim();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            SizedBox(
-              width: 160,
-              child: VoyagerTextField(
-                controller: _label,
-                decoration: const InputDecoration(
-                  labelText: 'New account',
-                  hintText: 'e.g. Work',
-                  isDense: true,
-                ),
-                onChanged: (_) => setState(() {}),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: VoyagerTextField(
-                controller: _dir,
-                decoration: InputDecoration(
-                  labelText: 'Folder',
-                  hintText: codex
-                      ? r'e.g. C:\Users\you\.codex-2'
-                      : r'e.g. C:\Users\you\.claude-2',
-                  isDense: true,
-                ),
-                onChanged: (_) => setState(() {}),
-              ),
-            ),
-            const SizedBox(width: 8),
-            GlassButton(
-              onPressed:
-                  label.isEmpty || dir.isEmpty || widget.taken.contains(dir)
-                  ? null
-                  : () {
-                      widget.onAdd(label, dir);
-                      _label.clear();
-                      _dir.clear();
-                      setState(() {});
-                    },
-              label: 'Add',
-              dense: true,
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Text(
-          codex
-              ? 'A folder is a CODEX_HOME holding a login, which Gaia copies '
-                    'into a Codex home of its own. The first account is the '
-                    'default. Synced to all your devices.'
-              : "A folder is a CLAUDE_CONFIG_DIR, used on Gaia's runs only. "
-                    'The first account is the default. Synced to all your '
-                    'devices.',
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// An account's usage (§6.4): its bars, or what's wrong with reading them.
-class GaiaUsageRow extends ConsumerWidget {
-  const GaiaUsageRow({super.key, required this.account});
-
-  final GaiaAccount account;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // A login check that finds a login outdates the last usage read's signed
-    // out, which would otherwise stand until the next one (§6.4). Either can
-    // come first.
-    void recheck(AsyncValue<bool?> login) {
-      if (!login.isLoading &&
-          login.valueOrNull == true &&
-          ref.read(gaiaUsageProvider)[account.key]?.health ==
-              GaiaUsageHealth.signedOut) {
-        ref.read(gaiaRecheckUsageProvider)(account.key);
-      }
-    }
-
-    ref.listen(
-      gaiaUsageProvider.select((usage) => usage[account.key]?.health),
-      (_, _) => recheck(
-        account.adapter == kGaiaCodexAdapter
-            ? ref
-                  .read(gaiaCodexAccountProvider(account))
-                  .whenData((setup) => setup.loggedIn)
-            : ref
-                  .read(gaiaClaudeAccountProvider(account.dir))
-                  .whenData((setup) => setup.loggedIn),
-      ),
-    );
-    final read = ref.watch(gaiaUsageProvider)[account.key];
-    if (read == null) return const SizedBox.shrink();
-    final health = read.health;
-    if (account.adapter == kGaiaCodexAdapter) {
-      ref.listen(
-        gaiaCodexAccountProvider(account),
-        (_, next) => recheck(next.whenData((setup) => setup.loggedIn)),
-      );
-    } else {
-      ref.listen(
-        gaiaClaudeAccountProvider(account.dir),
-        (_, next) => recheck(next.whenData((setup) => setup.loggedIn)),
-      );
-    }
-    // The login check above already says so, with the command to fix it.
-    final loggedIn = account.adapter == kGaiaCodexAdapter
-        ? ref.watch(gaiaCodexAccountProvider(account)).valueOrNull?.loggedIn
-        : ref
-              .watch(gaiaClaudeAccountProvider(account.dir))
-              .valueOrNull
-              ?.loggedIn;
-    if (health == GaiaUsageHealth.signedOut && loggedIn == false) {
-      return const SizedBox.shrink();
-    }
-    if (health != null && health != GaiaUsageHealth.ok) {
-      return _CheckRow(
-        ok: false,
-        warnOnly: true,
-        label: gaiaUsageMessage(
-          account.adapter,
-          health,
-          read.checkedAt,
-          account: account,
-        ),
-      );
-    }
-    final usage = read.usage;
-    if (usage == null) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(top: 10),
-      child: Wrap(spacing: 20, runSpacing: 10, children: gaiaUsageBars(usage)),
-    );
-  }
-}
-
-class _CheckRow extends StatelessWidget {
-  const _CheckRow({
-    required this.ok,
-    required this.label,
-    this.fix,
-    this.action,
-    this.warnOnly = false,
-  });
-
-  final bool ok;
-  final String label;
-
-  /// The command that fixes it, shown copyable.
-  final String? fix;
-
-  /// A button that fixes it.
-  final Widget? action;
-
-  /// Not a blocker: amber rather than red.
-  final bool warnOnly;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final color = ok
-        ? theme.colorScheme.primary
-        : warnOnly
-        ? Colors.amber
-        : theme.colorScheme.error;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            ok
-                ? PhosphorIconsRegular.checkCircle
-                : warnOnly
-                ? PhosphorIconsRegular.warningCircle
-                : PhosphorIconsRegular.xCircle,
-            size: 18,
-            color: color,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label),
-                if (action case final action?)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: action,
-                  ),
-                if (fix case final command?)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Row(
-                      children: [
-                        Flexible(
-                          child: SelectableText(
-                            command,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              fontFamily: AppFonts.monoFamily,
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: 'Copy',
-                          visualDensity: VisualDensity.compact,
-                          icon: const Icon(PhosphorIconsRegular.copy, size: 14),
-                          onPressed: () =>
-                              Clipboard.setData(ClipboardData(text: command)),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _SettingsTab extends ConsumerStatefulWidget {
   const _SettingsTab();
 
@@ -3500,33 +2338,7 @@ class _SettingsTabState extends ConsumerState<_SettingsTab> {
         _UtilitySection(settings: settings),
         const SizedBox(height: 24),
         _CommandsSection(settings: settings),
-        if (isWindows) ...[
-          const SizedBox(height: 24),
-          _KeysSection(settings: settings),
-        ],
         const SizedBox(height: 16),
-        if (isWindows) ...[
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Notify when a run finishes'),
-            subtitle: const Text(
-              'A Windows notification when Gaia finishes, or has a question, '
-              'while it is hidden.',
-            ),
-            value: settings.notifyOnDone,
-            onChanged: (value) => ref
-                .read(gaiaRepositoryProvider)
-                .upsertSettings(settings.copyWith(notifyOnDone: value)),
-          ),
-          _ContextSection(settings: settings),
-          const SizedBox(height: 8),
-          Text(
-            "Gaia's window is hidden from screenshots and screen recordings, "
-            'including your own screen shares, so it never shows up in '
-            'what it captures.',
-            style: muted,
-          ),
-        ],
       ],
     );
   }
@@ -3603,104 +2415,6 @@ class _NameSectionState extends ConsumerState<_NameSection> {
           alignment: Alignment.centerRight,
           child: GlassButton(
             onPressed: dirty ? _save : null,
-            label: 'Save',
-            dense: true,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Focused-window context (§15.4): whether each message says which window
-/// Gaia was opened from, and the apps and sites it never reads.
-class _ContextSection extends ConsumerStatefulWidget {
-  const _ContextSection({required this.settings});
-
-  final GaiaSettings settings;
-
-  @override
-  ConsumerState<_ContextSection> createState() => _ContextSectionState();
-}
-
-class _ContextSectionState extends ConsumerState<_ContextSection> {
-  final _exclusions = TextEditingController();
-
-  /// The list as last loaded or saved, one per line.
-  String? _saved;
-
-  static String _lines(List<String> entries) => entries.join('\n');
-
-  @override
-  void dispose() {
-    _exclusions.dispose();
-    super.dispose();
-  }
-
-  Future<void> _save() async {
-    final text = _exclusions.text;
-    await ref
-        .read(gaiaRepositoryProvider)
-        .upsertSettings(
-          widget.settings.copyWith(
-            contextExclusions: [
-              for (final line in text.split('\n'))
-                if (line.trim().isNotEmpty) line.trim(),
-            ],
-          ),
-        );
-    setState(() => _saved = text);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final settings = widget.settings;
-    final stored = _lines(settings.contextExclusions);
-    // As GAIA.md's: reloaded when it changes elsewhere with nothing unsaved.
-    if (_saved == null || (_exclusions.text == _saved && _saved != stored)) {
-      _saved = stored;
-      _exclusions.text = stored;
-    }
-    final muted = theme.textTheme.bodySmall?.copyWith(
-      color: theme.colorScheme.onSurfaceVariant,
-    );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Say which window Gaia was opened from'),
-          subtitle: const Text(
-            "Each message carries the app, window title and, in a browser, "
-            'the address you were on. It shows on the draft, where you can '
-            'remove it.',
-          ),
-          value: settings.windowContext,
-          onChanged: (value) => ref
-              .read(gaiaRepositoryProvider)
-              .upsertSettings(settings.copyWith(windowContext: value)),
-        ),
-        const SizedBox(height: 4),
-        Text('Never read', style: theme.textTheme.titleSmall),
-        const SizedBox(height: 4),
-        Text(
-          "Apps and sites Gaia doesn't describe or read a selection from, "
-          'one per line: an app or its exe name, or a site like rbc.com.',
-          style: muted,
-        ),
-        const SizedBox(height: 8),
-        VoyagerTextField(
-          controller: _exclusions,
-          minLines: 3,
-          maxLines: 8,
-          onChanged: (_) => setState(() {}),
-        ),
-        const SizedBox(height: 8),
-        Align(
-          alignment: Alignment.centerRight,
-          child: GlassButton(
-            onPressed: _exclusions.text != _saved ? _save : null,
             label: 'Save',
             dense: true,
           ),
@@ -4347,192 +3061,6 @@ class _CommandDialogState extends State<_CommandDialog> {
           dense: true,
         ),
       ],
-    );
-  }
-}
-
-/// Gaia's rebindable keys (§9.1, §15.1): send, and the global hotkeys.
-class _KeysSection extends ConsumerWidget {
-  const _KeysSection({required this.settings});
-
-  final GaiaSettings settings;
-
-  Future<void> _save(WidgetRef ref, Map<String, String> keybinds) => ref
-      .read(gaiaRepositoryProvider)
-      .upsertSettings(settings.copyWith(keybinds: keybinds));
-
-  Future<void> _change(
-    BuildContext context,
-    WidgetRef ref,
-    GaiaKeybind keybind,
-  ) async {
-    final combo = await showDialog<GaiaCombo>(
-      context: context,
-      builder: (_) => _ComboDialog(keybind: keybind),
-    );
-    if (combo == null || !context.mounted) return;
-    final stored = '$combo';
-    final clash = GaiaKeybind.values
-        .where(
-          (other) =>
-              other != keybind &&
-              other.global == keybind.global &&
-              gaiaComboFor(other, settings.keybinds) == stored,
-        )
-        .firstOrNull;
-    if (clash != null) {
-      showVoyagerToast(context, message: '$stored is already ${clash.label}');
-      return;
-    }
-    // Send only works inside Gaia, so it can't take a system-wide hotkey.
-    final voyager = ref.read(settingsProvider).valueOrNull;
-    final voyagerClash = !keybind.global
-        ? gaiaFixedKeyClash(stored, [
-            for (final tab in GaiaPanelTab.values) tab.label,
-          ])
-        : voyager == null
-        ? null
-        : gaiaHotkeyClash(stored, {
-            'Quick journal entry': voyager.journalHotkey,
-            'Quick to-do': voyager.todoHotkey,
-            'Quick transaction': voyager.financeHotkey,
-            'Scheduled reminder': voyager.reminderHotkey,
-            'Quick note': voyager.noteHotkey,
-            'Quick event': voyager.calendarHotkey,
-          });
-    if (voyagerClash != null) {
-      showVoyagerToast(context, message: '$stored is already $voyagerClash');
-      return;
-    }
-    await _save(ref, {...settings.keybinds, keybind.name: stored});
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final muted = theme.textTheme.bodySmall?.copyWith(
-      color: theme.colorScheme.onSurfaceVariant,
-    );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text('Keys', style: theme.textTheme.titleMedium),
-        const SizedBox(height: 4),
-        Text(
-          'Send works in Gaia. The others work from any app; they need Ctrl, '
-          'Alt or Win so they never take over plain typing.',
-          style: muted,
-        ),
-        for (final keybind in GaiaKeybind.values)
-          ListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            title: Text(keybind.label),
-            subtitle: Text(switch (gaiaComboFor(keybind, settings.keybinds)) {
-              '' => 'Not set',
-              final combo => combo,
-            }, style: muted),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (settings.keybinds.containsKey(keybind.name))
-                  IconButton(
-                    tooltip: keybind.defaultCombo.isEmpty
-                        ? 'Clear'
-                        : 'Reset to ${keybind.defaultCombo}',
-                    icon: const Icon(
-                      PhosphorIconsRegular.arrowCounterClockwise,
-                      size: 16,
-                    ),
-                    onPressed: () => _save(ref, {
-                      for (final MapEntry(:key, :value)
-                          in settings.keybinds.entries)
-                        if (key != keybind.name) key: value,
-                    }),
-                  ),
-                GlassButton(
-                  onPressed: () => _change(context, ref, keybind),
-                  label: 'Change',
-                  dense: true,
-                ),
-              ],
-            ),
-          ),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Put Gaia on the right in a split'),
-          subtitle: const Text(
-            'Split the screen with Gaia puts the other window on the left. '
-            'Off, Gaia goes on the left and the other window on the right.',
-          ),
-          value: settings.splitGaiaRight,
-          onChanged: (value) => ref
-              .read(gaiaRepositoryProvider)
-              .upsertSettings(settings.copyWith(splitGaiaRight: value)),
-        ),
-      ],
-    );
-  }
-}
-
-/// Waits for a key combo: the key pressed with the modifiers held. Esc on
-/// its own cancels.
-class _ComboDialog extends StatefulWidget {
-  const _ComboDialog({required this.keybind});
-
-  final GaiaKeybind keybind;
-
-  @override
-  State<_ComboDialog> createState() => _ComboDialogState();
-}
-
-class _ComboDialogState extends State<_ComboDialog> {
-  String? _refused;
-
-  @override
-  void initState() {
-    super.initState();
-    HardwareKeyboard.instance.addHandler(_onKey);
-  }
-
-  @override
-  void dispose() {
-    HardwareKeyboard.instance.removeHandler(_onKey);
-    super.dispose();
-  }
-
-  bool _onKey(KeyEvent event) {
-    if (event is! KeyDownEvent) return false;
-    final keyboard = HardwareKeyboard.instance;
-    if (event.logicalKey == LogicalKeyboardKey.escape &&
-        !keyboard.isControlPressed &&
-        !keyboard.isAltPressed &&
-        !keyboard.isShiftPressed) {
-      Navigator.of(context).pop();
-      return true;
-    }
-    final combo = gaiaComboFromEvent(event);
-    if (combo == null) return false;
-    // Settings' plain key would be eaten from every Gaia text box.
-    if ((widget.keybind.global || widget.keybind == GaiaKeybind.settings) &&
-        !combo.hasModifier) {
-      setState(() => _refused = '$combo needs Ctrl, Alt or Win with it.');
-      return true;
-    }
-    Navigator.of(context).pop(combo);
-    return true;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.keybind.label),
-      content: Text(
-        _refused ??
-            'Press the keys for ${widget.keybind.label}: a letter, digit, '
-                'F-key, Space, Enter or Backspace, with any modifiers.\n'
-                'Esc to cancel.',
-      ),
     );
   }
 }
