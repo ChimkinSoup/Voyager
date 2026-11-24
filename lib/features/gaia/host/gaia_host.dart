@@ -975,57 +975,6 @@ class GaiaHost {
         )
       : await gaiaSetMemoryCards(repository, chatId, memoryId, state, text);
 
-  /// Memory [memoryId], saying [text], filed by the utility model, which
-  /// only the companion runs: the Gaia page's Suggest
-  /// (GAIA_MEMORY_TOPICS_HLD.md §5). True when it's in a topic or offered
-  /// one after; throws a [GaiaReadException] saying why it couldn't be
-  /// placed.
-  Future<bool> suggestTopics(String memoryId, String text) async {
-    try {
-      await _companionUp();
-      final placed = await _pipe.request('placeMemory', {
-        'memoryId': memoryId,
-        'text': text,
-      });
-      if (placed == null) {
-        throw GaiaReadException("Gaia's utility model couldn't place it.");
-      }
-      return placed == true;
-    } on GaiaRemoteException catch (error) {
-      throw GaiaReadException(error.message);
-    } on GaiaPipeException catch (error) {
-      throw GaiaReadException(error.message);
-    }
-  }
-
-  /// Where the utility model, which only the companion runs, would file each
-  /// of [memories] (at most [kGaiaSortBatch]): the Gaia page's Sort these
-  /// (GAIA_MEMORY_TOPICS_HLD.md §6). By memory id, those it placed; nothing
-  /// is applied. Throws a [GaiaReadException] saying why it couldn't.
-  Future<Map<String, GaiaPlacement>> sortMemories(
-    List<GaiaMemory> memories,
-  ) async {
-    try {
-      await _companionUp();
-      final sorted = await _pipe.request('sortMemories', {
-        'memories': [
-          for (final memory in memories) {'id': memory.id, 'text': memory.text},
-        ],
-      });
-      if (sorted is! Map) {
-        throw GaiaReadException("Gaia's utility model couldn't sort them.");
-      }
-      return {
-        for (final MapEntry(:key, :value) in sorted.entries)
-          key as String: gaiaPlacementFromJson(value),
-      };
-    } on GaiaRemoteException catch (error) {
-      throw GaiaReadException(error.message);
-    } on GaiaPipeException catch (error) {
-      throw GaiaReadException(error.message);
-    }
-  }
-
   /// Opens [chatId] in the Gaia window: a notification clicked, or a chat
   /// picked on the Gaia page.
   /// With [btwId], at that side question.

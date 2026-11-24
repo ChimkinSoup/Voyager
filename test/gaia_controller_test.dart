@@ -4341,7 +4341,7 @@ void main() {
     });
 
     test('/remember is filed by the utility model once saved, with its tags '
-        'and a new topic offered; the Gaia page asks the same', () async {
+        'and a new topic offered', () async {
       await controller.send('/remember Biscuit needs a booster');
       await settle();
       final memory = (await main.repository.listMemories()).single;
@@ -4355,52 +4355,6 @@ void main() {
       await controller.send('/remember biscuit needs a BOOSTER');
       await settle();
       expect(placements(), hasLength(1));
-
-      // The page's Suggest, through the main instance.
-      final loose = await main.memories.save(
-        'Takes Biscuit to Dr Lee',
-        status: GaiaMemoryStatus.active,
-      );
-      expect(
-        await main.pipe.request('placeMemory', {
-          'memoryId': loose!.id,
-          'text': loose.text,
-        }),
-        isTrue,
-      );
-      expect((await main.repository.getMemory(loose.id))!.topicIds, ['pets']);
-    });
-
-    test("the page's Sort these gets where each memory would go, by id, "
-        'and nothing is filed (§6)', () async {
-      final a = await main.memories.save(
-        'Plays the cello',
-        status: GaiaMemoryStatus.active,
-      );
-      final b = await main.memories.save(
-        'Takes Biscuit to Dr Lee',
-        status: GaiaMemoryStatus.active,
-      );
-      final sorted = await main.pipe.request('sortMemories', {
-        'memories': [
-          {'id': a!.id, 'text': a.text},
-          {'id': b!.id, 'text': b.text},
-        ],
-      });
-      expect(sorted, {
-        a.id: gaiaPlacementToJson((
-          topicIds: const [],
-          suggested: (name: 'Music', parentId: null),
-          tags: const [],
-        )),
-        b.id: gaiaPlacementToJson((
-          topicIds: const ['pets'],
-          suggested: null,
-          tags: const ['vet'],
-        )),
-      });
-      expect(utility.inputs.last, contains('1. Plays the cello'));
-      expect((await main.repository.getMemory(b.id))!.topicIds, isEmpty);
     });
 
     test(

@@ -3097,14 +3097,6 @@ class GaiaController extends ChangeNotifier {
         return _drain();
       case 'remote':
         return _onRemote(params);
-      case 'placeMemory':
-        return _place(params['memoryId']! as String, params['text']! as String);
-      case 'sortMemories':
-        return _sort([
-          for (final memory in params['memories']! as List)
-            if (memory case {'id': final String id, 'text': final String text})
-              (id: id, text: text),
-        ]);
       default:
         throw GaiaPipeException('unknown method $method');
     }

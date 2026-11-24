@@ -985,7 +985,9 @@ tab closes an Ask Gaia chat first, as the tab strip does. The phone's page is un
   memory and topic drags, the F2 hint, Sort these and its `gaiaSortProvider`, Suggest topics,
   the Setup tab with `GaiaUsageRow` (and `gaia_usage_row_test.dart`), run rows, Undo in Actions,
   the Keys and Context sections, and the rest of its `isWindows` branches. The page is the
-  phone's alone. `GaiaHost.sortMemories` and `suggestTopics`, which only the page called, stay.
+  phone's alone. `GaiaHost.sortMemories` and `suggestTopics`, which only the page called, went
+  next, with the companion's `sortMemories` and `placeMemory` requests; the companion's own
+  Sort and Suggest call its controller directly.
 - **No inbox count** on the Memories button. The header's inbox chip (§5.5) is the desktop's.
 
 **Tests:** `gaia_page_desktop_test.dart` (new): on Windows, Open in Gaia and a button per tab,
