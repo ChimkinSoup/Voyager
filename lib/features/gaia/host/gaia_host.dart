@@ -1032,6 +1032,10 @@ class GaiaHost {
   void openChat(String chatId, {String? btwId}) =>
       _sendOrLaunch('openChat', {'chatId': chatId, 'btwId': ?btwId});
 
+  /// Opens the Gaia window's settings panel at [tab] (a `GaiaPanelTab`'s
+  /// name): the desktop Gaia page's buttons (GAIA_SETTINGS_HLD.md §9).
+  void openPanel(String tab) => _sendOrLaunch('openPanel', {'tab': tab});
+
   /// Has the companion read [key]'s usage again (§6.4), if it's up: with none,
   /// there's no usage to correct.
   void recheckUsage(String key) {

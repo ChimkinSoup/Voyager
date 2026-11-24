@@ -2176,6 +2176,16 @@ void main() {
         expect(companions.single.events, ['openChat c1']);
       });
     });
+
+    test('openPanel with no companion launches one and arrives after hello', () {
+      run((async, host) {
+        host.openPanel('memories');
+        async.flushMicrotasks();
+        expect(pipe.launches, hasLength(1));
+        connect(async);
+        expect(companions.single.events, ['openPanel memories']);
+      });
+    });
   });
 
   group("the settings panel's queue (GAIA_SETTINGS_HLD.md §3.2)", () {

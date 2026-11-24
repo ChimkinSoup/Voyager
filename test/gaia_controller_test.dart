@@ -13,6 +13,7 @@ import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/features/gaia/usage/gaia_usage.dart';
 import 'package:voyager/features/gaia/companion/gaia_commands.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
+import 'package:voyager/features/gaia/companion/gaia_settings_panel.dart';
 import 'package:voyager/features/gaia/companion/gaia_tool_results.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_greetings.dart';
@@ -4268,6 +4269,22 @@ void main() {
       expect(controller.currentChatId, chatId);
       expect(controller.messages, hasLength(2));
     });
+
+    test(
+      "openPanel opens the Gaia window's settings panel at that tab "
+      '(GAIA_SETTINGS_HLD.md §9)',
+      () async {
+        main.pipe.notify('openPanel', {'tab': 'status'});
+        await settle();
+        expect(window.shown, GaiaMode.window);
+        expect(controller.panel.open, isTrue);
+        expect(controller.panel.tab, GaiaPanelTab.status);
+        main.pipe.notify('openPanel', {'tab': 'queue'});
+        await settle();
+        expect(controller.panel.open, isTrue);
+        expect(controller.panel.tab, GaiaPanelTab.queue);
+      },
+    );
   });
 
   group('GAIA.md', () {

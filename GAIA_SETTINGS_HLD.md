@@ -1,6 +1,6 @@
 # Gaia — Settings Panel and Memory Review (HLD)
 
-Status: **Design (2026-11-20), open questions decided (§11). Phases 1 and 2 built and checked live 2026-11-22 (§10.1, §10.2); Phase 3 built and checked live the same day (§10.3); Phase 4 built and checked live 2026-11-23 (§10.4); Phase 5 built and checked live the same day (§10.5); Phase 6 built and checked live 2026-11-23 (§10.6); Phase 7 not built.** Moves the Gaia page's management tabs
+Status: **Design (2026-11-20), open questions decided (§11). Phases 1 and 2 built and checked live 2026-11-22 (§10.1, §10.2); Phase 3 built and checked live the same day (§10.3); Phase 4 built and checked live 2026-11-23 (§10.4); Phase 5 built and checked live the same day (§10.5); Phase 6 built and checked live 2026-11-23 (§10.6); Phase 7 built and checked live the same day (§10.7).** Moves the Gaia page's management tabs
 (GAIA_HLD.md §17) into the companion, in Gaia's own look, so everything Gaia needs is
 reachable from the Gaia window. The Memories tab is redesigned rather than ported, and
 gains a new card-by-card review with an "Ask Gaia" chat about the memory in front of you.
@@ -967,6 +967,43 @@ inbox review.
 **Not checked live:** the two fixes (tested above), the narrow window's chat under the card, the
 list card's hover icon (the ⋯ menu was used), the phone's read-only chip and card, and another
 device.
+
+### 10.7 Phase 7 as built (2026-11-23)
+
+**Built:** on Windows, `GaiaPage` builds `_OpenInGaia` in place of its tabs: a line saying
+where everything went, **Open in Gaia** (the window hotkey's path, as the old header button
+was), and one button per `GaiaPanelTab`. Each sends `GaiaHost.openPanel(tab.name)`, an
+`openPanel {tab}` event through `_sendOrLaunch`, so a companion that isn't up is launched and
+gets it after `hello`, as `openChat` does. The companion brings the Gaia window up (it may be
+hidden, which `openPanel` alone doesn't handle) and opens the panel at that tab; a different
+tab closes an Ask Gaia chat first, as the tab strip does. The phone's page is unchanged.
+
+**Where it differs from the design above:**
+- **`openPanel` has no `memoryId`** (§3.3). Nothing on the desktop sends one: the recall chip
+  opens the panel in the companion itself, and the phone's reveal stays on its own page.
+- **The page's Windows-only code stays, unreachable:** memory and topic drags, F2, Sort these,
+  the Setup tab, run rows, Undo in Actions, and the rest of its `isWindows` branches. Left for a
+  later clean-up pass, so this phase stays small.
+- **No inbox count** on the Memories button. The header's inbox chip (§5.5) is the desktop's.
+
+**Tests:** `gaia_page_desktop_test.dart` (new): on Windows, Open in Gaia and a button per tab,
+and no tabs. `gaia_controller_test.dart` has 1 more: `openPanel` shows the Gaia window and opens
+the panel at that tab, then switches tab. `gaia_host_test.dart` has 1 more: `openPanel` with no
+companion launches one and arrives after `hello`. `gaia_memory_tree_test.dart` loses its 14
+Windows-variant tests, which drove the page's desktop Memories tab; its two phone tests stay.
+
+**Checked live (2026-11-23, `gaiaqa`, qa-128):** from a copy of the Debug build with this code
+bundled, with background input on the main window, parked off-screen. The page showed the line,
+Open in Gaia and the six buttons, and no tabs.
+- **Hidden:** Status brought the Gaia window up in front, with the panel open on Status.
+- **Behind** (the main window in front): Queue brought it in front on Queue.
+- **Not running** (the companion killed, Memories clicked within a second, ahead of the host's
+  own relaunch): the relaunched companion came up in front with the panel open on Memories. The
+  panel's open state isn't kept across restarts and the kept tab was Queue, so the event did that.
+- **Open in Gaia** with Gaia hidden brought the window up.
+- No error in the profile's error log.
+
+**Not checked live:** the phone's page (unchanged code).
 
 ## 11. Decisions (2026-11-20)
 

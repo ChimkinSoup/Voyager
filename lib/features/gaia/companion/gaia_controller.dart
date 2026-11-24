@@ -3028,6 +3028,13 @@ class GaiaController extends ChangeNotifier {
             btwId: params['btwId'] as String?,
           ),
         );
+      case 'openPanel':
+        // A tab this build doesn't know (a newer host's) is skipped.
+        final tab = GaiaPanelTab.values.asNameMap()[params['tab']];
+        if (tab == null) break;
+        // As the tab strip does: only the review shows an Ask Gaia chat.
+        if (tab != panel.tab) closeAsk();
+        unawaited(openWindow().then((_) => openPanel(tab: tab)));
       case 'tokens':
         tokens.value = switch (params['rows']) {
           final List rows => _tokenRows(rows),

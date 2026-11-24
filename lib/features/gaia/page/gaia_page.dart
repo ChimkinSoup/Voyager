@@ -81,6 +81,9 @@ class _GaiaPageState extends ConsumerState<GaiaPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Everything here is in the Gaia window's settings panel on the desktop
+    // (GAIA_SETTINGS_HLD.md §9); the phone keeps the full page.
+    if (isWindows) return const _OpenInGaia();
     ref.listen(gaiaRevealMemoryProvider, (_, id) {
       if (id != null) setState(() => _reveal(id));
     });
@@ -190,6 +193,65 @@ class _GaiaPageState extends ConsumerState<GaiaPage> {
 
 /// The widest the page's content gets: room for all seven tabs in a row.
 const _pageWidth = 1200.0;
+
+/// The desktop's Gaia page (GAIA_SETTINGS_HLD.md §9): a way into the Gaia
+/// window, and into its settings panel at each tab.
+class _OpenInGaia extends StatelessWidget {
+  const _OpenInGaia();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      type: MaterialType.transparency,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+        children: [
+          Text('Gaia', style: theme.textTheme.headlineSmall),
+          const SizedBox(height: 12),
+          Text(
+            "Gaia's chats, memories and settings are in the Gaia window. "
+            'Its sidebar lists the chats, and the gear at its foot (Ctrl+,) '
+            'opens the rest.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: GlassButton(
+              onPressed: () => GaiaHost.instance.onHotkey(GaiaHotkey.window),
+              icon: const Icon(PhosphorIconsRegular.planet, size: 13),
+              label: 'Open in Gaia',
+            ),
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final tab in GaiaPanelTab.values)
+                GlassButton(
+                  onPressed: () => GaiaHost.instance.openPanel(tab.name),
+                  icon: Icon(switch (tab) {
+                    GaiaPanelTab.memories => PhosphorIconsRegular.brain,
+                    GaiaPanelTab.actions => PhosphorIconsRegular.listChecks,
+                    GaiaPanelTab.queue => PhosphorIconsRegular.queue,
+                    GaiaPanelTab.status => PhosphorIconsRegular.broadcast,
+                    GaiaPanelTab.setup => PhosphorIconsRegular.wrench,
+                    GaiaPanelTab.settings => PhosphorIconsRegular.gear,
+                  }, size: 13),
+                  label: tab.label,
+                  dense: true,
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _ChatsTab extends ConsumerStatefulWidget {
   const _ChatsTab();
