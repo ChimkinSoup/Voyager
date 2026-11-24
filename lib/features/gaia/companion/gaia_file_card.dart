@@ -98,7 +98,6 @@ class GaiaFileCard extends StatelessWidget {
                   icon: Icons.close,
                   onPressed: remove,
                   size: 24,
-                  still: true,
                 ),
               ),
           ],

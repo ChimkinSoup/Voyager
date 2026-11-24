@@ -27,14 +27,13 @@ class GaiaAmbient extends InheritedWidget {
   bool updateShouldNotify(GaiaAmbient old) => old.running != running;
 }
 
-/// Gaia's button (after Aceternity UI's hover border gradient): a dark fill
-/// in a [GaiaGlowRing], lit by a soft light that circles the ring. Once the
-/// cursor comes within [_reach] of the button, the light swings round to
-/// face it and follows it, a tint of the accent; over the button, it centres
-/// on the cursor, widens, and turns the accent at full saturation. Squared
-/// off with a [label], or square with only an [icon]; either way its
-/// corners are the composer's, [GaiaRadius.chip]. A [color] stands in for
-/// the accent and tints the label, as Cancel's red does.
+/// Gaia's button: no edge at rest, a bare muted icon or a label on a faint
+/// light fill. Hover (or Tab) fills it with a faint tint of the accent,
+/// colours its content, and rounds it to about a third of its height; an
+/// icon-only one has no fill at rest to morph from, so it opens straight
+/// onto the rounded shape. Squared off with a [label], or square with only
+/// an [icon]. A [color] stands in for the accent and tints the label, as
+/// Cancel's red does.
 class GaiaButton extends StatefulWidget {
   const GaiaButton({
     super.key,
@@ -44,29 +43,44 @@ class GaiaButton extends StatefulWidget {
     this.size = 36,
     this.color,
     this.padding = 16,
-    this.still = false,
     this.radius,
-  }) : assert(label != null || icon != null);
+    this.iconSize,
+    this.tooltip,
+    this.semanticLabel,
+    this.glyph,
+  }) : assert(label != null || icon != null || glyph != null);
 
   /// Null disables the button.
   final VoidCallback? onPressed;
   final String? label;
   final IconData? icon;
 
+  /// Drawn in place of [icon] when the icon is more than one glyph, as the
+  /// composer's hand is. It's given the content's colour and [iconSize] as
+  /// its [IconTheme].
+  final Widget? glyph;
+
   /// The height, and an icon-only button's width.
   final double size;
 
-  /// The light's colour and the label's; the accent and white when null.
+  /// The icon's size; 0.45 of [size] when null.
+  final double? iconSize;
+
+  /// Shown on hover, and the button's name to a screen reader.
+  final String? tooltip;
+
+  /// With no [tooltip], its name to a screen reader alone: where a button
+  /// repeats down a list, a tooltip on each would cover the rows under it.
+  final String? semanticLabel;
+
+  /// The hover tint's colour and the content's; the accent when null.
   final Color? color;
 
   /// Either side of a squared-off button's label.
   final double padding;
 
-  /// The ring without its moving light, which lights up whole on hover:
-  /// for small buttons there can be many of, as on each attachment.
-  final bool still;
-
-  /// The corner radius; [GaiaRadius.chip] when null.
+  /// The corner radius at rest and on hover; when null, [GaiaRadius.chip]
+  /// at rest, rounding to a third of [size] on hover.
   final double? radius;
 
   @override
@@ -98,12 +112,26 @@ class _GaiaButtonState extends State<GaiaButton> {
   Widget build(BuildContext context) {
     final enabled = widget.onPressed != null;
     final lit = _hovered || (_focused && enabled);
+    final pressed = _pressed && enabled;
     final square = widget.label == null;
-    final outer = widget.radius ?? GaiaRadius.chip;
-    final iconSize = widget.size * 0.45;
-    final foreground = widget.color ?? Colors.white;
+    final accent = widget.color ?? Theme.of(context).colorScheme.primary;
+    final rest = square ? 0.0 : 0.05;
+    final fill = lit
+        ? accent.withValues(alpha: pressed ? 0.22 : 0.14)
+        : Colors.white.withValues(alpha: pressed ? rest + 0.1 : rest);
+    final foreground = lit
+        ? Color.lerp(accent, Colors.white, 0.4)!
+        : widget.color ?? (square ? GaiaInk.muted : GaiaInk.dim);
+    final radius =
+        widget.radius ?? (lit || square ? widget.size / 3 : GaiaRadius.chip);
+    final iconSize = widget.iconSize ?? widget.size * 0.45;
     final content = square
-        ? Icon(widget.icon, size: iconSize, color: foreground)
+        ? widget.glyph != null
+              ? IconTheme.merge(
+                  data: IconThemeData(color: foreground, size: iconSize),
+                  child: widget.glyph!,
+                )
+              : Icon(widget.icon, size: iconSize, color: foreground)
         : Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -121,43 +149,20 @@ class _GaiaButtonState extends State<GaiaButton> {
               ),
             ],
           );
-    final inner = Container(
+    final body = AnimatedContainer(
+      duration: GaiaMotion.quick,
+      curve: GaiaMotion.curve,
       alignment: Alignment.center,
       padding: square ? null : EdgeInsets.symmetric(horizontal: widget.padding),
+      decoration: ShapeDecoration(
+        color: fill,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(radius),
+        ),
+      ),
       child: content,
     );
-    final Widget ring;
-    if (widget.still) {
-      final colors = Theme.of(context).colorScheme;
-      final accent = widget.color ?? colors.primary;
-      // The moving ring's colours, idle and lit, round the whole edge.
-      ring = AnimatedContainer(
-        duration: GaiaMotion.quick,
-        padding: const EdgeInsets.all(1),
-        decoration: BoxDecoration(
-          color: lit
-              ? HSLColor.fromColor(accent).withSaturation(1).toColor()
-              : Color.lerp(accent, Colors.white, 0.5)!.withValues(alpha: 0.3),
-          borderRadius: BorderRadius.circular(outer),
-        ),
-        child: Container(
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            color: Color.lerp(colors.surface, Colors.black, 0.5),
-            borderRadius: BorderRadius.circular(outer - 1),
-          ),
-          child: inner,
-        ),
-      );
-    } else {
-      ring = GaiaGlowRing(
-        radius: outer,
-        hovered: lit,
-        color: widget.color,
-        child: inner,
-      );
-    }
-    return FocusableActionDetector(
+    final button = FocusableActionDetector(
       enabled: enabled,
       mouseCursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
       actions: {
@@ -189,19 +194,25 @@ class _GaiaButtonState extends State<GaiaButton> {
               height: widget.size,
               width: square ? widget.size : null,
               // As wide as its label, unless made wider.
-              child: square ? ring : IntrinsicWidth(child: ring),
+              child: square ? body : IntrinsicWidth(child: body),
             ),
           ),
         ),
       ),
     );
+    final tooltip = widget.tooltip;
+    if (tooltip != null) return Tooltip(message: tooltip, child: button);
+    final semanticLabel = widget.semanticLabel;
+    return semanticLabel == null
+        ? button
+        : Semantics(button: true, label: semanticLabel, child: button);
   }
 }
 
-/// The ring of light round Gaia's buttons and its notch: a dark fill in a
-/// thin ring that the light circles. Near the cursor the light swings round
-/// to face it; while [hovered], it centres on the cursor, widens, and turns
-/// the accent at full saturation.
+/// The ring of light round Gaia's notch, menus and date picker: a dark fill
+/// in a thin ring that the light circles. Near the cursor the light swings
+/// round to face it; while [hovered], it centres on the cursor, widens, and
+/// turns the accent at full saturation.
 class GaiaGlowRing extends StatefulWidget {
   const GaiaGlowRing({
     super.key,

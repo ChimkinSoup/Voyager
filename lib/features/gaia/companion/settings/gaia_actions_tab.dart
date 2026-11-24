@@ -22,22 +22,17 @@ class GaiaActionsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final actions = controller.actions;
+    if (actions != null && actions.isEmpty) {
+      return const GaiaPanelEmpty(
+        title: 'Nothing yet.',
+        detail: 'What Gaia saves or does after you accept it shows here.',
+      );
+    }
     return GaiaPanelScroll(
       key: const PageStorageKey('gaia panel actions'),
       slivers: [
         if (actions == null)
           const SliverToBoxAdapter(child: SizedBox.shrink())
-        else if (actions.isEmpty)
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(10),
-              child: Text(
-                'Nothing yet. What Gaia saves or does after you accept it '
-                'shows here.',
-                style: GaiaType.row.copyWith(color: GaiaInk.muted),
-              ),
-            ),
-          )
         else
           SliverList.list(
             children: [

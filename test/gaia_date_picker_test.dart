@@ -101,11 +101,11 @@ void main() {
     expect(edits, isEmpty);
   });
 
-  testWidgets("an attachment's remove button is still", (tester) async {
+  testWidgets('a button has no glow ring', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: VoyagerTheme.dark(),
-        home: GaiaButton(icon: Icons.close, onPressed: () {}, still: true),
+        home: GaiaButton(icon: Icons.close, onPressed: () {}),
       ),
     );
     expect(find.byType(GaiaGlowRing), findsNothing);

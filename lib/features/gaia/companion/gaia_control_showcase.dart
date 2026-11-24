@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_card_view.dart';
+import 'package:voyager/features/gaia/companion/gaia_settings_panel.dart';
 import 'package:voyager/features/gaia/host/gaia_flash.dart';
 
 /// One step of the preview card: [marker] is what hovering it shows, [flash]
@@ -524,13 +525,11 @@ class _GaiaControlShowcaseState extends State<GaiaControlShowcase> {
             ),
           ],
         ),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Control border'),
-          subtitle: const Text(
-            'Round every monitor, with its notch on the primary one. The '
-            "notch's button only turns this off: no chat is touched.",
-          ),
+        GaiaPanelSwitch(
+          title: 'Control border',
+          subtitle:
+              'Round every monitor, with its notch on the primary one. The '
+              "notch's button only turns this off: no chat is touched.",
           value: _border,
           onChanged: _setBorder,
         ),

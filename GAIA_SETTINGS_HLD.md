@@ -1,6 +1,6 @@
 # Gaia — Settings Panel and Memory Review (HLD)
 
-Status: **Design (2026-11-20), open questions decided (§11). Phases 1 and 2 built and checked live 2026-11-22 (§10.1, §10.2); Phase 3 built and checked live the same day (§10.3); Phase 4 built and checked live 2026-11-23 (§10.4); Phase 5 built and checked live the same day (§10.5); Phase 6 built and checked live 2026-11-23 (§10.6); Phase 7 built and checked live the same day (§10.7).** Moves the Gaia page's management tabs
+Status: **Design (2026-11-20), open questions decided (§11). Phases 1 and 2 built and checked live 2026-11-22 (§10.1, §10.2); Phase 3 built and checked live the same day (§10.3); Phase 4 built and checked live 2026-11-23 (§10.4); Phase 5 built and checked live the same day (§10.5); Phase 6 built and checked live 2026-11-23 (§10.6); Phase 7 built and checked live the same day (§10.7). The source line's split, left over from Phase 5, built and checked live the same day (§10.6.1).** Moves the Gaia page's management tabs
 (GAIA_HLD.md §17) into the companion, in Gaia's own look, so everything Gaia needs is
 reachable from the Gaia window. The Memories tab is redesigned rather than ported, and
 gains a new card-by-card review with an "Ask Gaia" chat about the memory in front of you.
@@ -916,8 +916,8 @@ memoryId, text, accept}`.
   session that already has it (a resume, or a catch-up) isn't told again.
 - **A proposal from an Ask Gaia chat** joins the end of an inbox deck. Other decks don't take it.
 - **The phone** shows the `About:` chip and the revision card read-only. It gets no Ask Gaia.
-- **Still not built: the source line's read-only split** (§6.2, left over from Phase 5). "from
-  *chat*, Nov 20" is still text.
+- **The source line's read-only split** (§6.2, left over from Phase 5) was built after this phase
+  (2026-11-23); see §10.6.1.
 
 **Tests:** `gaia_memory_review_test.dart` has 3 more. **/** opens the chat beside the card as the
 only chat built, with the `About:` chip and typing going to the composer, not the deck. Skip hides
@@ -967,6 +967,53 @@ inbox review.
 **Not checked live:** the two fixes (tested above), the narrow window's chat under the card, the
 list card's hover icon (the ⋯ menu was used), the phone's read-only chip and card, and another
 device.
+
+### 10.6.1 The source line's split (2026-11-23)
+
+**Built:** a review card's "from *chat*, Nov 20" is a click (tooltip Show / Hide this chat) when
+its chat is known. It shows that chat in the Ask Gaia chat's place, so beside the card in a wide
+window and under it otherwise, as §7.1 lays out, not always under. `GaiaController.showSource`
+makes it the current chat, as `askAbout` does, and `closeAsk` now closes either one and gives back
+the chat that was in view, so the tab strip, closing the panel and ending the review all hide it.
+It follows the card in front as the Ask Gaia chat does: another card hides it, coming back shows it.
+Ask Gaia (/) takes its place, a click on the line takes the place back, and a second click hides it,
+which brings back an Ask Gaia chat that card has.
+
+**Read-only** is `_ChatColumn(readOnly: true)`: the messages with no composer; no Edit & resend,
+Attach as context, Fork, Rewind or chapter actions on hover, right-click or a chapter's divider;
+no Retry; checkboxes not toggled; cards, revision cards and recall chips take no clicks. The hover
+bar keeps Copy, the model and the time. Copying, images, tool results and selecting text still work.
+
+**Tests:** `gaia_memory_review_test.dart` has 1 more, covering all of the above apart from the
+right-click menu; Remember on the chat's memory card sends nothing (it fails with the cards live),
+and hovering a message offers Copy but not Edit & resend or Fork. The full
+`test/gaia_*_test.dart` run: 2,047 passed, 25 skipped, 1 failed: `gaia_memories_tab_test.dart`'s
+card-topics test, which passes alone and in its file, with and without this change.
+
+**Checked live (2026-11-23, `gaiaqa`, qa-128):** from the `vwt-run` build copy with a fresh
+bundle, background input only. A Tea topic review; the first card's line "from *Green Tea
+Preference Saved as Memory*" showed that chat beside the card with no composer, its memory cards
+as they were. Hovering a message showed only its time and Copy; right-click offered Select all
+and Copy message. → hid it and ← brought it back. / gave the Ask Gaia chat; a click on the line
+took the place back, a second click brought Ask Gaia back. The Actions tab hid it and gave back the
+chat that was open; closing the panel did too. No error in the logs. Two fixes came of it:
+- **The hover bar was gone entirely**, Copy and the time with it (`actions: null` hides the bar).
+  It now gets an empty list.
+- **Back on Memories after another tab, the Ask Gaia chat came back instead of the source**: the
+  choice was the review view's, which the tab rebuilds. It's on `GaiaMemoryReview.sourceOf` now,
+  as `asked` is. Both re-checked live.
+
+**Scrolled to where it came from** (added after the pass, same day): the split opens at the message
+with the memory's card, flashed, as a search result is (`GaiaController.revealing`). A memory
+offered without a card (the curator, /remember) opens at the last message from before it was made.
+The widget test's chat now has 37 messages after the card, and the card must be on screen (it
+fails without the reveal). Checked live on the same Tea card. The no-card case isn't tested.
+
+Seen, not from this change: after tapping a tab and coming back, the focus stays on the tab's
+button, so Esc doesn't reach the deck until the deck is clicked.
+
+**Not checked live:** the narrow window's chat under the card, clicks on an undecided card in the
+chat (the chats used had only decided ones; widget-tested), and the phone (no review there).
 
 ### 10.7 Phase 7 as built (2026-11-23)
 

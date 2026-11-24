@@ -10,6 +10,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:voyager/core/utils/moon.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_moon.dart';
+import 'package:voyager/features/gaia/companion/gaia_settings_panel.dart';
 import 'package:voyager/features/gaia/companion/gaia_starfield.dart';
 
 /// How the sky leaves once a prompt is sent from it.
@@ -3988,10 +3989,8 @@ class GaiaSkyPanel extends StatelessWidget {
                                 '(else 1 in $kGaiaRareAurora)',
                               ),
                             ),
-                            Switch(
+                            GaiaToggle(
                               value: debug.skyRareAurora,
-                              materialTapTargetSize:
-                                  MaterialTapTargetSize.shrinkWrap,
                               onChanged: debug.setSkyRareAurora,
                             ),
                           ],
@@ -4126,10 +4125,8 @@ class GaiaSkyPanel extends StatelessWidget {
                             const Expanded(
                               child: Text('Blink out without glints or glow'),
                             ),
-                            Switch(
+                            GaiaToggle(
                               value: debug.skyPlainBlink,
-                              materialTapTargetSize:
-                                  MaterialTapTargetSize.shrinkWrap,
                               onChanged: debug.setSkyPlainBlink,
                             ),
                           ],

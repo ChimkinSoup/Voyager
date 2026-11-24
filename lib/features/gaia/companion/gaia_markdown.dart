@@ -16,6 +16,7 @@ import 'package:markdown/markdown.dart' as md;
 import 'package:path/path.dart' as p;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
+import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_style.dart';
 
 /// A message's text rendered as Markdown (§9.5): the one renderer for the
@@ -1619,13 +1620,12 @@ class _GaiaCodeBlockState extends State<GaiaCodeBlock> {
     );
     final language = widget.language;
     final copy = SelectionContainer.disabled(
-      child: IconButton(
+      child: GaiaButton(
         tooltip: _copied == null ? 'Copy code' : 'Copied',
+        icon: _copied == null ? Icons.content_copy : Icons.check,
+        size: 28,
         iconSize: 16,
-        visualDensity: VisualDensity.compact,
-        color: theme.colorScheme.onSurfaceVariant,
         onPressed: _copy,
-        icon: Icon(_copied == null ? Icons.content_copy : Icons.check),
       ),
     );
     final body = SingleChildScrollView(

@@ -394,9 +394,11 @@ class _GaiaShell extends StatelessWidget {
     // In the Gaia window, over the sidebar and chat (GAIA_SETTINGS_HLD.md
     // §2.2), which are kept as they were underneath for when it closes.
     final panelShown = !floater && controller.panel.open;
-    // An Ask Gaia chat is the current chat, shown in the panel: the one
-    // under it isn't built meanwhile, so there's only ever one (§2.2).
-    final asking = panelShown && controller.asking != null;
+    // An Ask Gaia chat or a review card's source chat is the current chat,
+    // shown in the panel: the one under it isn't built meanwhile, so there's
+    // only ever one (§2.2).
+    final source = panelShown && controller.showingSource != null;
+    final asking = source || (panelShown && controller.asking != null);
     Widget chat({bool sidebarShown = false, VoidCallback? toggleSidebar}) =>
         Column(
           children: [
@@ -464,7 +466,10 @@ class _GaiaShell extends StatelessWidget {
                     maxStepMove: controller.debug.starStep,
                     // Below the header and its divider.
                     top: kGaiaHeaderHeight + 1,
-                    left: floater ? null : controller.sidebar.edge,
+                    // The panel has no sidebar: across the whole window.
+                    left: floater || panelShown
+                        ? null
+                        : controller.sidebar.edge,
                     placing: controller.debug.placeStars,
                     under: controller.scrolledUnder,
                     moonlight: () => gaiaMoonlight(
@@ -507,7 +512,9 @@ class _GaiaShell extends StatelessWidget {
                       burstTest: controller.debug.skyBurstTest,
                       satelliteTest: controller.debug.skySatelliteTest,
                       top: kGaiaHeaderHeight + 1,
-                      left: floater ? null : controller.sidebar.edge,
+                      left: floater || panelShown
+                          ? null
+                          : controller.sidebar.edge,
                       // Nothing counts in dummy mode, which the sky tour
                       // turns on too (GAIA_STATS_HLD.md §3.1).
                       onSighting: controller.debug.dummyMode
@@ -556,6 +563,7 @@ class _GaiaShell extends StatelessWidget {
                                             askChat: asking
                                                 ? _ChatColumn(
                                                     controller: controller,
+                                                    readOnly: source,
                                                   )
                                                 : null,
                                           ),
@@ -629,9 +637,13 @@ class _GaiaShell extends StatelessWidget {
 /// window and the floaters, or an Ask Gaia chat in the settings panel
 /// (GAIA_SETTINGS_HLD.md §7.2). Only one is ever built.
 class _ChatColumn extends StatelessWidget {
-  const _ChatColumn({required this.controller});
+  const _ChatColumn({required this.controller, this.readOnly = false});
 
   final GaiaController controller;
+
+  /// A review card's source chat (§6.2): its messages alone, with nothing
+  /// that writes to it.
+  final bool readOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -648,8 +660,10 @@ class _ChatColumn extends StatelessWidget {
         onEdit: (message) => _editMessage(context, controller, message),
         onAttach: controller.attachMessage,
         controller: controller,
+        readOnly: readOnly,
       ),
     );
+    if (readOnly) return messages;
     final composer = _Composer(controller: controller);
     // The composer's chips float over the messages' foot.
     return ValueListenableBuilder(
@@ -832,8 +846,8 @@ class _Header extends StatelessWidget {
   final GaiaController controller;
   final bool sidebarShown;
 
-  /// Over the settings panel (GAIA_SETTINGS_HLD.md §2.3): titled Settings,
-  /// with no chat's project, title or New chat.
+  /// Over the settings panel (GAIA_SETTINGS_HLD.md §2.3): its tabs, after a
+  /// button that closes it, with no chat's project, title or New chat.
   final bool panel;
 
   /// Null in the floaters, which have no sidebar.
@@ -869,7 +883,18 @@ class _Header extends StatelessWidget {
         height: kGaiaHeaderHeight,
         child: Row(
           children: [
-            if (toggleSidebar case final toggle?) ...[
+            if (panel) ...[
+              const SizedBox(width: 12),
+              Tooltip(
+                message: 'Close settings (Esc)',
+                child: GaiaButton(
+                  icon: Icons.arrow_back,
+                  size: 34,
+                  onPressed: controller.closePanel,
+                ),
+              ),
+              const SizedBox(width: 10),
+            ] else if (toggleSidebar case final toggle?) ...[
               const SizedBox(width: 12),
               GaiaButton(
                 icon: Icons.view_sidebar_outlined,
@@ -881,11 +906,8 @@ class _Header extends StatelessWidget {
               const SizedBox(width: 16),
             Expanded(
               child: panel
-                  ? Text(
-                      'Settings',
-                      style: theme.textTheme.titleSmall,
-                      overflow: TextOverflow.ellipsis,
-                    )
+                  // After the close button: 12 + 34 + 10.
+                  ? GaiaPanelTabs(controller: controller, start: 56)
                   : LayoutBuilder(
                       builder: (context, constraints) => Row(
                         children: [
@@ -1877,11 +1899,11 @@ class _SidebarState extends State<_Sidebar> {
             : null,
         // One on every project would be a column of buttons: the row under
         // the cursor shows its own.
-        action: GaiaActionIcon(
-          label: 'New chat in ${project.name}',
+        action: GaiaButton(
+          semanticLabel: 'New chat in ${project.name}',
           icon: Icons.add,
-          compact: true,
-          tooltip: false,
+          size: 24,
+          iconSize: 16,
           onPressed: () => _newChatIn(project),
         ),
         onTap: renaming
@@ -2310,10 +2332,11 @@ class _SidebarState extends State<_Sidebar> {
                         ),
                       ],
                       const SizedBox(width: 4),
-                      GaiaActionIcon(
-                        label: 'Clear selection',
+                      GaiaButton(
+                        tooltip: 'Clear selection',
                         icon: Icons.close,
-                        compact: true,
+                        size: 24,
+                        iconSize: 16,
                         onPressed: _clearPicked,
                       ),
                     ],
@@ -2345,11 +2368,11 @@ class _SidebarState extends State<_Sidebar> {
                         SliverToBoxAdapter(
                           child: _SidebarLabel(
                             'Projects',
-                            trailing: GaiaActionIcon(
-                              label: 'New project',
+                            trailing: GaiaButton(
+                              semanticLabel: 'New project',
                               icon: Icons.add,
-                              compact: true,
-                              tooltip: false,
+                              size: 24,
+                              iconSize: 16,
                               onPressed: _newProject,
                             ),
                           ),
@@ -2417,15 +2440,15 @@ class _SidebarState extends State<_Sidebar> {
                           SliverToBoxAdapter(
                             child: _SidebarLabel(
                               'Archived',
-                              trailing: GaiaActionIcon(
-                                label: _archivedOpen
+                              trailing: GaiaButton(
+                                semanticLabel: _archivedOpen
                                     ? 'Hide archived'
                                     : 'Show archived',
                                 icon: _archivedOpen
                                     ? Icons.expand_less
                                     : Icons.expand_more,
-                                compact: true,
-                                tooltip: false,
+                                size: 24,
+                                iconSize: 16,
                                 onPressed: () => setState(
                                   () => _archivedOpen = !_archivedOpen,
                                 ),
@@ -2731,6 +2754,7 @@ class _Messages extends StatefulWidget {
     required this.onEdit,
     required this.onAttach,
     required this.controller,
+    this.readOnly = false,
   });
 
   final List<GaiaMessage> messages;
@@ -2754,6 +2778,9 @@ class _Messages extends StatefulWidget {
 
   /// For the cards in replies (§10), which answer through it.
   final GaiaController controller;
+
+  /// As on [_ChatColumn].
+  final bool readOnly;
 
   @override
   State<_Messages> createState() => _MessagesState();
@@ -3144,7 +3171,8 @@ class _MessagesState extends State<_Messages>
       final scrolledUp = _scroll.hasClients && _scroll.offset > 100;
       widget.controller.scrolledUnder.value = _under();
       final chatId = _chatId;
-      if (_restoring == null && chatId != null) {
+      // A source chat seen read-only leaves where it was last left.
+      if (_restoring == null && chatId != null && !widget.readOnly) {
         final places = widget.controller.scrolledTo;
         !scrolledUp || across == null
             ? places.remove(chatId)
@@ -3399,6 +3427,7 @@ class _MessagesState extends State<_Messages>
       onAttach: _attach,
       onRenameChapter: _startRename,
       controller: widget.controller,
+      readOnly: widget.readOnly,
       gutter: gutter,
       orbTier: orbTier,
       orbKey: orbKey,
@@ -3529,7 +3558,9 @@ class _MessagesState extends State<_Messages>
                             rename: _rename,
                             renameFocus: _renameFocus,
                             onEndRename: _endRename,
-                            menu: () => _chapterMenu(message),
+                            menu: widget.readOnly
+                                ? null
+                                : () => _chapterMenu(message),
                           ),
                         if (switched != null || moved != null)
                           _VendorDivider(
@@ -4400,7 +4431,9 @@ class _ChapterDivider extends StatelessWidget {
   final TextEditingController rename;
   final FocusNode renameFocus;
   final void Function({required bool keep}) onEndRename;
-  final List<GaiaMenuItem> Function() menu;
+
+  /// Null in a read-only chat.
+  final List<GaiaMenuItem> Function()? menu;
 
   @override
   Widget build(BuildContext context) {
@@ -4435,9 +4468,11 @@ class _ChapterDivider extends StatelessWidget {
         : Flexible(
             child: Text(title, style: style, overflow: TextOverflow.ellipsis),
           );
+    final menu = this.menu;
     return GestureDetector(
-      onSecondaryTapUp: (details) =>
-          showGaiaMenu(context, details.globalPosition, menu()),
+      onSecondaryTapUp: menu == null
+          ? null
+          : (details) => showGaiaMenu(context, details.globalPosition, menu()),
       child: Padding(
         padding: const EdgeInsets.only(bottom: 12),
         child: Row(
@@ -4619,6 +4654,7 @@ class _MessageView extends StatelessWidget {
     required this.onAttach,
     required this.onRenameChapter,
     required this.controller,
+    required this.readOnly,
     required this.gutter,
     required this.orbTier,
     required this.orbKey,
@@ -4638,6 +4674,10 @@ class _MessageView extends StatelessWidget {
   /// Its chapter's title to edit in its divider.
   final void Function(GaiaMessage message) onRenameChapter;
   final GaiaController controller;
+
+  /// As on [_ChatColumn]: copying only, its cards and checkboxes shown as
+  /// they are.
+  final bool readOnly;
 
   /// The list's margin either side of the messages.
   final double gutter;
@@ -4677,7 +4717,7 @@ class _MessageView extends StatelessWidget {
         alignment: Alignment.centerRight,
         inset: 0,
         copy: message.text,
-        actions: _actions,
+        actions: readOnly ? _noActions : _actions,
         at: message.createdAt,
         controller: controller,
         child: GaiaAppear(
@@ -4818,13 +4858,15 @@ class _MessageView extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           for (final (index, part) in message.parts.indexed)
-            switch (part) {
+            _inert(part, switch (part) {
               GaiaTextPart(:final text, :final checks) => _MessageText(
                 text: text,
                 markdown: true,
                 menu: _menu,
                 checks: checks,
-                onCheck: (task) => controller.toggleCheck(message, index, task),
+                onCheck: readOnly
+                    ? null
+                    : (task) => controller.toggleCheck(message, index, task),
               ),
               // Its actions are on the activity card already: only the
               // reads show here, and nothing when there were none.
@@ -4944,7 +4986,7 @@ class _MessageView extends StatelessWidget {
               GaiaQuotePart() ||
               GaiaMemoryRefPart() ||
               GaiaUnknownPart() => const SizedBox.shrink(),
-            },
+            }),
           // Rebuilt with the controller: a retry isn't on the message. The
           // CLI's own retry line, with its countdown, over a cut-off note.
           if (streaming)
@@ -4986,7 +5028,7 @@ class _MessageView extends StatelessWidget {
             ),
           // Rebuilt with the controller: whether it's still the last reply
           // isn't on the message.
-          if (message.status == GaiaMessageStatus.error)
+          if (message.status == GaiaMessageStatus.error && !readOnly)
             ListenableBuilder(
               listenable: controller,
               builder: (context, _) => controller.canRetry(message)
@@ -4996,7 +5038,6 @@ class _MessageView extends StatelessWidget {
                         label: 'Retry',
                         size: 28,
                         padding: 12,
-                        still: true,
                         onPressed: () => unawaited(controller.retryFailed()),
                       ),
                     )
@@ -5018,7 +5059,11 @@ class _MessageView extends StatelessWidget {
       inset: indent + _bubblePadding.left - kGaiaActionIconPadding,
       above: _HoverActions._above - _replyPadding.bottom,
       copy: message.text,
-      actions: streaming ? null : _actions,
+      actions: streaming
+          ? null
+          : readOnly
+          ? _noActions
+          : _actions,
       label: replyLabel?.model,
       labelTip: replyLabel?.account,
       at: message.createdAt,
@@ -5047,6 +5092,16 @@ class _MessageView extends StatelessWidget {
       ),
     );
   }
+
+  /// A read-only chat's hover bar: Copy and when, nothing that acts.
+  static List<GaiaMenuItem> _noActions() => const [];
+
+  /// [part]'s view, taking no clicks in a read-only chat where a click
+  /// would write or leave it: a card's answers, the recall chip's link.
+  Widget _inert(GaiaPart part, Widget view) =>
+      readOnly && part is! GaiaTextPart && part is! GaiaActivityPart
+      ? IgnorePointer(child: view)
+      : view;
 
   /// A message's rectangle, hugging its text. Nearly opaque, so the
   /// starfield behind it is almost gone but the stars around it aren't.
@@ -5091,14 +5146,14 @@ class _MessageView extends StatelessWidget {
         icon: Icons.code,
         onPressed: () => Clipboard.setData(ClipboardData(text: code)),
       ),
-    if (message.text.isNotEmpty)
+    if (message.text.isNotEmpty && !readOnly)
       GaiaMenuItem(
         label: 'Attach as context',
         icon: Icons.format_quote,
         onPressed: () => onAttach(message),
       ),
-    ..._actions(),
-    if (message.chapter != null) ...[
+    if (!readOnly) ..._actions(),
+    if (message.chapter != null && !readOnly) ...[
       GaiaMenuItem(
         label: 'Rename chapter',
         icon: Icons.edit_outlined,
@@ -5399,15 +5454,19 @@ class _HoverActionsState extends State<_HoverActions>
                                   if (right && when != null) when,
                                   if (widget.copy case final text?
                                       when text.isNotEmpty)
-                                    GaiaActionIcon(
-                                      label: _copied ? 'Copied' : 'Copy',
+                                    GaiaButton(
+                                      tooltip: _copied ? 'Copied' : 'Copy',
                                       icon: _copied ? Icons.check : Icons.copy,
+                                      size: kGaiaActionIconExtent,
+                                      iconSize: 16,
                                       onPressed: () => _copy(text),
                                     ),
                                   for (final action in actions())
-                                    GaiaActionIcon(
-                                      label: action.label,
+                                    GaiaButton(
+                                      tooltip: action.label,
                                       icon: action.icon!,
+                                      size: kGaiaActionIconExtent,
+                                      iconSize: 16,
                                       onPressed: action.onPressed,
                                     ),
                                   if (widget.label case final label?)
@@ -7277,17 +7336,10 @@ class _LimitDecisionState extends State<_LimitDecision> {
                 runSpacing: 8,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  for (final (index, option) in options.indexed)
-                    GaiaButton(
-                      label: option.label,
-                      // The first is the one the keybind takes: only it has
-                      // the moving light.
-                      still: index > 0,
-                      onPressed: option.pick,
-                    ),
+                  for (final option in options)
+                    GaiaButton(label: option.label, onPressed: option.pick),
                   GaiaButton(
                     label: 'Dismiss',
-                    still: options.isNotEmpty,
                     color: theme.colorScheme.error,
                     onPressed: _dismiss,
                   ),
@@ -7563,21 +7615,14 @@ class _ComposerStatus extends StatelessWidget {
                 ? 'Can see screen: on. An agent with its CLI\'s shell or web tools '
                       'could send screen text elsewhere, or be steered by it.'
                 : 'Can see screen: off',
-            child: InkWell(
-              borderRadius: BorderRadius.circular(GaiaRadius.chip),
-              onTap: controller.toggleSeeScreen,
-              child: Padding(
-                padding: const EdgeInsets.all(_UsageRing.margin),
-                child: Icon(
-                  controller.canSeeScreen
-                      ? Icons.visibility
-                      : Icons.visibility_off_outlined,
-                  size: 14,
-                  color: controller.canSeeScreen
-                      ? theme.colorScheme.primary
-                      : theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
+            child: GaiaButton(
+              icon: controller.canSeeScreen
+                  ? Icons.visibility
+                  : Icons.visibility_off_outlined,
+              size: 14 + 2 * _UsageRing.margin,
+              iconSize: 14,
+              color: controller.canSeeScreen ? theme.colorScheme.primary : null,
+              onPressed: controller.toggleSeeScreen,
             ),
           ),
         ),
@@ -7595,11 +7640,16 @@ class _ComposerStatus extends StatelessWidget {
                     'with no cards. Esc stops a run.',
             },
             child: Builder(
-              builder: (button) => InkWell(
-                borderRadius: BorderRadius.circular(GaiaRadius.chip),
+              builder: (button) => GaiaButton(
+                glyph: _HandIcon(hand: controller.hand),
+                size: 14 + 2 * _UsageRing.margin,
+                iconSize: 14,
+                color: controller.hand == GaiaHand.off
+                    ? null
+                    : theme.colorScheme.primary,
                 // At the button, not the pointer, so Enter and Space open
                 // it too.
-                onTap: () {
+                onPressed: () {
                   final box = button.findRenderObject()! as RenderBox;
                   _showHandMenu(
                     context,
@@ -7607,10 +7657,6 @@ class _ComposerStatus extends StatelessWidget {
                     box.localToGlobal(box.size.center(Offset.zero)),
                   );
                 },
-                child: Padding(
-                  padding: const EdgeInsets.all(_UsageRing.margin),
-                  child: _HandIcon(hand: controller.hand),
-                ),
               ),
             ),
           ),
@@ -8315,23 +8361,16 @@ class _HandIcon extends StatelessWidget {
 
   final GaiaHand hand;
 
+  /// In its button's colour, from the [IconTheme].
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final color = hand == GaiaHand.off
-        ? theme.colorScheme.onSurfaceVariant
-        : theme.colorScheme.primary;
+    final color = IconTheme.of(context).color!;
     const outlined = Icon(Icons.pan_tool_alt_outlined, size: 14);
     // The filled glyph's edge sits inside the outlined one's, so filled is
     // the outline with its inside filled in, keeping the hand's size.
-    final icon = IconTheme.merge(
-      data: IconThemeData(color: color),
-      child: hand == GaiaHand.off
-          ? outlined
-          : const Stack(
-              children: [outlined, Icon(Icons.pan_tool_alt, size: 14)],
-            ),
-    );
+    final Widget icon = hand == GaiaHand.off
+        ? outlined
+        : const Stack(children: [outlined, Icon(Icons.pan_tool_alt, size: 14)]);
     if (hand != GaiaHand.auto) return icon;
     return Stack(
       clipBehavior: Clip.none,

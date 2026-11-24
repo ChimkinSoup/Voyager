@@ -610,16 +610,13 @@ class _ToolButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
+    // Selected, it's in the accent.
+    return GaiaButton(
       tooltip: tooltip,
-      isSelected: selected,
+      icon: icon,
+      size: 40,
       iconSize: iconSize,
-      style: IconButton.styleFrom(
-        backgroundColor: selected
-            ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.25)
-            : null,
-      ),
-      icon: Icon(icon),
+      color: selected ? Theme.of(context).colorScheme.primary : null,
       onPressed: onPressed,
     );
   }

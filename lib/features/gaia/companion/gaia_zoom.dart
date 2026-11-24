@@ -255,7 +255,6 @@ class _GaiaZoomState extends State<GaiaZoom> {
               label: 'Reset',
               size: 28,
               padding: 10,
-              still: true,
               // A pill, so its ends follow the indicator's.
               radius: 14,
             ),

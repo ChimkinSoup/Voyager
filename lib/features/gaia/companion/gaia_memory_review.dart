@@ -185,6 +185,11 @@ class GaiaMemoryReview extends ChangeNotifier {
   /// front, for the rest of the review (§7.1).
   final asked = <String>{};
 
+  /// The memory whose source chat was last shown from its card's source
+  /// line (§6.2), shown again whenever that card is in front, in place of
+  /// its Ask Gaia chat.
+  String? sourceOf;
+
   /// Esc in an Ask Gaia chat's composer: it stays closed.
   void dismissAsk(String memoryId) {
     if (!asked.remove(memoryId)) return;
@@ -455,8 +460,9 @@ class GaiaMemoryReviewView extends StatefulWidget {
   final GaiaMemoryReview review;
 
   /// The Ask Gaia chat (GAIA_SETTINGS_HLD.md §7.1), built by the Gaia window
-  /// while [GaiaController.asking] is set: under the card, or beside it in a
-  /// window wider than [kGaiaAskBesideWidth].
+  /// while [GaiaController.asking] is set, or the card's source chat, read-only,
+  /// while [GaiaController.showingSource] is (§6.2): under the card, or beside
+  /// it in a window wider than [kGaiaAskBesideWidth].
   final Widget? chat;
 
   @override
@@ -527,12 +533,16 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
   }
 
   /// The Ask Gaia chat follows the card in front (§7.1): shown for one asked
-  /// about in this review, hidden for any other.
+  /// about in this review, hidden for any other. So does the source chat, in
+  /// its place.
   void _syncAsk() {
     if (!mounted) return;
     final review = _review;
     final memory = review.finished ? null : review.card(review.index).memory;
-    if (memory != null && review.asked.contains(memory.id)) {
+    final source = memory?.sourceChatId;
+    if (memory != null && memory.id == review.sourceOf && source != null) {
+      unawaited(_controller.showSource(memory));
+    } else if (memory != null && review.asked.contains(memory.id)) {
       _controller.askAbout(memory);
     } else {
       _controller.closeAsk();
@@ -542,6 +552,7 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
 
   /// Ask Gaia (/): [memory]'s chat shown, its composer given the focus.
   void _ask(GaiaMemory memory) {
+    _review.sourceOf = null;
     _review.asked.add(memory.id);
     if (_controller.asking == memory.id) {
       WidgetsBinding.instance.addPostFrameCallback(
@@ -551,6 +562,12 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
     }
     _controller.askAbout(memory);
     _wasAsking = true;
+  }
+
+  /// The source line clicked: [memory]'s source chat shown, or hidden again.
+  void _toggleSource(GaiaMemory memory) {
+    _review.sourceOf = _review.sourceOf == memory.id ? null : memory.id;
+    _syncAsk();
   }
 
   @override
@@ -1190,7 +1207,8 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
     return path.isEmpty ? topic.name : path.join(' › ');
   }
 
-  /// "from Planning the CS246 study plan, Nov 20": where it came from.
+  /// "from Planning the CS246 study plan, Nov 20": where it came from, a
+  /// click showing that chat read-only (§6.2).
   Widget _source(GaiaMemory memory) {
     final chat = memory.sourceChatId == null
         ? null
@@ -1198,7 +1216,7 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
               .where((chat) => chat.id == memory.sourceChatId)
               .firstOrNull;
     final when = gaiaWhen(memory.createdAt.toLocal());
-    return Text.rich(
+    final line = Text.rich(
       TextSpan(
         children: [
           if (chat != null) ...[
@@ -1213,6 +1231,16 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
         ],
       ),
       style: GaiaType.label.copyWith(color: GaiaInk.faint),
+    );
+    if (chat == null) return line;
+    return Tooltip(
+      message: _controller.showingSource == chat.id
+          ? 'Hide this chat'
+          : 'Show this chat',
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(onTap: () => _toggleSource(memory), child: line),
+      ),
     );
   }
 

@@ -2041,6 +2041,8 @@ class GaiaController extends ChangeNotifier {
   /// from the start (§7.2). The chat in view is back once it closes.
   void askAbout(GaiaMemory memory) {
     if (asking == memory.id) return;
+    // The source chat's place: the chat to come back to is from before it.
+    if (showingSource != null) closeAsk();
     if (asking == null) _askReturn = currentChatId;
     final chatId = _askChats[memory.id] ??= _uuid.v4();
     if (_chat(chatId) == null) {
@@ -2086,15 +2088,67 @@ class GaiaController extends ChangeNotifier {
     return memory == null ? ref : _memoryRef(memory);
   }
 
-  /// The Ask Gaia chat hidden, the chat that was in view back. [dismiss]ed
-  /// (Esc in its composer), its card in the review doesn't bring it back.
+  /// The chat a review card came from, shown read-only in the Ask Gaia
+  /// chat's place (GAIA_SETTINGS_HLD.md §6.2), the current chat while it is;
+  /// null when none is.
+  String? showingSource;
+
+  /// [memory]'s source chat shown as [showingSource], in place of any Ask
+  /// Gaia chat, scrolled to where [memory] came from. The chat in view
+  /// before either is back once it closes ([closeAsk]).
+  Future<void> showSource(GaiaMemory memory) async {
+    final chatId = memory.sourceChatId!;
+    if (showingSource == chatId) return;
+    closeAsk();
+    _askReturn = currentChatId;
+    showingSource = chatId;
+    _viewChat(chatId);
+    notifyListeners();
+    if (!_messages.containsKey(chatId)) {
+      try {
+        await _load(chatId);
+      } on GaiaPipeException catch (error) {
+        debugPrint('[gaia] source chat not loaded: $error');
+        if (showingSource == chatId) closeAsk();
+        return;
+      }
+    }
+    // Set after viewing it, which forgets any earlier one.
+    if (showingSource != chatId) return;
+    revealing = _sourceMessage(chatId, memory);
+    notifyListeners();
+  }
+
+  /// The message in [chatId] that [memory] came from: the one with its memory
+  /// card, or for one offered without a card (the curator, /remember), the
+  /// last from before it was made.
+  String? _sourceMessage(String chatId, GaiaMemory memory) {
+    final messages = _messages[chatId] ?? const <GaiaMessage>[];
+    return messages
+            .lastWhereOrNull(
+              (message) => message.parts.any(
+                (part) => part is GaiaMemoryPart && part.memoryId == memory.id,
+              ),
+            )
+            ?.id ??
+        messages
+            .lastWhereOrNull(
+              (message) => !message.createdAt.isAfter(memory.createdAt),
+            )
+            ?.id;
+  }
+
+  /// The Ask Gaia chat or [showingSource] hidden, the chat that was in view
+  /// back. [dismiss]ed (Esc in its composer), an Ask Gaia chat's card in the
+  /// review doesn't bring it back.
   void closeAsk({bool dismiss = false}) {
     final memoryId = asking;
-    if (memoryId == null) return;
+    if (memoryId == null && showingSource == null) return;
     asking = null;
+    showingSource = null;
     _viewChat(_askReturn);
     _askReturn = null;
-    if (dismiss) review?.dismissAsk(memoryId);
+    if (dismiss && memoryId != null) review?.dismissAsk(memoryId);
     notifyListeners();
   }
 

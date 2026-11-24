@@ -44,6 +44,8 @@ class GaiaTextField extends StatefulWidget {
     this.onAddWord,
     this.undoController,
     this.lists = false,
+    this.style,
+    this.fill,
   });
 
   final TextEditingController controller;
@@ -75,6 +77,12 @@ class GaiaTextField extends StatefulWidget {
   /// numbers follow every edit. Tab and Backspace are the owner's to wire,
   /// on its focus node.
   final bool lists;
+
+  /// Over the theme's body text, such as a smaller size.
+  final TextStyle? style;
+
+  /// In place of [gaiaFieldFill].
+  final Color? fill;
 
   @override
   State<GaiaTextField> createState() => _GaiaTextFieldState();
@@ -442,7 +450,9 @@ class _GaiaTextFieldState extends State<GaiaTextField>
     final theme = Theme.of(context);
     final accent = theme.colorScheme.primary;
     final style = withSquiggleRoom(
-      theme.textTheme.bodyLarge!.copyWith(color: theme.colorScheme.onSurface),
+      theme.textTheme.bodyLarge!
+          .merge(widget.style)
+          .copyWith(color: theme.colorScheme.onSurface),
     );
     // None beside a button: its own padding is the gap, as wide as the one
     // between it and the field's edge.
@@ -638,7 +648,7 @@ class _GaiaTextFieldState extends State<GaiaTextField>
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 400),
               decoration: BoxDecoration(
-                color: gaiaFieldFill,
+                color: widget.fill ?? gaiaFieldFill,
                 borderRadius: BorderRadius.circular(GaiaRadius.chip),
                 // The light takes over from the edge under the cursor.
                 boxShadow: [

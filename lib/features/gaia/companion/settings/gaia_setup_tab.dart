@@ -7,7 +7,6 @@ import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/features/gaia/adapters/gaia_clis.dart';
-import 'package:voyager/features/gaia/companion/gaia_action_icon.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_commands.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
@@ -65,7 +64,7 @@ class _CliSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         GaiaPanelHeading(
-          cli.name.toUpperCase(),
+          cli.name,
           trailing: GaiaButton(
             label: 'Check again',
             icon: Icons.refresh,
@@ -331,22 +330,25 @@ class _AccountRowState extends State<_AccountRow> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          GaiaActionIcon(
-                            label: 'Move up',
+                          GaiaButton(
+                            tooltip: 'Move up',
                             icon: Icons.arrow_upward,
-                            compact: true,
+                            size: 24,
+                            iconSize: 16,
                             onPressed: widget.onUp,
                           ),
-                          GaiaActionIcon(
-                            label: 'Move down',
+                          GaiaButton(
+                            tooltip: 'Move down',
                             icon: Icons.arrow_downward,
-                            compact: true,
+                            size: 24,
+                            iconSize: 16,
                             onPressed: widget.onDown,
                           ),
-                          GaiaActionIcon(
-                            label: 'Remove',
+                          GaiaButton(
+                            tooltip: 'Remove',
                             icon: Icons.delete_outline,
-                            compact: true,
+                            size: 24,
+                            iconSize: 16,
                             onPressed: widget.onRemove,
                           ),
                         ],
@@ -606,10 +608,11 @@ class _CheckRow extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 4),
-                        GaiaActionIcon(
-                          label: 'Copy',
+                        GaiaButton(
+                          tooltip: 'Copy',
                           icon: Icons.copy,
-                          compact: true,
+                          size: 24,
+                          iconSize: 16,
                           onPressed: () async {
                             await Clipboard.setData(
                               ClipboardData(text: command),

@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
-import 'package:voyager/features/gaia/companion/gaia_action_icon.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_card_text_field.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
@@ -417,6 +416,8 @@ class _GaiaMemoriesTabState extends State<GaiaMemoriesTab> {
                   controller: _search,
                   focusNode: _searchFocus,
                   hintText: 'Search memories and topics (Ctrl+F)',
+                  style: kGaiaPanelFieldStyle,
+                  fill: gaiaPanelFieldFill(context),
                 ),
               ),
             ),
@@ -468,15 +469,11 @@ class _GaiaMemoriesTabState extends State<GaiaMemoriesTab> {
             ),
             if (inbox.isNotEmpty || pins.isNotEmpty || merges.isNotEmpty) ...[
               SliverToBoxAdapter(
-                child: GaiaPanelHeading(
+                child: _FoldHeading(
                   key: _inboxKey,
                   'Inbox (${inbox.length + pins.length + merges.length})',
-                  trailing: GaiaButton(
-                    label: showInbox ? 'Hide' : 'Show',
-                    size: 26,
-                    padding: 10,
-                    onPressed: () => setState(() => _showInbox = !showInbox),
-                  ),
+                  shown: showInbox,
+                  onTap: () => setState(() => _showInbox = !showInbox),
                 ),
               ),
               if (showInbox) ...[
@@ -598,15 +595,10 @@ class _GaiaMemoriesTabState extends State<GaiaMemoriesTab> {
             cards(active),
             if (archived.isNotEmpty) ...[
               SliverToBoxAdapter(
-                child: GaiaPanelHeading(
+                child: _FoldHeading(
                   'Archived (${archived.length})',
-                  trailing: GaiaButton(
-                    label: _showArchived ? 'Hide' : 'Show',
-                    size: 26,
-                    padding: 10,
-                    onPressed: () =>
-                        setState(() => _showArchived = !_showArchived),
-                  ),
+                  shown: _showArchived,
+                  onTap: () => setState(() => _showArchived = !_showArchived),
                 ),
               ),
               if (_showArchived) cards(archived),
@@ -1288,6 +1280,8 @@ class _NameFieldState extends State<_NameField> {
       controller: _text,
       focusNode: _focus,
       hintText: widget.hint,
+      style: kGaiaPanelFieldStyle,
+      fill: gaiaPanelFieldFill(context),
     ),
   );
 }
@@ -1656,10 +1650,9 @@ class _MemoryCardState extends State<_MemoryCard> {
   Widget _chips(ThemeData theme) {
     final memory = _memory;
     final tree = widget.tree;
-    final label = theme.textTheme.labelSmall?.copyWith(
-      color: theme.colorScheme.primary,
-      fontWeight: FontWeight.bold,
-    );
+    // In the topic strip's ink, not the accent: a card's topics are
+    // details of it.
+    final label = GaiaType.label.copyWith(color: GaiaInk.dim);
     final background = theme.scaffoldBackgroundColor;
     final suggested = memory.suggestedTopic;
     return Wrap(
@@ -1719,10 +1712,9 @@ class _MemoryCardState extends State<_MemoryCard> {
   Widget _sortedLine(ThemeData theme, GaiaPlacement placement) {
     final controller = widget.controller;
     final tree = widget.tree;
-    final label = theme.textTheme.labelSmall?.copyWith(
-      color: theme.colorScheme.primary,
-      fontWeight: FontWeight.bold,
-    );
+    // In the topic strip's ink, not the accent: a card's topics are
+    // details of it.
+    final label = GaiaType.label.copyWith(color: GaiaInk.dim);
     final background = theme.scaffoldBackgroundColor;
     return Wrap(
       spacing: 4,
@@ -1955,19 +1947,21 @@ class _MemoryCardState extends State<_MemoryCard> {
                   if (unsorted &&
                       memory.suggestedTopic == null &&
                       widget.sorted == null)
-                    GaiaActionIcon(
-                      label: _suggesting ? 'Suggesting…' : 'Suggest topics',
+                    GaiaButton(
+                      tooltip: _suggesting ? 'Suggesting…' : 'Suggest topics',
                       icon: Icons.auto_awesome,
-                      compact: true,
+                      size: 24,
+                      iconSize: 16,
                       onPressed: _suggesting ? null : _suggest,
                     ),
                   if (memory.status == GaiaMemoryStatus.active || memory.pinned)
-                    GaiaActionIcon(
-                      label: memory.pinned ? 'Unpin' : 'Pin to every chat',
+                    GaiaButton(
+                      tooltip: memory.pinned ? 'Unpin' : 'Pin to every chat',
                       icon: memory.pinned
                           ? Icons.push_pin
                           : Icons.push_pin_outlined,
-                      compact: true,
+                      size: 24,
+                      iconSize: 16,
                       onPressed: () => unawaited(
                         widget.write('pinMemory', {
                           'memoryId': memory.id,
@@ -1976,29 +1970,33 @@ class _MemoryCardState extends State<_MemoryCard> {
                       ),
                     ),
                   if (memory.status != GaiaMemoryStatus.archived)
-                    GaiaActionIcon(
-                      label: 'Ask Gaia',
+                    GaiaButton(
+                      tooltip: 'Ask Gaia',
                       icon: Icons.forum_outlined,
-                      compact: true,
+                      size: 24,
+                      iconSize: 16,
                       onPressed: _askGaia,
                     ),
-                  GaiaActionIcon(
-                    label: primaryLabel,
+                  GaiaButton(
+                    tooltip: primaryLabel,
                     icon: primaryIcon,
-                    compact: true,
+                    size: 24,
+                    iconSize: 16,
                     onPressed: () => unawaited(primary()),
                   ),
-                  GaiaActionIcon(
-                    label: proposed ? 'Dismiss' : 'Delete',
+                  GaiaButton(
+                    tooltip: proposed ? 'Dismiss' : 'Delete',
                     icon: proposed ? Icons.close : Icons.delete_outline,
-                    compact: true,
+                    size: 24,
+                    iconSize: 16,
                     onPressed: () => unawaited(_delete()),
                   ),
                   Builder(
-                    builder: (context) => GaiaActionIcon(
-                      label: 'More',
+                    builder: (context) => GaiaButton(
+                      tooltip: 'More',
                       icon: Icons.more_horiz,
-                      compact: true,
+                      size: 24,
+                      iconSize: 16,
                       onPressed: () {
                         final box = context.findRenderObject()! as RenderBox;
                         showGaiaMenu(
@@ -2070,4 +2068,76 @@ class _ChatLinkState extends State<_ChatLink> {
       ),
     ),
   );
+}
+
+/// A section's heading that folds it away: the heading, then a chevron
+/// beside it, pointing down while what's under it shows. A click on either
+/// flips it.
+class _FoldHeading extends StatefulWidget {
+  const _FoldHeading(
+    this.text, {
+    super.key,
+    required this.shown,
+    required this.onTap,
+  });
+
+  final String text;
+  final bool shown;
+  final VoidCallback onTap;
+
+  @override
+  State<_FoldHeading> createState() => _FoldHeadingState();
+}
+
+class _FoldHeadingState extends State<_FoldHeading> {
+  var _hovered = false;
+
+  /// Reached with Tab, and flipped with Enter or Space: lit as hovered.
+  var _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _hovered || _focused ? GaiaInk.muted : GaiaInk.faint;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 14, 4, 6),
+      child: SizedBox(
+        height: 28,
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: FocusableActionDetector(
+            mouseCursor: SystemMouseCursors.click,
+            actions: {
+              ActivateIntent: CallbackAction<ActivateIntent>(
+                onInvoke: (_) => widget.onTap(),
+              ),
+            },
+            onShowHoverHighlight: (hovered) =>
+                setState(() => _hovered = hovered),
+            onShowFocusHighlight: (focused) =>
+                setState(() => _focused = focused),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: widget.onTap,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    widget.text,
+                    style: GaiaType.heading.copyWith(color: color),
+                  ),
+                  const SizedBox(width: 4),
+                  AnimatedRotation(
+                    duration: GaiaMotion.quick,
+                    curve: GaiaMotion.curve,
+                    turns: widget.shown ? 0 : -0.25,
+                    child: Icon(Icons.expand_more, size: 16, color: color),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

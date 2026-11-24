@@ -162,7 +162,6 @@ class GaiaImageThumb extends StatelessWidget {
                         icon: Icons.close,
                         onPressed: remove,
                         size: 24,
-                        still: true,
                       ),
                     ),
                 ],

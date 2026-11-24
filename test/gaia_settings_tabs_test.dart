@@ -141,13 +141,13 @@ void main() {
     ) async {
       final controller = await pump(tester, tab: GaiaPanelTab.settings);
       expect(find.text('Notify when a run finishes'), findsOneWidget);
-      Switch notify() => tester.widget<Switch>(
+      GaiaToggle notify() => tester.widget<GaiaToggle>(
         find.descendant(
           of: find.ancestor(
             of: find.text('Notify when a run finishes'),
             matching: find.byType(GaiaPanelSwitch),
           ),
-          matching: find.byType(Switch),
+          matching: find.byType(GaiaToggle),
         ),
       );
       expect(notify().value, isTrue);
@@ -313,7 +313,7 @@ void main() {
         tester,
         find.descendant(
           of: find.byKey(ValueKey('key $key')),
-          matching: find.text('Change'),
+          matching: find.byType(GaiaKeyChip),
         ),
       );
       Future<void> press(

@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:uuid/uuid.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
-import 'package:voyager/features/gaia/companion/gaia_action_icon.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_commands.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
@@ -38,93 +37,114 @@ class GaiaSettingsTab extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const GaiaPanelHeading('NOTIFICATIONS'),
-              GaiaPanelSwitch(
-                title: 'Notify when a run finishes',
-                subtitle:
-                    'A Windows notification when Gaia finishes, or has a '
-                    'question, while it is hidden.',
-                value: settings['notifyOnDone'] != false,
-                onChanged: (on) => save({'notifyOnDone': on}),
+              GaiaPanelSection(
+                heading: 'Notifications',
+                children: [
+                  GaiaPanelSwitch(
+                    title: 'Notify when a run finishes',
+                    subtitle:
+                        'A Windows notification when Gaia finishes, or has a '
+                        'question, while it is hidden.',
+                    value: settings['notifyOnDone'] != false,
+                    onChanged: (on) => save({'notifyOnDone': on}),
+                  ),
+                ],
               ),
-              const GaiaPanelHeading('YOUR NAME'),
-              const GaiaPanelNote(
-                'Gaia uses it to greet you in a new chat. Synced to all your '
-                'devices.',
+              GaiaPanelSection(
+                heading: 'Your name',
+                children: [
+                  const GaiaPanelNote(
+                    'Gaia uses it to greet you in a new chat. Synced to all '
+                    'your devices.',
+                  ),
+                  _SavedText(
+                    key: const ValueKey('userName'),
+                    stored: settings['userName'] as String? ?? '',
+                    maxLength: 24,
+                    normalize: (text) => text.trim(),
+                    onSave: (text) => save({'userName': text}),
+                  ),
+                ],
               ),
-              _SavedText(
-                key: const ValueKey('userName'),
-                stored: settings['userName'] as String? ?? '',
-                maxLength: 24,
-                normalize: (text) => text.trim(),
-                onSave: (text) => save({'userName': text}),
+              GaiaPanelSection(
+                heading: 'GAIA.md',
+                children: [
+                  const GaiaPanelNote(
+                    "Instructions every agent gets, in place of the CLIs' own "
+                    'global files (your CLAUDE.md is left out of Gaia chats). '
+                    'Synced to all your devices.',
+                  ),
+                  _SavedText(
+                    key: const ValueKey('gaiaMd'),
+                    stored: settings['gaiaMd'] as String? ?? '',
+                    hint: 'e.g. Keep answers short. I use Windows and Flutter.',
+                    minLines: 8,
+                    maxLines: 20,
+                    onSave: (text) => save({'gaiaMd': text}),
+                  ),
+                ],
               ),
-              const GaiaPanelHeading('GAIA.MD'),
-              const GaiaPanelNote(
-                "Instructions every agent gets, in place of the CLIs' own "
-                'global files (your CLAUDE.md is left out of Gaia chats). '
-                'Synced to all your devices.',
-              ),
-              _SavedText(
-                key: const ValueKey('gaiaMd'),
-                stored: settings['gaiaMd'] as String? ?? '',
-                hint: 'e.g. Keep answers short. I use Windows and Flutter.',
-                minLines: 8,
-                maxLines: 20,
-                onSave: (text) => save({'gaiaMd': text}),
-              ),
-              const GaiaPanelHeading('CONTEXT'),
-              GaiaPanelSwitch(
-                title: 'Say which window Gaia was opened from',
-                subtitle:
-                    'Each message carries the app, window title and, in a '
-                    'browser, the address you were on. It shows on the '
-                    'draft, where you can remove it.',
-                value: settings['windowContext'] != false,
-                onChanged: (on) => save({'windowContext': on}),
-              ),
-              const SizedBox(height: 8),
-              const GaiaPanelNote(
-                "Never read: apps and sites Gaia doesn't describe or read a "
-                'selection from, one per line: an app or its exe name, or a '
-                'site like rbc.com.',
-              ),
-              _SavedText(
-                key: const ValueKey('contextExclusions'),
-                stored: gaiaContextExclusionsFromJson(
-                  settings['contextExclusions'],
-                ).join('\n'),
-                minLines: 3,
-                maxLines: 8,
-                onSave: (text) => save({
-                  'contextExclusions': [
-                    for (final line in text.split('\n'))
-                      if (line.trim().isNotEmpty) line.trim(),
-                  ],
-                }),
-              ),
-              const GaiaPanelNote(
-                "Gaia's window is hidden from screenshots and screen "
-                'recordings, including your own screen shares, so it never '
-                'shows up in what it captures.',
+              GaiaPanelSection(
+                heading: 'Context',
+                children: [
+                  GaiaPanelSwitch(
+                    title: 'Say which window Gaia was opened from',
+                    subtitle:
+                        'Each message carries the app, window title and, in a '
+                        'browser, the address you were on. It shows on the '
+                        'draft, where you can remove it.',
+                    value: settings['windowContext'] != false,
+                    onChanged: (on) => save({'windowContext': on}),
+                  ),
+                  const SizedBox(height: 8),
+                  const GaiaPanelNote(
+                    "Never read: apps and sites Gaia doesn't describe or read "
+                    'a selection from, one per line: an app or its exe name, '
+                    'or a site like rbc.com.',
+                  ),
+                  _SavedText(
+                    key: const ValueKey('contextExclusions'),
+                    stored: gaiaContextExclusionsFromJson(
+                      settings['contextExclusions'],
+                    ).join('\n'),
+                    minLines: 3,
+                    maxLines: 8,
+                    onSave: (text) => save({
+                      'contextExclusions': [
+                        for (final line in text.split('\n'))
+                          if (line.trim().isNotEmpty) line.trim(),
+                      ],
+                    }),
+                  ),
+                  const GaiaPanelNote(
+                    "Gaia's window is hidden from screenshots and screen "
+                    'recordings, including your own screen shares, so it '
+                    'never shows up in what it captures.',
+                  ),
+                ],
               ),
               _AgentsSection(controller: controller, save: save),
               _UtilitySection(controller: controller, save: save),
               _CommandsSection(controller: controller, save: save),
               _KeysSection(controller: controller, save: save),
-              const GaiaPanelHeading('INBOX ALERT'),
-              const GaiaPanelNote(
-                'Alert me when this many memories are waiting: a chip in '
-                "Gaia's header counts them down as you decide them, once "
-                'there are at least this many.',
-              ),
-              _SavedText(
-                key: const ValueKey('memoryAlertAt'),
-                stored: '${controller.memoryAlertAt}',
-                width: 120,
-                digitsOnly: true,
-                valid: (text) => (int.tryParse(text) ?? 0) >= 1,
-                onSave: (text) => save({'memoryAlertAt': int.parse(text)}),
+              GaiaPanelSection(
+                heading: 'Inbox alert',
+                children: [
+                  const GaiaPanelNote(
+                    'Alert me when this many memories are waiting: a chip in '
+                    "Gaia's header counts them down as you decide them, once "
+                    'there are at least this many.',
+                  ),
+                  _SavedText(
+                    key: const ValueKey('memoryAlertAt'),
+                    stored: '${controller.memoryAlertAt}',
+                    // Room for Save inside it.
+                    width: 170,
+                    digitsOnly: true,
+                    valid: (text) => (int.tryParse(text) ?? 0) >= 1,
+                    onSave: (text) => save({'memoryAlertAt': int.parse(text)}),
+                  ),
+                ],
               ),
             ],
           ),
@@ -256,30 +276,34 @@ class _SavedTextState extends State<_SavedText> {
 
   @override
   Widget build(BuildContext context) {
+    // Save shows in the box only while there's something to save.
     final field = GaiaPanelField(
       controller: _text,
       hintText: widget.hint,
       minLines: widget.minLines,
       maxLines: widget.maxLines,
       onSubmitted: _submit,
+      trailing: AnimatedSwitcher(
+        duration: GaiaMotion.quick,
+        child: _dirty
+            ? GaiaButton(
+                key: const ValueKey('save'),
+                label: 'Save',
+                size: 28,
+                padding: 10,
+                onPressed: _submit,
+              )
+            : const SizedBox(width: 8),
+      ),
     );
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          if (widget.width case final width?)
-            SizedBox(width: width, child: field)
-          else
-            Expanded(child: field),
-          const SizedBox(width: 8),
-          GaiaButton(
-            label: 'Save',
-            size: 32,
-            onPressed: _dirty ? _submit : null,
-          ),
-        ],
-      ),
+      child: widget.width == null
+          ? field
+          : Align(
+              alignment: Alignment.centerLeft,
+              child: SizedBox(width: widget.width, child: field),
+            ),
     );
   }
 }
@@ -319,34 +343,38 @@ class _AgentsSectionState extends State<_AgentsSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const GaiaPanelHeading('TIERS'),
-        const GaiaPanelNote(
-          "Each tier runs on an agent. Pick the tier for a message from "
-          "Gaia's composer.",
+        GaiaPanelSection(
+          heading: 'Tiers',
+          children: [
+            const GaiaPanelNote(
+              "Each tier runs on an agent. Pick the tier for a message from "
+              "Gaia's composer.",
+            ),
+            for (final tier in GaiaTier.values)
+              _PickRow(
+                key: ValueKey('tier ${tier.name}'),
+                label: tier.label,
+                value: switch (agents
+                    .where((agent) => agent.id == tiers[tier])
+                    .firstOrNull) {
+                  final agent? => '${agent.label} · ${_agentLine(agent)}',
+                  null => 'No agent',
+                },
+                items: [
+                  for (final agent in agents)
+                    GaiaMenuItem(
+                      label: agent.label,
+                      detail: _agentLine(agent),
+                      onPressed: () => widget.save({
+                        'tiers': gaiaTiersToJson({...tiers, tier: agent.id}),
+                      }),
+                    ),
+                ],
+              ),
+          ],
         ),
-        for (final tier in GaiaTier.values)
-          _PickRow(
-            key: ValueKey('tier ${tier.name}'),
-            label: tier.label,
-            value: switch (agents
-                .where((agent) => agent.id == tiers[tier])
-                .firstOrNull) {
-              final agent? => '${agent.label} · ${_agentLine(agent)}',
-              null => 'No agent',
-            },
-            items: [
-              for (final agent in agents)
-                GaiaMenuItem(
-                  label: agent.label,
-                  detail: _agentLine(agent),
-                  onPressed: () => widget.save({
-                    'tiers': gaiaTiersToJson({...tiers, tier: agent.id}),
-                  }),
-                ),
-            ],
-          ),
-        GaiaPanelHeading(
-          'AGENTS',
+        GaiaPanelSection(
+          heading: 'Agents',
           trailing: _adding
               ? null
               : GaiaButton(
@@ -356,43 +384,46 @@ class _AgentsSectionState extends State<_AgentsSection> {
                   padding: 10,
                   onPressed: () => setState(() => _adding = true),
                 ),
-        ),
-        for (final agent in agents)
-          _HoverRow(
-            key: ValueKey('agent ${agent.id}'),
-            title: agent.label,
-            detail: _agentLine(agent),
-            actions: [
-              GaiaActionIcon(
-                label: inUse.contains(agent.id)
-                    ? 'A tier uses this agent'
-                    : 'Remove',
-                icon: Icons.delete_outline,
-                compact: true,
-                onPressed: inUse.contains(agent.id)
-                    ? null
-                    : () => widget.save({
-                        'agents': [
-                          for (final other in agents)
-                            if (other.id != agent.id) other.toJson(),
-                        ],
-                      }),
-              ),
-            ],
-          ),
-        if (_adding)
-          _AgentEditor(
-            onCancel: () => setState(() => _adding = false),
-            onAdd: (agent) async {
-              final saved = await widget.save({
-                'agents': [
-                  for (final other in agents) other.toJson(),
-                  agent.toJson(),
+          children: [
+            for (final agent in agents)
+              _HoverRow(
+                key: ValueKey('agent ${agent.id}'),
+                title: agent.label,
+                detail: _agentLine(agent),
+                actions: [
+                  GaiaButton(
+                    tooltip: inUse.contains(agent.id)
+                        ? 'A tier uses this agent'
+                        : 'Remove',
+                    icon: Icons.delete_outline,
+                    size: 24,
+                    iconSize: 16,
+                    onPressed: inUse.contains(agent.id)
+                        ? null
+                        : () => widget.save({
+                            'agents': [
+                              for (final other in agents)
+                                if (other.id != agent.id) other.toJson(),
+                            ],
+                          }),
+                  ),
                 ],
-              });
-              if (saved && mounted) setState(() => _adding = false);
-            },
-          ),
+              ),
+            if (_adding)
+              _AgentEditor(
+                onCancel: () => setState(() => _adding = false),
+                onAdd: (agent) async {
+                  final saved = await widget.save({
+                    'agents': [
+                      for (final other in agents) other.toJson(),
+                      agent.toJson(),
+                    ],
+                  });
+                  if (saved && mounted) setState(() => _adding = false);
+                },
+              ),
+          ],
+        ),
       ],
     );
   }
@@ -552,10 +583,9 @@ class _UtilitySection extends StatelessWidget {
   Widget build(BuildContext context) {
     final settings = controller.settings;
     final defaultTier = controller.defaultTier;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return GaiaPanelSection(
+      heading: 'Utility model',
       children: [
-        const GaiaPanelHeading('UTILITY MODEL'),
         const GaiaPanelNote(
           'A fast Claude model on Claude Code, on the same login as your '
           'chats: it picks the tier for a new chat, writes chat titles and '
@@ -662,21 +692,18 @@ class _CommandsSectionState extends State<_CommandsSection> {
   @override
   Widget build(BuildContext context) {
     final commands = widget.controller.commands;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return GaiaPanelSection(
+      heading: 'Commands',
+      trailing: _editing == ''
+          ? null
+          : GaiaButton(
+              label: 'Add command',
+              icon: Icons.add,
+              size: 28,
+              padding: 10,
+              onPressed: () => setState(() => _editing = ''),
+            ),
       children: [
-        GaiaPanelHeading(
-          'COMMANDS',
-          trailing: _editing == ''
-              ? null
-              : GaiaButton(
-                  label: 'Add command',
-                  icon: Icons.add,
-                  size: 28,
-                  padding: 10,
-                  onPressed: () => setState(() => _editing = ''),
-                ),
-        ),
         const GaiaPanelNote(
           r'Type /name in Gaia, then anything after it: it becomes the '
           r'template, with $ARGUMENTS (what you typed after the name), $1 to '
@@ -701,10 +728,11 @@ class _CommandsSectionState extends State<_CommandsSection> {
                   : command.description,
               onTap: () => setState(() => _editing = command.name),
               actions: [
-                GaiaActionIcon(
-                  label: 'Remove',
+                GaiaButton(
+                  tooltip: 'Remove',
                   icon: Icons.delete_outline,
-                  compact: true,
+                  size: 24,
+                  iconSize: 16,
                   onPressed: () => widget.save({
                     'commands': [
                       for (final other in commands)
@@ -893,10 +921,9 @@ class _KeysSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final keybinds = controller.keybinds;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return GaiaPanelSection(
+      heading: 'Keys',
       children: [
-        const GaiaPanelHeading('KEYS'),
         const GaiaPanelNote(
           'Send and Settings work in Gaia. The others work from any app; '
           'they need Ctrl, Alt or Win so they never take over plain typing.',
@@ -905,19 +932,17 @@ class _KeysSection extends StatelessWidget {
           _HoverRow(
             key: ValueKey('key ${keybind.name}'),
             title: keybind.label,
-            detail: switch (gaiaComboFor(keybind, keybinds)) {
-              '' => 'Not set',
-              final combo => combo,
-            },
+            onTap: () => _change(context, keybind),
             alwaysShowActions: true,
             actions: [
               if (keybinds.containsKey(keybind.name))
-                GaiaActionIcon(
-                  label: keybind.defaultCombo.isEmpty
+                GaiaButton(
+                  tooltip: keybind.defaultCombo.isEmpty
                       ? 'Clear'
                       : 'Reset to ${keybind.defaultCombo}',
                   icon: Icons.restart_alt,
-                  compact: true,
+                  size: 24,
+                  iconSize: 16,
                   onPressed: () => save({
                     'keybinds': {
                       for (final MapEntry(:key, :value) in keybinds.entries)
@@ -926,12 +951,14 @@ class _KeysSection extends StatelessWidget {
                   }),
                 ),
               const SizedBox(width: 6),
-              GaiaButton(
-                label: 'Change',
-                size: 28,
-                padding: 10,
-                onPressed: () => _change(context, keybind),
+              Tooltip(
+                message: 'Change',
+                child: GaiaKeyChip(switch (gaiaComboFor(keybind, keybinds)) {
+                  '' => 'Not set',
+                  final combo => combo,
+                }, onTap: () => _change(context, keybind)),
               ),
+              const SizedBox(width: 6),
             ],
           ),
         GaiaPanelSwitch(
@@ -1100,14 +1127,14 @@ class _HoverRow extends StatefulWidget {
   const _HoverRow({
     super.key,
     required this.title,
-    required this.detail,
+    this.detail,
     required this.actions,
     this.onTap,
     this.alwaysShowActions = false,
   });
 
   final String title;
-  final String detail;
+  final String? detail;
   final List<Widget> actions;
   final VoidCallback? onTap;
   final bool alwaysShowActions;
@@ -1153,16 +1180,18 @@ class _HoverRowState extends State<_HoverRow> {
                         color: _hovered ? GaiaInk.bright : GaiaInk.dim,
                       ),
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      widget.detail,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GaiaType.label.copyWith(
-                        color: GaiaInk.muted,
-                        fontWeight: FontWeight.w400,
+                    if (widget.detail case final detail?) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        detail,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GaiaType.label.copyWith(
+                          color: GaiaInk.muted,
+                          fontWeight: FontWeight.w400,
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),

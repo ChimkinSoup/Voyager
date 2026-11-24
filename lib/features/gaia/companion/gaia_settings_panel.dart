@@ -4,7 +4,6 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_style.dart';
 import 'package:voyager/features/gaia/companion/gaia_text_field.dart';
@@ -85,7 +84,7 @@ class GaiaSettingsPanel extends ChangeNotifier {
 /// The panel's body under the Gaia window's header: the tab strip with ×,
 /// then the tab. Its keys: Esc closes it (a text box or menu with the focus
 /// keeps its own), Ctrl+1 to Ctrl+6 pick a tab.
-class GaiaSettingsPanelView extends StatelessWidget {
+class GaiaSettingsPanelView extends StatefulWidget {
   const GaiaSettingsPanelView({
     super.key,
     required this.controller,
@@ -99,7 +98,27 @@ class GaiaSettingsPanelView extends StatelessWidget {
   final Widget? askChat;
 
   @override
+  State<GaiaSettingsPanelView> createState() => _GaiaSettingsPanelViewState();
+}
+
+class _GaiaSettingsPanelViewState extends State<GaiaSettingsPanelView> {
+  /// Times the Memories tab was left with its chat open. Left so, it goes
+  /// at once rather than fading: fading out, its chat column would show the
+  /// chat it gave back, and only one chat column is ever built.
+  var _cuts = 0;
+
+  @override
+  void didUpdateWidget(GaiaSettingsPanelView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.askChat != null &&
+        widget.controller.panel.tab != GaiaPanelTab.memories) {
+      _cuts++;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final controller = widget.controller;
     final panel = controller.panel;
     return CallbackShortcuts(
       bindings: {
@@ -114,36 +133,45 @@ class GaiaSettingsPanelView extends StatelessWidget {
       },
       child: FocusScope(
         autofocus: true,
+        // The sky shows through, dimmed, so the panel is still in Gaia's
+        // window rather than over it.
         child: Material(
-          color: Theme.of(context).scaffoldBackgroundColor,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _TabStrip(controller: controller),
-              const Divider(height: 1),
-              Expanded(
-                child: KeyedSubtree(
-                  key: ValueKey(panel.tab),
-                  child: switch (panel.tab) {
-                    GaiaPanelTab.actions => GaiaActionsTab(
-                      controller: controller,
-                    ),
-                    GaiaPanelTab.queue => GaiaQueueTab(controller: controller),
-                    GaiaPanelTab.status => GaiaStatusTab(
-                      controller: controller,
-                    ),
-                    GaiaPanelTab.setup => GaiaSetupTab(controller: controller),
-                    GaiaPanelTab.settings => GaiaSettingsTab(
-                      controller: controller,
-                    ),
-                    GaiaPanelTab.memories => GaiaMemoriesTab(
-                      controller: controller,
-                      askChat: askChat,
-                    ),
-                  },
-                ),
+          color: Theme.of(
+            context,
+          ).scaffoldBackgroundColor.withValues(alpha: 0.82),
+          child: AnimatedSwitcher(
+            key: ValueKey(_cuts),
+            duration: GaiaMotion.quick,
+            switchInCurve: GaiaMotion.curve,
+            switchOutCurve: GaiaMotion.curve,
+            layoutBuilder: (current, previous) =>
+                Stack(fit: StackFit.expand, children: [...previous, ?current]),
+            transitionBuilder: (child, animation) => FadeTransition(
+              opacity: animation,
+              child: SlideTransition(
+                position: Tween(
+                  begin: const Offset(0, 0.01),
+                  end: Offset.zero,
+                ).animate(animation),
+                child: child,
               ),
-            ],
+            ),
+            child: KeyedSubtree(
+              key: ValueKey(panel.tab),
+              child: switch (panel.tab) {
+                GaiaPanelTab.actions => GaiaActionsTab(controller: controller),
+                GaiaPanelTab.queue => GaiaQueueTab(controller: controller),
+                GaiaPanelTab.status => GaiaStatusTab(controller: controller),
+                GaiaPanelTab.setup => GaiaSetupTab(controller: controller),
+                GaiaPanelTab.settings => GaiaSettingsTab(
+                  controller: controller,
+                ),
+                GaiaPanelTab.memories => GaiaMemoriesTab(
+                  controller: controller,
+                  askChat: widget.askChat,
+                ),
+              },
+            ),
           ),
         ),
       ),
@@ -151,47 +179,41 @@ class GaiaSettingsPanelView extends StatelessWidget {
   }
 }
 
-class _TabStrip extends StatelessWidget {
-  const _TabStrip({required this.controller});
+/// The panel's tabs, in the Gaia window's header in place of a chat's
+/// title. They start where a tab's content does, at [kGaiaPanelContentWidth]
+/// centred, once the window is wide enough; [start] is where they'd be
+/// otherwise, from the window's left edge.
+class GaiaPanelTabs extends StatelessWidget {
+  const GaiaPanelTabs({
+    super.key,
+    required this.controller,
+    required this.start,
+  });
 
   final GaiaController controller;
+  final double start;
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-    height: 48,
-    child: Row(
-      children: [
-        const SizedBox(width: 12),
-        Expanded(
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                for (final (i, tab) in GaiaPanelTab.values.indexed)
-                  Tooltip(
-                    message: 'Ctrl+${i + 1}',
-                    child: _TabLabel(
-                      label: tab.label,
-                      selected: controller.panel.tab == tab,
-                      onTap: () => controller.showPanelTab(tab),
-                    ),
-                  ),
-              ],
+  Widget build(BuildContext context) {
+    final side = gaiaPanelSide(MediaQuery.sizeOf(context).width);
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: EdgeInsets.only(left: max(0, side - start)),
+      child: Row(
+        children: [
+          for (final (i, tab) in GaiaPanelTab.values.indexed)
+            Tooltip(
+              message: 'Ctrl+${i + 1}',
+              child: _TabLabel(
+                label: tab.label,
+                selected: controller.panel.tab == tab,
+                onTap: () => controller.showPanelTab(tab),
+              ),
             ),
-          ),
-        ),
-        Tooltip(
-          message: 'Close settings (Esc)',
-          child: GaiaButton(
-            icon: Icons.close,
-            size: 30,
-            onPressed: controller.closePanel,
-          ),
-        ),
-        const SizedBox(width: 12),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+  }
 }
 
 /// A tab's label in the sidebar's row look: dim, white under the cursor,
@@ -261,6 +283,10 @@ class _TabLabelState extends State<_TabLabel> {
 /// The readable width a tab's content is held to, centred in the panel.
 const kGaiaPanelContentWidth = 760.0;
 
+/// The space each side of a tab's content in a panel [width] wide.
+double gaiaPanelSide(double width) =>
+    max(24.0, (width - kGaiaPanelContentWidth) / 2);
+
 /// A tab's one scroll (GAIA_SETTINGS_HLD.md §2.3): [slivers] held to
 /// [kGaiaPanelContentWidth] and centred. Nothing inside scrolls on its own.
 class GaiaPanelScroll extends StatelessWidget {
@@ -271,10 +297,7 @@ class GaiaPanelScroll extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      final side = max(
-        24.0,
-        (constraints.maxWidth - kGaiaPanelContentWidth) / 2,
-      );
+      final side = gaiaPanelSide(constraints.maxWidth);
       return CustomScrollView(
         slivers: [
           SliverPadding(
@@ -398,10 +421,9 @@ class _GaiaPanelSwitchState extends State<GaiaPanelSwitch> {
                 ],
               ),
             ),
-            Transform.scale(
-              scale: 0.75,
-              child: Switch(value: widget.value, onChanged: widget.onChanged),
-            ),
+            const SizedBox(width: 12),
+            GaiaToggle(value: widget.value, onChanged: widget.onChanged),
+            const SizedBox(width: 6),
           ],
         ),
       ),
@@ -420,6 +442,7 @@ class GaiaPanelField extends StatefulWidget {
     this.minLines,
     this.maxLines = 1,
     this.onSubmitted,
+    this.trailing,
   });
 
   final TextEditingController controller;
@@ -427,6 +450,9 @@ class GaiaPanelField extends StatefulWidget {
   final int? minLines;
   final int maxLines;
   final VoidCallback? onSubmitted;
+
+  /// Inside the box at its bottom right, such as Save.
+  final Widget? trailing;
 
   @override
   State<GaiaPanelField> createState() => _GaiaPanelFieldState();
@@ -462,8 +488,19 @@ class _GaiaPanelFieldState extends State<GaiaPanelField> {
     hintText: widget.hintText,
     minLines: widget.minLines,
     maxLines: widget.maxLines,
+    trailing: widget.trailing,
+    style: kGaiaPanelFieldStyle,
+    fill: gaiaPanelFieldFill(context),
   );
 }
+
+/// A panel text box's text: at the rows' size.
+const kGaiaPanelFieldStyle = TextStyle(fontSize: 13);
+
+/// A panel text box's fill: the surface a little towards black, so it sits
+/// in the panel's blue rather than as a grey slab on it.
+Color gaiaPanelFieldFill(BuildContext context) =>
+    Color.lerp(Theme.of(context).colorScheme.surface, Colors.black, 0.25)!;
 
 /// One of a few choices, as a pill in the tab strip's look: dim, lit under
 /// the cursor, and the chosen one filled and edged.
@@ -483,5 +520,246 @@ class GaiaPanelChoice extends StatelessWidget {
   // As wide as its label: the tab label's centring fills a Wrap's width.
   Widget build(BuildContext context) => IntrinsicWidth(
     child: _TabLabel(label: label, selected: selected, onTap: onTap),
+  );
+}
+
+/// A section of a tab: its [heading], then its [children] together on a
+/// card, so a long tab reads as groups rather than one column.
+class GaiaPanelSection extends StatelessWidget {
+  const GaiaPanelSection({
+    super.key,
+    required this.heading,
+    this.trailing,
+    required this.children,
+  });
+
+  final String heading;
+  final Widget? trailing;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      GaiaPanelHeading(heading, trailing: trailing),
+      Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.fromLTRB(4, 8, 4, 6),
+        decoration: BoxDecoration(
+          color: GaiaInk.hover,
+          borderRadius: BorderRadius.circular(GaiaRadius.panel),
+          border: Border.all(color: GaiaInk.hairline),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: children,
+        ),
+      ),
+    ],
+  );
+}
+
+/// On or off, in Gaia's look: a pill in the glow rings' rim, filled with
+/// the accent while on.
+class GaiaToggle extends StatefulWidget {
+  const GaiaToggle({super.key, required this.value, required this.onChanged});
+
+  final bool value;
+  final ValueChanged<bool>? onChanged;
+
+  @override
+  State<GaiaToggle> createState() => _GaiaToggleState();
+}
+
+class _GaiaToggleState extends State<GaiaToggle> {
+  /// Reached with Tab, and flipped with Enter or Space: its rim lit.
+  var _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = Theme.of(context).colorScheme.primary;
+    final value = widget.value;
+    final onChanged = widget.onChanged;
+    final flip = onChanged == null ? null : () => onChanged(!value);
+    return Semantics(
+      toggled: value,
+      child: FocusableActionDetector(
+        enabled: flip != null,
+        mouseCursor: flip == null
+            ? MouseCursor.defer
+            : SystemMouseCursors.click,
+        actions: {
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (_) => flip?.call(),
+          ),
+        },
+        onShowFocusHighlight: (focused) => setState(() => _focused = focused),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: flip,
+          child: AnimatedContainer(
+            duration: GaiaMotion.quick,
+            curve: GaiaMotion.curve,
+            width: 32,
+            height: 18,
+            padding: const EdgeInsets.all(2),
+            decoration: BoxDecoration(
+              color: value
+                  ? accent.withValues(alpha: 0.25)
+                  : accent.withValues(alpha: 0),
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(
+                color: _focused
+                    ? accent
+                    : value
+                    ? accent.withValues(alpha: 0.8)
+                    : GaiaInk.faint.withValues(alpha: 0.6),
+              ),
+            ),
+            child: AnimatedAlign(
+              duration: GaiaMotion.quick,
+              curve: GaiaMotion.curve,
+              alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+              child: AnimatedContainer(
+                duration: GaiaMotion.quick,
+                width: 12,
+                height: 12,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: value ? GaiaInk.bright : GaiaInk.faint,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A key's name in a chip, as the empty chat's hints show it. With [onTap],
+/// it lights under the cursor and takes a click.
+class GaiaKeyChip extends StatefulWidget {
+  const GaiaKeyChip(this.label, {super.key, this.onTap});
+
+  final String label;
+  final VoidCallback? onTap;
+
+  @override
+  State<GaiaKeyChip> createState() => _GaiaKeyChipState();
+}
+
+class _GaiaKeyChipState extends State<GaiaKeyChip> {
+  var _hovered = false;
+
+  /// Reached with Tab, and pressed with Enter or Space: lit as hovered.
+  var _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final lit = (_hovered || _focused) && widget.onTap != null;
+    return FocusableActionDetector(
+      enabled: widget.onTap != null,
+      mouseCursor: widget.onTap == null
+          ? MouseCursor.defer
+          : SystemMouseCursors.click,
+      actions: {
+        ActivateIntent: CallbackAction<ActivateIntent>(
+          onInvoke: (_) => widget.onTap?.call(),
+        ),
+      },
+      onShowHoverHighlight: (hovered) => setState(() => _hovered = hovered),
+      onShowFocusHighlight: (focused) => setState(() => _focused = focused),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: GaiaMotion.quick,
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: lit ? GaiaInk.hover : GaiaInk.hover.withValues(alpha: 0),
+            borderRadius: BorderRadius.circular(GaiaRadius.chip),
+            border: Border.all(color: lit ? GaiaInk.faint : GaiaInk.hairline),
+          ),
+          child: Text(
+            widget.label,
+            style: GaiaType.label.copyWith(
+              color: lit ? GaiaInk.bright : GaiaInk.muted,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A tab with nothing in it, as the empty chat is: a line in the middle,
+/// then [detail] or the keys that would fill it.
+class GaiaPanelEmpty extends StatelessWidget {
+  const GaiaPanelEmpty({
+    super.key,
+    required this.title,
+    this.detail,
+    this.hints = const [],
+  });
+
+  final String title;
+  final String? detail;
+
+  /// Each key's name and what it does.
+  final List<(String, String)> hints;
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(24, 0, 24, 48),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w500,
+              color: GaiaInk.dim,
+            ),
+          ),
+          if (detail case final detail?) ...[
+            const SizedBox(height: 10),
+            Text(
+              detail,
+              textAlign: TextAlign.center,
+              style: GaiaType.row.copyWith(
+                color: GaiaInk.muted,
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+          ],
+          if (hints.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 20,
+              runSpacing: 8,
+              children: [
+                for (final (key, does) in hints)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      GaiaKeyChip(key),
+                      const SizedBox(width: 6),
+                      Text(
+                        does,
+                        style: GaiaType.label.copyWith(color: GaiaInk.faint),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    ),
   );
 }

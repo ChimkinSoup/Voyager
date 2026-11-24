@@ -11,6 +11,7 @@ import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_activity_chip.dart';
 import 'package:voyager/features/gaia/companion/gaia_appear.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
+import 'package:voyager/features/gaia/companion/gaia_button_studies.dart';
 import 'package:voyager/features/gaia/companion/gaia_card_view.dart';
 import 'package:voyager/features/gaia/companion/gaia_control_showcase.dart';
 import 'package:voyager/features/gaia/companion/gaia_memory_card.dart';
@@ -23,14 +24,20 @@ import 'package:voyager/features/gaia/companion/gaia_orb.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_studio.dart';
 import 'package:voyager/features/gaia/companion/gaia_notch.dart';
 import 'package:voyager/features/gaia/companion/gaia_red_orb_studies.dart';
+import 'package:voyager/features/gaia/companion/gaia_settings_panel.dart';
 import 'package:voyager/features/gaia/companion/gaia_stats.dart';
 import 'package:voyager/features/gaia/companion/gaia_text_field.dart';
+import 'package:voyager/features/gaia/companion/gaia_text_field_studies.dart';
 import 'package:voyager/features/gaia/companion/gaia_tier_picker.dart';
 import 'package:voyager/features/gaia/companion/gaia_toast.dart';
 import 'package:voyager/features/gaia/companion/gaia_toast_icon_studio.dart';
 import 'package:voyager/features/gaia/companion/gaia_vanish.dart';
 import 'package:voyager/features/gaia/host/gaia_memories.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
+
+/// Keeps the debug menu's scroll offset from one opening to the next, since
+/// each dialog route starts with a bucket of its own.
+final _debugMenuStorage = PageStorageBucket();
 
 /// Gaia's debug menu (Ctrl+Shift+D, or the sidebar's bug): scripted
 /// replies, toast and loading-animation previews and display toggles, kept
@@ -45,7 +52,10 @@ Future<void> showGaiaDebugMenu(
       constraints: const BoxConstraints(maxWidth: 520),
       child: ListenableBuilder(
         listenable: Listenable.merge([controller, controller.debug]),
-        builder: (context, _) => _DebugMenu(controller: controller),
+        builder: (context, _) => PageStorage(
+          bucket: _debugMenuStorage,
+          child: _DebugMenu(controller: controller),
+        ),
       ),
     ),
   ),
@@ -69,6 +79,7 @@ class _DebugMenu extends StatelessWidget {
       child: Text(text, style: theme.textTheme.titleSmall),
     );
     return ListView(
+      key: const PageStorageKey('gaia debug menu'),
       shrinkWrap: true,
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
       children: [
@@ -85,6 +96,10 @@ class _DebugMenu extends StatelessWidget {
           ],
         ),
         Text('Kept on this desktop, never synced.', style: muted),
+        heading('Text field studies'),
+        const GaiaTextFieldStudies(),
+        heading('Button studies'),
+        const GaiaButtonStudies(),
         heading('Red layered orb studies'),
         const GaiaRedOrbStudies(),
         heading('Orb studio'),
@@ -109,24 +124,20 @@ class _DebugMenu extends StatelessWidget {
         ),
         _AutoRoutePreview(controller: controller),
         heading('Replies'),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Scripted replies'),
-          subtitle: const Text(
-            'A message that is one of the commands below gets a canned reply '
-            'instead of a Claude Code run: no tokens. The chat is saved like '
-            'any other.',
-          ),
+        GaiaPanelSwitch(
+          title: 'Scripted replies',
+          subtitle:
+              'A message that is one of the commands below gets a canned reply '
+              'instead of a Claude Code run: no tokens. The chat is saved like '
+              'any other.',
           value: debug.scriptedReplies,
           onChanged: debug.setScriptedReplies,
         ),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Dummy mode'),
-          subtitle: const Text(
-            'Every other message gets the same canned reply. Nothing reaches '
-            'a provider: no agent run, no routing, no titles.',
-          ),
+        GaiaPanelSwitch(
+          title: 'Dummy mode',
+          subtitle:
+              'Every other message gets the same canned reply. Nothing reaches '
+              'a provider: no agent run, no routing, no titles.',
           value: debug.dummyMode,
           onChanged: debug.setDummyMode,
         ),
@@ -533,23 +544,19 @@ class _DebugMenu extends StatelessWidget {
         heading('Taking control of the screen'),
         GaiaControlShowcase(clientOrigin: () => controller.windowOrigin),
         heading('Display'),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Show FPS counter'),
-          subtitle: const Text(
-            "Gaia's rendered frame rate and a five-minute graph, as on "
-            "Voyager's Dev page.",
-          ),
+        GaiaPanelSwitch(
+          title: 'Show FPS counter',
+          subtitle:
+              "Gaia's rendered frame rate and a five-minute graph, as on "
+              "Voyager's Dev page.",
           value: debug.showFps,
           onChanged: debug.setShowFps,
         ),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('FPS drop alert'),
-          subtitle: const Text(
-            'Records the frame rate hidden, and shows the counter once a '
-            'reading falls below the threshold, until it is closed.',
-          ),
+        GaiaPanelSwitch(
+          title: 'FPS drop alert',
+          subtitle:
+              'Records the frame rate hidden, and shows the counter once a '
+              'reading falls below the threshold, until it is closed.',
           value: debug.fpsAlert,
           onChanged: debug.setFpsAlert,
         ),
@@ -563,63 +570,52 @@ class _DebugMenu extends StatelessWidget {
           onChanged: (fps, {required save}) =>
               debug.setFpsAlertThreshold(fps.round(), save: save),
         ),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Slow animations'),
-          subtitle: const Text('Every animation at a tenth of its speed.'),
+        GaiaPanelSwitch(
+          title: 'Slow animations',
+          subtitle: 'Every animation at a tenth of its speed.',
           value: debug.slowAnimations,
           onChanged: debug.setSlowAnimations,
         ),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Sky debug'),
-          subtitle: const Text(
-            "A panel over the chat to tune the empty chat's sky: its rotation, "
-            'stars, constellations, meteors, aurora and exit.',
-          ),
+        GaiaPanelSwitch(
+          title: 'Sky debug',
+          subtitle:
+              "A panel over the chat to tune the empty chat's sky: its rotation, "
+              'stars, constellations, meteors, aurora and exit.',
           value: debug.skyPanel,
           onChanged: debug.setSkyPanel,
         ),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Constellation figures (experimental)'),
-          subtitle: const Text(
-            "Once the sky traces a constellation, a sketch of what it's named "
-            'for is drawn over it, fading with its lines.',
-          ),
+        GaiaPanelSwitch(
+          title: 'Constellation figures (experimental)',
+          subtitle:
+              "Once the sky traces a constellation, a sketch of what it's named "
+              'for is drawn over it, fading with its lines.',
           value: debug.skyFigures,
           onChanged: debug.setSkyFigures,
         ),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Place stars'),
-          subtitle: const Text(
-            'Hold Ctrl over the chat: click to place a star in the starfield '
-            'behind, Shift+click for a small cluster, drag to move either, '
-            'right-click to take one away. They go when this is turned off.',
-          ),
+        GaiaPanelSwitch(
+          title: 'Place stars',
+          subtitle:
+              'Hold Ctrl over the chat: click to place a star in the starfield '
+              'behind, Shift+click for a small cluster, drag to move either, '
+              'right-click to take one away. They go when this is turned off.',
           value: debug.placeStars,
           onChanged: debug.setPlaceStars,
         ),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Allow screenshots'),
-          subtitle: const Text(
-            "Gaia shows in screenshots, screen recordings and screen shares, "
-            "which it's hidden from otherwise.",
-          ),
+        GaiaPanelSwitch(
+          title: 'Allow screenshots',
+          subtitle:
+              "Gaia shows in screenshots, screen recordings and screen shares, "
+              "which it's hidden from otherwise.",
           value: debug.allowScreenshots,
           onChanged: debug.setAllowScreenshots,
         ),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Haiku picks recalled memories'),
-          subtitle: const Text(
-            "Recall's stage 2: the utility model picks from the matched "
-            "memories on a chat's first message, and on later ones with a "
-            'new strong match. Each pass is logged with its tokens. On by '
-            'default.',
-          ),
+        GaiaPanelSwitch(
+          title: 'Haiku picks recalled memories',
+          subtitle:
+              "Recall's stage 2: the utility model picks from the matched "
+              "memories on a chat's first message, and on later ones with a "
+              'new strong match. Each pass is logged with its tokens. On by '
+              'default.',
           value: debug.recallPick,
           onChanged: debug.setRecallPick,
         ),

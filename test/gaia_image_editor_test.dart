@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_image_editor.dart';
 import 'package:voyager/features/gaia/companion/gaia_image_render.dart';
 import 'package:voyager/features/gaia/companion/gaia_spinner.dart';
@@ -100,14 +101,17 @@ void main() {
   testWidgets('opens on the pen', (tester) async {
     await open(tester);
 
-    bool selected(String tool) => tester
-        .widget<IconButton>(
-          find.ancestor(
-            of: find.byTooltip(tool),
-            matching: find.byType(IconButton),
-          ),
-        )
-        .isSelected!;
+    // A selected tool is in the accent.
+    bool selected(String tool) =>
+        tester
+            .widget<GaiaButton>(
+              find.ancestor(
+                of: find.byTooltip(tool),
+                matching: find.byType(GaiaButton),
+              ),
+            )
+            .color !=
+        null;
     expect(selected('Pen'), isTrue);
     expect(selected('Arrow'), isFalse);
   });

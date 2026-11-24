@@ -167,7 +167,7 @@ void main() {
   }
 
   Finder tab(String label) => find.descendant(
-    of: find.byType(GaiaSettingsPanelView),
+    of: find.byType(GaiaPanelTabs),
     matching: find.text(label),
   );
 
@@ -181,8 +181,8 @@ void main() {
     await pressCtrlComma(tester);
     expect(controller.panel.open, isTrue);
     expect(find.byType(GaiaSettingsPanelView), findsOneWidget);
-    // The header's title and the tab.
-    expect(find.text('Settings'), findsNWidgets(2));
+    // The tabs take the header's title.
+    expect(find.text('Settings'), findsOneWidget);
     for (final label in [
       'Memories',
       'Actions',
@@ -222,18 +222,14 @@ void main() {
     expect(controller.skyActive.value, isFalse);
   });
 
-  testWidgets("the sidebar's gear opens it, and × closes it", (tester) async {
+  testWidgets("the sidebar's gear opens it, and the header's back button "
+      'closes it', (tester) async {
     final controller = await pump(tester);
     await tester.tap(find.byIcon(Icons.settings_outlined));
     await settle(tester);
     expect(controller.panel.open, isTrue);
 
-    await tester.tap(
-      find.descendant(
-        of: find.byType(GaiaSettingsPanelView),
-        matching: find.byIcon(Icons.close),
-      ),
-    );
+    await tester.tap(find.byIcon(Icons.arrow_back));
     await settle(tester);
     expect(controller.panel.open, isFalse);
   });
@@ -351,7 +347,7 @@ void main() {
       expect(find.text('First global'), findsOneWidget);
       expect(find.text('Second global'), findsOneWidget);
       expect(find.text('Parser follow-up'), findsOneWidget);
-      final drain = tester.widget<Switch>(find.byType(Switch));
+      final drain = tester.widget<GaiaToggle>(find.byType(GaiaToggle));
       expect(drain.value, isTrue);
     });
 
@@ -395,7 +391,7 @@ void main() {
         'id': 'q2',
       });
 
-      await tester.tap(find.byType(Switch));
+      await tester.tap(find.byType(GaiaToggle));
       await settle(tester);
       expect(requests.where((r) => r.$1 == 'setDrain').single.$2, {
         'chatId': 'c1',

@@ -3,12 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
-import 'package:voyager/features/gaia/companion/gaia_action_icon.dart';
+import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_card_text_field.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_settings_panel.dart';
 import 'package:voyager/features/gaia/companion/gaia_style.dart';
 import 'package:voyager/features/gaia/companion/gaia_toast.dart';
+import 'package:voyager/features/gaia/gaia_keybinds.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
 
 /// The settings panel's Queue tab (GAIA_SETTINGS_HLD.md §4): each chat's
@@ -30,6 +31,16 @@ class GaiaQueueTab extends StatelessWidget {
       if (item.chatId != null && !chats.containsKey(item.chatId)) continue;
       (groups[item.chatId] ??= []).add(item);
     }
+    if (groups.isEmpty) {
+      return GaiaPanelEmpty(
+        title: 'Nothing is queued.',
+        hints: [
+          ('/queue', 'queue the draft'),
+          (GaiaFixedKey.queue.combo, 'the same'),
+          ('/queue-pop', 'take the next back'),
+        ],
+      );
+    }
     final muted = GaiaType.row.copyWith(color: GaiaInk.muted);
     return GaiaPanelScroll(
       key: const PageStorageKey('gaia panel queue'),
@@ -45,13 +56,6 @@ class GaiaQueueTab extends StatelessWidget {
             ),
           ),
         ),
-        if (groups.isEmpty)
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(10),
-              child: Text('Nothing is queued.', style: muted),
-            ),
-          ),
         for (final MapEntry(key: chatId, value: items) in groups.entries)
           _QueueGroup(
             key: ValueKey(chatId),
@@ -110,14 +114,13 @@ class _QueueGroup extends StatelessWidget {
                         'Drain',
                         style: GaiaType.label.copyWith(color: GaiaInk.muted),
                       ),
-                      Transform.scale(
-                        scale: 0.75,
-                        child: Switch(
-                          value: chat.drain,
-                          onChanged: (drain) =>
-                              controller.setChatDrain(chat.id, drain),
-                        ),
+                      const SizedBox(width: 8),
+                      GaiaToggle(
+                        value: chat.drain,
+                        onChanged: (drain) =>
+                            controller.setChatDrain(chat.id, drain),
                       ),
+                      const SizedBox(width: 6),
                     ],
                   ),
           ),
@@ -320,10 +323,11 @@ class _QueueRowState extends State<_QueueRow> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    GaiaActionIcon(
-                      label: 'Copy',
+                    GaiaButton(
+                      tooltip: 'Copy',
                       icon: Icons.copy,
-                      compact: true,
+                      size: 24,
+                      iconSize: 16,
                       onPressed: () async {
                         await Clipboard.setData(
                           ClipboardData(text: widget.item.text),
@@ -337,10 +341,11 @@ class _QueueRowState extends State<_QueueRow> {
                         );
                       },
                     ),
-                    GaiaActionIcon(
-                      label: 'Delete',
+                    GaiaButton(
+                      tooltip: 'Delete',
                       icon: Icons.delete_outline,
-                      compact: true,
+                      size: 24,
+                      iconSize: 16,
                       onPressed: _delete,
                     ),
                   ],

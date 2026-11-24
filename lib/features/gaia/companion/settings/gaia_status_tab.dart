@@ -89,103 +89,158 @@ class _GaiaStatusTabState extends State<GaiaStatusTab> {
         else
           SliverList.list(
             children: [
-              const GaiaPanelHeading('Desktops'),
-              if (status.beacons.isEmpty)
-                const GaiaPanelNote(
-                  'No desktop has Gaia running under this account yet.',
-                ),
-              for (final beacon in status.beacons)
-                _BeaconRow(
-                  key: ValueKey('beacon ${beacon.deviceId}'),
-                  beacon: beacon,
-                  here: beacon.deviceId == status.thisDevice,
-                  now: now,
-                ),
-              if (status.beaconMode case final on?) ...[
-                const GaiaPanelHeading('This desktop'),
-                GaiaPanelSwitch(
-                  title: 'Beacon mode',
-                  subtitle:
-                      'Stays awake so a paired phone can run Gaia here, with '
-                      'the display allowed to turn off. While plugged in, '
-                      'closing the lid does nothing; on battery it still '
-                      'sleeps.',
-                  value: on,
-                  onChanged: (on) => _run(
-                    () => controller.setBeaconMode(on),
-                    "Couldn't change beacon mode",
-                  ),
-                ),
-              ],
-              const GaiaPanelHeading('Paired devices'),
-              const GaiaPanelNote(
-                'A phone pairs to send this desktop messages. Trust one only '
-                'when the code it shows matches.',
+              GaiaPanelSection(
+                heading: 'Desktops',
+                children: [
+                  if (status.beacons.isEmpty)
+                    const GaiaPanelNote(
+                      'No desktop has Gaia running under this account yet.',
+                    ),
+                  for (final beacon in status.beacons)
+                    _BeaconRow(
+                      key: ValueKey('beacon ${beacon.deviceId}'),
+                      beacon: beacon,
+                      here: beacon.deviceId == status.thisDevice,
+                      now: now,
+                    ),
+                ],
               ),
-              if (status.devices.isEmpty) const GaiaPanelNote('None yet.'),
-              for (final (:device, :trusted, :refused) in status.devices)
-                _DeviceRow(
-                  key: ValueKey('device ${device.deviceId}'),
-                  device: device,
-                  trusted: trusted,
-                  refused: refused,
-                  onPair: () => _pair(device),
-                  onRevoke: () => _run(
-                    () => controller.revokeDevice(device),
-                    "Couldn't revoke",
-                  ),
-                  onForget: () => _run(
-                    () => controller.forgetDevice(device),
-                    device.revoked ? "Couldn't remove" : "Couldn't decline",
-                  ),
+              if (status.beaconMode case final on?)
+                GaiaPanelSection(
+                  heading: 'This desktop',
+                  children: [
+                    GaiaPanelSwitch(
+                      title: 'Beacon mode',
+                      subtitle:
+                          'Stays awake so a paired phone can run Gaia here, with '
+                          'the display allowed to turn off. While plugged in, '
+                          'closing the lid does nothing; on battery it still '
+                          'sleeps.',
+                      value: on,
+                      onChanged: (on) => _run(
+                        () => controller.setBeaconMode(on),
+                        "Couldn't change beacon mode",
+                      ),
+                    ),
+                  ],
                 ),
+              GaiaPanelSection(
+                heading: 'Paired devices',
+                children: [
+                  const GaiaPanelNote(
+                    'A phone pairs to send this desktop messages. Trust one '
+                    'only when the code it shows matches.',
+                  ),
+                  if (status.devices.isEmpty) const GaiaPanelNote('None yet.'),
+                  for (final (:device, :trusted, :refused)
+                      in status.devices) ...[
+                    _DeviceRow(
+                      key: ValueKey('device ${device.deviceId}'),
+                      device: device,
+                      trusted: trusted,
+                      refused: refused,
+                      onPair: () => setState(() => _pairing = device.deviceId),
+                      onRevoke: () => _run(
+                        () => controller.revokeDevice(device),
+                        "Couldn't revoke",
+                      ),
+                      onForget: () => _run(
+                        () => controller.forgetDevice(device),
+                        device.revoked ? "Couldn't remove" : "Couldn't decline",
+                      ),
+                    ),
+                    // Only while it can still be paired: trusted, revoked or
+                    // turned down elsewhere meanwhile, the check is gone.
+                    if (_pairing == device.deviceId &&
+                        !device.revoked &&
+                        !trusted &&
+                        !refused)
+                      _PairConfirm(
+                        device: device,
+                        onCancel: () => setState(() => _pairing = null),
+                        onPair: () async {
+                          setState(() => _pairing = null);
+                          await _run(
+                            () => controller.pairDevice(device),
+                            "Couldn't pair",
+                          );
+                        },
+                      ),
+                  ],
+                ],
+              ),
             ],
           ),
       ],
     );
   }
 
-  /// Pairing trusts the key behind [device]'s code: the user checks the
-  /// code matches what the device shows first, as on the page.
-  Future<void> _pair(GaiaDevice device) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Pair ${device.name}?'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+  /// The device whose Pair was clicked, by id, while its code is shown to
+  /// check: pairing trusts the key behind it, as on the page.
+  String? _pairing;
+}
+
+/// Pair's check, opened in place under the device's row: the code, to match
+/// against what the device shows, then They match or Cancel.
+class _PairConfirm extends StatelessWidget {
+  const _PairConfirm({
+    required this.device,
+    required this.onCancel,
+    required this.onPair,
+  });
+
+  final GaiaDevice device;
+  final VoidCallback onCancel;
+  final VoidCallback onPair;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    margin: const EdgeInsets.fromLTRB(4, 2, 4, 8),
+    padding: const EdgeInsets.all(14),
+    decoration: gaiaFloating(
+      Theme.of(context).colorScheme,
+      radius: GaiaRadius.panel,
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Pair ${device.name}?',
+          style: GaiaType.row.copyWith(color: GaiaInk.bright),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          "Check that ${device.name}'s Gaia page shows this code. If it "
+          "doesn't, someone else asked: don't pair.",
+          style: GaiaType.row.copyWith(
+            color: GaiaInk.muted,
+            fontWeight: FontWeight.w400,
+          ),
+        ),
+        const SizedBox(height: 14),
+        Center(
+          child: SelectableText(
+            device.code,
+            style: const TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w500,
+              letterSpacing: 2,
+              color: GaiaInk.bright,
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            Text(
-              "Check that ${device.name}'s Gaia page shows this code. "
-              "If it doesn't, someone else asked: don't pair.",
-            ),
-            const SizedBox(height: 16),
-            Center(
-              child: SelectableText(
-                device.code,
-                style: Theme.of(context).textTheme.headlineMedium,
-              ),
-            ),
+            GaiaButton(label: 'Cancel', size: 32, onPressed: onCancel),
+            const SizedBox(width: 8),
+            GaiaButton(label: 'They match', size: 32, onPressed: onPair),
           ],
         ),
-        actions: [
-          GaiaButton(
-            label: 'Cancel',
-            onPressed: () => Navigator.of(context).pop(false),
-            color: Theme.of(context).colorScheme.error,
-          ),
-          GaiaButton(
-            label: 'They match',
-            onPressed: () => Navigator.of(context).pop(true),
-          ),
-        ],
-      ),
-    );
-    if (ok == true) {
-      await _run(() => widget.controller.pairDevice(device), "Couldn't pair");
-    }
-  }
+      ],
+    ),
+  );
 }
 
 /// A Gaia row: hover fill, a leading icon, a title over a status line, and

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,6 +9,7 @@ import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.da
 import 'package:voyager/features/gaia/companion/gaia_app.dart';
 import 'package:voyager/features/gaia/companion/gaia_chat_body.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
+import 'package:voyager/features/gaia/companion/gaia_memory_card.dart';
 import 'package:voyager/features/gaia/companion/gaia_memory_review.dart';
 import 'package:voyager/features/gaia/companion/gaia_settings_panel.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
@@ -38,6 +40,7 @@ void main() {
     GaiaMemoryStatus status = GaiaMemoryStatus.active,
     List<String> topicIds = const [],
     bool pinned = false,
+    String? sourceChatId,
   }) => GaiaMemory(
     id: id,
     createdAt: at,
@@ -46,6 +49,7 @@ void main() {
     status: status,
     topicIds: topicIds,
     pinned: pinned,
+    sourceChatId: sourceChatId,
   );
 
   late List<(String, Map<String, Object?>)> requests;
@@ -55,6 +59,8 @@ void main() {
   late List<GaiaPinSuggestion> pins;
   late Map<String, String> refuse;
   late Map<String, Completer<void>> hold;
+  late List<GaiaChat> chats;
+  late Map<String, List<GaiaMessage>> messages;
 
   List<Map<String, Object?>> sent(String method) => [
     for (final (m, params) in requests)
@@ -118,7 +124,12 @@ void main() {
               'inbox': 0,
             };
           case 'chats':
+            return [for (final chat in chats) chat.toJson()];
           case 'messages':
+            return [
+              for (final message in messages[params['chatId']] ?? const [])
+                message.toJson(),
+            ];
           case 'drafts':
           case 'btws':
           case 'queue':
@@ -254,6 +265,8 @@ void main() {
     memories = [];
     merges = [];
     pins = [];
+    chats = [];
+    messages = {};
   });
 
   Finder inReview(Finder finder) =>
@@ -706,6 +719,15 @@ void main() {
 
     await key(tester, LogicalKeyboardKey.slash);
     expect(askChat(), findsOneWidget);
+    // Left with its chat open, the tab goes at once: fading out, its chat
+    // column would show the chat it gave back.
+    controller.showPanelTab(GaiaPanelTab.actions);
+    await tester.pump();
+    expect(find.byType(GaiaMemoryReviewView), findsNothing);
+    controller.showPanelTab(GaiaPanelTab.memories);
+    await settle(tester);
+    await settle(tester);
+    expect(askChat(), findsOneWidget);
     controller.closePanel();
     await settle(tester);
     expect(controller.asking, isNull);
@@ -764,6 +786,139 @@ void main() {
     expect(find.text('Applied'), findsOneWidget);
     runner.finish(controller.currentChatId!);
     await settle(tester);
+    await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets("a card's source line shows its chat read-only in the chat's "
+      'place: no composer, its cards inert; another card hides it and coming '
+      'back shows it; Ask Gaia and the source take turns; a second click or '
+      'closing the panel gives the chat that was open back', (tester) async {
+    chats = [
+      GaiaChat(
+        id: 'c1',
+        title: 'Planning the study plan',
+        createdAt: at,
+        updatedAt: at,
+        lastMessageAt: at,
+        tier: GaiaTier.standard,
+      ),
+    ];
+    GaiaMessage message(int seq, GaiaMessageRole role, List<GaiaPart> parts) =>
+        GaiaMessage(
+          id: 'm$seq',
+          chatId: 'c1',
+          seq: seq,
+          role: role,
+          parts: parts,
+          status: GaiaMessageStatus.complete,
+          createdAt: at,
+          updatedAt: at,
+        );
+    messages = {
+      'c1': [
+        message(1, GaiaMessageRole.user, [
+          const GaiaTextPart('Use kilometres from now on'),
+        ]),
+        message(2, GaiaMessageRole.assistant, [
+          const GaiaTextPart('Noted.'),
+          const GaiaMemoryPart(memoryId: 'p0', text: 'I prefer metric units'),
+        ]),
+        // Far more after it than the split shows.
+        for (var seq = 3; seq < 40; seq++)
+          message(
+            seq,
+            seq.isOdd ? GaiaMessageRole.user : GaiaMessageRole.assistant,
+            [
+              GaiaTextPart(
+                [for (var i = 0; i < 6; i++) 'line $i of $seq'].join('\n\n'),
+              ),
+            ],
+          ),
+      ],
+    };
+    memories = [
+      memory(
+        'p0',
+        'I prefer metric units',
+        status: GaiaMemoryStatus.proposed,
+        sourceChatId: 'c1',
+      ),
+      memory('p1', 'Fact 1', status: GaiaMemoryStatus.proposed),
+    ];
+    final controller = await pump(tester);
+    final before = controller.currentChatId;
+    await tester.tap(find.text('Review'));
+    await settle(tester);
+
+    final source = inReview(find.textContaining('Planning the study plan'));
+    await tester.tap(source);
+    await settle(tester);
+    expect(controller.showingSource, 'c1');
+    expect(controller.currentChatId, 'c1');
+    // Scrolled up to the message with its memory card, not at the newest:
+    // a jump, then a glide.
+    for (var i = 0; i < 4; i++) {
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+    final card = inReview(find.byType(GaiaMemoryCard));
+    expect(card, findsOneWidget);
+    expect(tester.getRect(card).top, greaterThanOrEqualTo(0));
+    expect(tester.getRect(card).bottom, lessThanOrEqualTo(1400));
+    expect(find.byType(GaiaChatBody), findsNothing, reason: 'no composer');
+    // Hovering a message offers Copy, and nothing that acts on it.
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(mouse.removePointer);
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(tester.getCenter(inReview(find.text('Noted.'))));
+    await settle(tester);
+    expect(find.byTooltip('Copy'), findsOneWidget);
+    expect(find.byTooltip('Edit & resend'), findsNothing);
+    expect(find.byTooltip('Fork from here'), findsNothing);
+    await mouse.moveTo(Offset.zero);
+    // Its memory card shows, but Remember on it does nothing.
+    await tester.tap(
+      find.descendant(of: card, matching: find.text('Remember')),
+      warnIfMissed: false,
+    );
+    await settle(tester);
+    expect(sent('decideMemory'), isEmpty);
+    // The deck's keys still work: Skip moves on and hides it.
+    await key(tester, LogicalKeyboardKey.arrowRight);
+    expect(controller.showingSource, isNull);
+    expect(controller.currentChatId, before);
+    await key(tester, LogicalKeyboardKey.arrowLeft);
+    expect(controller.showingSource, 'c1');
+
+    // Ask Gaia takes its place, and the source line takes it back.
+    await key(tester, LogicalKeyboardKey.slash);
+    expect(controller.asking, 'p0');
+    expect(controller.showingSource, isNull);
+    expect(find.byType(GaiaChatBody), findsOneWidget);
+    await tester.tap(source);
+    await settle(tester);
+    expect(controller.asking, isNull);
+    expect(controller.showingSource, 'c1');
+    // A second click hides it; the Ask Gaia chat asked for is back.
+    await tester.tap(source);
+    await settle(tester);
+    expect(controller.showingSource, isNull);
+    expect(controller.asking, 'p0');
+
+    // Another tab hides it; back on Memories, it's shown again.
+    await tester.tap(source);
+    await settle(tester);
+    controller.showPanelTab(GaiaPanelTab.actions);
+    await settle(tester);
+    expect(controller.showingSource, isNull);
+    controller.showPanelTab(GaiaPanelTab.memories);
+    await settle(tester);
+    await settle(tester);
+    expect(controller.showingSource, 'c1');
+    controller.closePanel();
+    await settle(tester);
+    expect(controller.showingSource, isNull);
+    expect(controller.currentChatId, before);
+    expect(find.byType(GaiaChatBody), findsOneWidget);
     await tester.pump(const Duration(seconds: 2));
   });
 }

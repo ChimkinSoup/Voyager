@@ -273,15 +273,12 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
                     ),
                   ),
                 ),
-                IconButton(
+                GaiaButton(
                   tooltip: _pin ? "Don't pin it" : 'Pin it to every chat',
-                  isSelected: _pin,
-                  visualDensity: VisualDensity.compact,
-                  icon: Icon(
-                    _pin ? Icons.push_pin : Icons.push_pin_outlined,
-                    size: 16,
-                    color: _pin ? accent : theme.colorScheme.outline,
-                  ),
+                  icon: _pin ? Icons.push_pin : Icons.push_pin_outlined,
+                  size: 28,
+                  iconSize: 16,
+                  color: _pin ? accent : null,
                   onPressed: () => setState(() => _pin = !_pin),
                 ),
                 const SizedBox(width: 4),

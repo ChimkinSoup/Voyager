@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_card_view.dart';
 import 'package:voyager/features/gaia/companion/gaia_control_showcase.dart';
+import 'package:voyager/features/gaia/companion/gaia_settings_panel.dart';
 import 'package:voyager/features/gaia/host/gaia_flash.dart';
 
 /// The debug menu's section for what Gaia plays on screen while in control.
@@ -123,13 +124,13 @@ void main() {
       await tapLabel(tester, 'Next step');
       expect(flashes().last['style'], style);
 
-      await tester.tap(find.byType(Switch));
+      await tester.tap(find.byType(GaiaToggle));
       await tester.pump();
       expect(
         (calls.lastWhere((c) => c.method == 'show').arguments as Map)['style'],
         style,
       );
-      await tester.tap(find.byType(Switch));
+      await tester.tap(find.byType(GaiaToggle));
       await tester.pump();
     }
   }, variant: windows);
@@ -139,7 +140,7 @@ void main() {
     (tester) async {
       await pump(tester);
       await tapLabel(tester, 'Current');
-      await tester.tap(find.byType(Switch));
+      await tester.tap(find.byType(GaiaToggle));
       await tapLabel(tester, 'Play all');
       calls.clear();
       await tapLabel(tester, 'Astral');
@@ -203,7 +204,7 @@ void main() {
 
   testWidgets('the border goes off with the section', (tester) async {
     await pump(tester);
-    await tester.tap(find.byType(Switch));
+    await tester.tap(find.byType(GaiaToggle));
     await tester.pump();
     final shown = calls.singleWhere((c) => c.method == 'show');
     expect((shown.arguments as Map)['label'], contains('Gaia is in control'));
@@ -216,7 +217,7 @@ void main() {
 
   testWidgets("the notch's button turns only this border off", (tester) async {
     await pump(tester);
-    await tester.tap(find.byType(Switch));
+    await tester.tap(find.byType(GaiaToggle));
     await tester.pump();
     calls.clear();
     await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
@@ -225,7 +226,10 @@ void main() {
       (_) {},
     );
     await tester.pump();
-    expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+    expect(
+      tester.widget<GaiaPanelSwitch>(find.byType(GaiaPanelSwitch)).value,
+      isFalse,
+    );
     expect(calls.single.arguments, isNull);
   }, variant: windows);
 

@@ -4,6 +4,7 @@ import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_card_text_field.dart';
 import 'package:voyager/features/gaia/companion/gaia_date_picker.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
+import 'package:voyager/features/gaia/companion/gaia_settings_panel.dart';
 import 'package:voyager/features/gaia/tools/gaia_proposals.dart';
 
 /// A proposal card (GAIA_HLD.md §10): what a `propose_*` tool would write.
@@ -333,7 +334,7 @@ class _GaiaProposalCardState extends State<GaiaProposalCard> {
     return Row(
       children: [
         Expanded(child: Text(label)),
-        Switch(
+        GaiaToggle(
           value: on,
           onChanged: (value) {
             widget.onEdit?.call(key, value);

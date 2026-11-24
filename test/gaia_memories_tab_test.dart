@@ -289,7 +289,7 @@ void main() {
     expect(inTab(find.text('Remembered (3)')), findsOneWidget);
     expect(inTab(find.text('Archived (1)')), findsOneWidget);
     expect(inTab(find.text('Old locker code 1234')), findsNothing);
-    await tester.tap(inTab(find.text('Show')));
+    await tester.tap(inTab(find.text('Archived (1)')));
     await tester.pump();
     expect(inTab(find.text('Old locker code 1234')), findsOneWidget);
 
@@ -302,7 +302,7 @@ void main() {
     // The inbox folds in a topic, so its own memories aren't buried.
     expect(inTab(find.text('Inbox (1)')), findsOneWidget);
     expect(inTab(find.text('I like naps')), findsNothing);
-    await tester.tap(inTab(find.text('Show')).first);
+    await tester.tap(inTab(find.text('Inbox (1)')));
     await tester.pump();
     expect(inTab(find.text('I like naps')), findsOneWidget);
     // Without its subtopics, only School's own.
