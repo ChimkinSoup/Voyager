@@ -69,9 +69,9 @@ void main() {
         pipe: companion,
         window: FakeGaiaWindow(),
         runners: {kGaiaClaudeCodeAdapter: FakeClaudeRunner()},
-        cliVersions: {kGaiaClaudeCodeAdapter: () async => (2, 1, 331)},
+        cliVersions: {kGaiaClaudeCodeAdapter: () async => (2, 2, 0)},
         exit: (_) {},
-      );
+      )..unreadableClis = {kGaiaClaudeCodeAdapter};
       await tester.runAsync(() async {
         await controller.start();
         await controller.onHotkey('small');

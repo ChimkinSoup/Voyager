@@ -231,7 +231,7 @@ class GaiaTextFieldStudies extends StatelessWidget {
         const SizedBox(height: 8),
         panel(
           'Current',
-          'The light that follows the cursor and the caret, for comparison.',
+          'Gaia\'s text field as it is now (Aurora edge v6), for comparison.',
           const _Current(),
         ),
         for (final study in _Study.values)
@@ -426,10 +426,8 @@ class _StudyFieldState extends State<_StudyField>
           tween: Tween(end: focused ? 1 : 0),
           duration: GaiaMotion.move,
           curve: GaiaMotion.curve,
-          builder: (context, t, child) => CustomPaint(
-            foregroundPainter: painter(t),
-            child: child,
-          ),
+          builder: (context, t, child) =>
+              CustomPaint(foregroundPainter: painter(t), child: child),
           child: row,
         );
 
@@ -460,10 +458,7 @@ class _StudyFieldState extends State<_StudyField>
         fill: raised,
         border: edge,
         shadows: [
-          drop(
-            lifted: focused,
-            color: focused ? accent : Colors.black,
-          ),
+          drop(lifted: focused, color: focused ? accent : Colors.black),
         ],
       ),
       _Study.topLight => box(

@@ -11,7 +11,7 @@ auroras you've seen, meteors seen, chats started and days active.
 - **Shown** as a dialog, like `/usage` (`showDialog`, `gaia_app.dart:7699`), in Gaia's
   look (§5).
 - **What it holds:**
-  - A row of headline numbers: days active, chats started, meteors seen, lifetime tokens.
+  - A row of headline numbers: days active, chats started, meteors seen, comets seen, lifetime tokens.
   - **Rare satellites**: one tile for each of ISS, Array, Hubble and Dish, showing its
     icon, count and first-seen date.
   - **Rare auroras**: one tile for each of crimson, mauve, twilight and gold, the same way.
@@ -60,6 +60,7 @@ all of these are true at that moment:
 | **Rare satellite** | It has been inside the sky's visible area for **3 s in total** while 1-4 hold. It doesn't need to cross the whole window. Counted once per satellite. |
 | **Rare aurora** | Once per sky: the first moment the rare aurora is up while 1-4 hold. Usually that's when `_Sky.begin()` rolls it. If the window gains focus a moment after the roll, the same sky still counts (§7.1). |
 | **Meteor** | Each meteor, ordinary or from a shower, created while 1-4 hold. |
+| **Comet** | As a rare satellite: 3 s in total inside the sky's visible area while 1-4 hold, once per comet. |
 | **Chat started** | The first prompt of a new chat is saved (`isNew` in the send path, `gaia_controller.dart:6430`). Forks, side questions and Ask Gaia chats don't count. |
 | **Day active** | Any prompt is sent. The day is your local date. |
 
@@ -81,7 +82,7 @@ all of these are true at that moment:
 | "Always the rare aurora" (`forceRare`) | No. An aurora counts only if `_rare` rolled it. |
 | "Rare colours" set (`rareColours != null`) | No. The colour must come from `_pickColours()`. |
 | A rare satellite chosen as the look (`satellite.share > 0`) | No. Only satellites picked by `_pickRare()` count. |
-| The test buttons (`satelliteTest`, `burstTest`) | No. Their streaks are marked as test spawns, even if a rare look rolls. |
+| The test buttons (`satelliteTest`, `burstTest`, `cometTest`) | No. Their streaks are marked as test spawns, even if a rare look rolls. |
 | Event rate, shower strength, "rare satellites" off | These change how often things come, not whether a sighting is real. Rolls under them still count, and "rare satellites" off simply means none roll. |
 
 ### 3.4 Batching
@@ -97,7 +98,7 @@ and when the window blurs or hides.
 The companion sends one notification for everything:
 
 ```
-statsSeen {kind: 'satellite'|'aurora'|'meteors'|'chat'|'day', id?, n?, day?}
+statsSeen {kind: 'satellite'|'aurora'|'meteors'|'comet'|'chat'|'day', id?, n?, day?}
 ```
 
 `id` is the satellite's or aurora's enum name. `n` is the meteor batch. `day` is
@@ -115,6 +116,7 @@ The stats are one document, `users/{uid}/gaia_stats/lifetime` (new
 satellites: { iss: {count, first}, array: {...}, hubble: {...}, dish: {...} }
 auroras:    { crimson: {count, first}, mauve: {...}, twilight: {...}, gold: {...} }
 meteors:    int
+comets:     int
 chats:      int
 days:       { '2026-11-22': true, ... }
 ```
@@ -146,7 +148,7 @@ From top to bottom, 80% of the window's width:
 
 1. **Title** "Stats", with × on the right.
 2. **Headline row**: four stat tiles, each a large number with a small label. Days
-   active, chats started, meteors seen, and lifetime tokens (compact, e.g. "48.2M").
+   active, chats started, meteors seen, comets seen, and lifetime tokens (compact, e.g. "48.2M").
 3. **Rare satellites**: a row of four tiles, rarest last (Dish, Array, Hubble, ISS).
    Each shows its icon, name, "×3" and "First seen 14 Nov 2026".
 4. **Rare auroras**: four tiles in the same style, rarest last (crimson, twilight,

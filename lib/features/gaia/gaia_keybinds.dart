@@ -33,9 +33,16 @@ enum GaiaKeybind {
 }
 
 /// [keybind]'s combo under [overrides] (the synced settings' `keybinds`);
-/// empty when unbound.
-String gaiaComboFor(GaiaKeybind keybind, Map<String, String> overrides) =>
-    overrides[keybind.name] ?? keybind.defaultCombo;
+/// empty when unbound. One inside Gaia saved before a fixed key took its
+/// combo is back to its default, as the fixed key would win it.
+String gaiaComboFor(GaiaKeybind keybind, Map<String, String> overrides) {
+  final combo = overrides[keybind.name];
+  if (combo == null ||
+      (!keybind.global && gaiaFixedKeyClash(combo, const []) != null)) {
+    return keybind.defaultCombo;
+  }
+  return combo;
+}
 
 /// The label of the hotkey in [hotkeys], Voyager's own by what they do, that
 /// already holds [combo]; null for none. They're stored as typed, so each is
@@ -52,6 +59,7 @@ enum GaiaFixedKey {
   newChat('New chat', 'Ctrl+N'),
   draftToNewChat('Move the draft to a new chat', 'Ctrl+Shift+N'),
   search('Search', 'Ctrl+F'),
+  sidebar('Sidebar', 'Ctrl+B'),
   debugMenu('Debug menu', 'Ctrl+Shift+D'),
   paste('Paste', 'Ctrl+V'),
   queue('Queue the draft', 'Ctrl+Q');

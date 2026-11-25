@@ -1245,16 +1245,26 @@ void main() {
     test('rare sightings go at once; meteors wait for a blur', () async {
       await startCompanion();
       controller.focused.value = true;
-      const meteor = (satellite: null, aurora: null);
+      const meteor = (satellite: null, aurora: null, comet: false);
       controller
         ..noteSighting(meteor)
-        ..noteSighting((satellite: GaiaSatellite.iss, aurora: null))
+        ..noteSighting((
+          satellite: GaiaSatellite.iss,
+          aurora: null,
+          comet: false,
+        ))
         ..noteSighting(meteor)
-        ..noteSighting((satellite: null, aurora: GaiaRareAurora.gold));
+        ..noteSighting((
+          satellite: null,
+          aurora: GaiaRareAurora.gold,
+          comet: false,
+        ))
+        ..noteSighting((satellite: null, aurora: null, comet: true));
       await settle();
       expect(seen(), [
         {'kind': 'satellite', 'id': 'iss'},
         {'kind': 'aurora', 'id': 'gold'},
+        {'kind': 'comet'},
       ]);
 
       controller.focused.value = false;
@@ -1265,7 +1275,7 @@ void main() {
         ..value = true
         ..value = false;
       await settle();
-      expect(seen(), hasLength(3));
+      expect(seen(), hasLength(4));
     });
   });
 
@@ -1602,6 +1612,36 @@ void main() {
     await controller.send('Two');
     await settle();
     expect(controller.cliVersions[kGaiaClaudeCodeAdapter], (2, 1, 326));
+  });
+
+  test('output the CLI printed that Gaia couldn\'t read marks it for the '
+      'untested chip, until its version is read anew', () async {
+    await main.pipe.startCompanion();
+    final reads = <GaiaCliVersion?>[(2, 2, 5), (2, 2, 5), (2, 2, 6)];
+    controller = GaiaController(
+      pipe: main.companion,
+      window: window,
+      runners: {kGaiaClaudeCodeAdapter: runner},
+      cliVersions: {kGaiaClaudeCodeAdapter: () async => reads.removeAt(0)},
+      exit: exits.add,
+    );
+    await controller.start();
+    await settle();
+    expect(controller.unreadableClis, isEmpty);
+
+    runner.sendError = GaiaRunException(
+      'Unreadable output from Claude Code: bad "message"',
+    );
+    await controller.send('One');
+    await settle();
+    expect(controller.unreadableClis, {kGaiaClaudeCodeAdapter});
+
+    runner.sendError = null;
+    runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+    await controller.send('Two');
+    await settle();
+    expect(controller.cliVersions[kGaiaClaudeCodeAdapter], (2, 2, 6));
+    expect(controller.unreadableClis, isEmpty);
   });
 
   group('images (§9.3)', () {

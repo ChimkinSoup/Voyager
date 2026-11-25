@@ -23,13 +23,15 @@ class GaiaSeen {
 }
 
 /// Gaia's lifetime stats, every desktop's (GAIA_STATS_HLD.md §4.2): the rare
-/// satellites and auroras seen, by their enum names; meteors seen; chats
-/// started; and each local day a prompt was sent, as `yyyy-MM-dd`.
+/// satellites and auroras seen, by their enum names; meteors and comets
+/// seen; chats started; and each local day a prompt was sent, as
+/// `yyyy-MM-dd`.
 class GaiaStats {
   const GaiaStats({
     this.satellites = const {},
     this.auroras = const {},
     this.meteors = 0,
+    this.comets = 0,
     this.chats = 0,
     this.days = const {},
   });
@@ -45,6 +47,7 @@ class GaiaStats {
       satellites: seen(json['satellites']),
       auroras: seen(json['auroras']),
       meteors: (json['meteors'] as num?)?.toInt() ?? 0,
+      comets: (json['comets'] as num?)?.toInt() ?? 0,
       chats: (json['chats'] as num?)?.toInt() ?? 0,
       days: {
         if (json['days'] case final Map days)
@@ -56,6 +59,7 @@ class GaiaStats {
   final Map<String, GaiaSeen> satellites;
   final Map<String, GaiaSeen> auroras;
   final int meteors;
+  final int comets;
   final int chats;
   final Set<String> days;
 
@@ -68,6 +72,7 @@ class GaiaStats {
       for (final MapEntry(:key, :value) in auroras.entries) key: value.toJson(),
     },
     'meteors': meteors,
+    'comets': comets,
     'chats': chats,
     'days': {for (final day in days) day: true},
   };

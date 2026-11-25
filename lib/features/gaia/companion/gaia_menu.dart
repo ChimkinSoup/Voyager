@@ -594,20 +594,26 @@ class _MenuShellState extends State<_MenuShell>
       onExit: (_) => setState(() => _hovered = false),
       child: AnimatedBuilder(
         animation: _grow,
-        builder: (context, ring) => DecoratedBox(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(_radius),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.55 * _grow.value),
-                offset: const Offset(0, 12),
-                blurRadius: 40,
-                spreadRadius: -8,
-              ),
-            ],
-          ),
-          child: ring,
-        ),
+        builder: (context, ring) {
+          final shadow = BoxShadow(
+            color: Colors.black.withValues(alpha: 0.55 * _grow.value),
+            offset: const Offset(0, 12),
+            blurRadius: 40,
+            spreadRadius: -8,
+          );
+          // A study's look may be see-through, as a frosted one is: its
+          // shadow skips what's under it, or it would show through.
+          if (GaiaRingLook.maybeOf(context) != null) {
+            return CustomPaint(painter: _ShadowAround(shadow), child: ring);
+          }
+          return DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(_radius),
+              boxShadow: [shadow],
+            ),
+            child: ring,
+          );
+        },
         child: GaiaGlowRing(
           radius: _radius,
           hovered: _hovered,
@@ -637,6 +643,38 @@ class _MenuShellState extends State<_MenuShell>
       child: shell,
     );
   }
+}
+
+/// [shadow] round a [_MenuShell], as its [BoxDecoration] would draw it,
+/// less what's under the shell.
+class _ShadowAround extends CustomPainter {
+  const _ShadowAround(this.shadow);
+
+  final BoxShadow shadow;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final shell = RRect.fromRectAndRadius(
+      Offset.zero & size,
+      const Radius.circular(_radius),
+    );
+    final around = Path.combine(
+      PathOperation.difference,
+      Path()..addRect(shell.outerRect.inflate(shadow.blurRadius * 2 + 64)),
+      Path()..addRRect(shell),
+    );
+    canvas
+      ..save()
+      ..clipPath(around)
+      ..drawRRect(
+        shell.shift(shadow.offset).inflate(shadow.spreadRadius),
+        shadow.toPaint(),
+      )
+      ..restore();
+  }
+
+  @override
+  bool shouldRepaint(_ShadowAround old) => old.shadow != shadow;
 }
 
 Widget _menuRow(

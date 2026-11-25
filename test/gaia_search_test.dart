@@ -331,6 +331,32 @@ void main() {
     expect(field, findsOneWidget);
   });
 
+  // Not search's, but this file's window is the one with the sidebar.
+  testWidgets('Ctrl+B toggles the sidebar, focused in the composer or not', (
+    tester,
+  ) async {
+    final controller = await pump(tester);
+    Future<void> ctrlB() async {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyB);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump();
+    }
+
+    expect(controller.sidebar.edge.value, greaterThan(0));
+    await tester.tap(find.byType(GaiaTextField));
+    await tester.pump();
+    await ctrlB();
+    expect(controller.sidebar.open, isFalse);
+    expect(controller.sidebar.edge.value, 0);
+
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pump();
+    await ctrlB();
+    expect(controller.sidebar.open, isTrue);
+    expect(controller.sidebar.edge.value, greaterThan(0));
+  });
+
   testWidgets('no matches says so, once the search has answered', (
     tester,
   ) async {

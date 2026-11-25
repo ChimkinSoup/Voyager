@@ -4,9 +4,13 @@ import 'dart:ui' as ui;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:voyager/features/gaia/companion/gaia_aurora_edge.dart';
+import 'package:voyager/features/gaia/companion/gaia_style.dart';
+import 'package:voyager/features/gaia/companion/gaia_text_field.dart';
 
-/// The outlined text box Gaia's cards edit in (a proposal's fields, a
-/// memory's text).
+/// The text box Gaia's cards edit in (a proposal's fields, a memory's
+/// text): in Gaia's field fill and aurora edge, its label inside along the
+/// top.
 ///
 /// Two things differ from a plain [TextField], both about selecting nothing:
 ///
@@ -37,6 +41,16 @@ class GaiaCardTextField extends StatefulWidget {
 }
 
 class _GaiaCardTextFieldState extends State<GaiaCardTextField> {
+  /// The edge follows the focus, so one of its own when not given one.
+  FocusNode? _ownFocus;
+  FocusNode get _focus => widget.focusNode ?? (_ownFocus ??= FocusNode());
+
+  @override
+  void dispose() {
+    _ownFocus?.dispose();
+    super.dispose();
+  }
+
   /// Where the primary button last went down, or null if it wasn't a plain
   /// click (another button, or Shift held to extend a selection).
   Offset? _down;
@@ -72,17 +86,31 @@ class _GaiaCardTextFieldState extends State<GaiaCardTextField> {
   Widget build(BuildContext context) => Listener(
     onPointerDown: _onDown,
     onPointerUp: _onUp,
-    child: TextField(
-      controller: widget.controller,
-      focusNode: widget.focusNode,
-      minLines: 1,
-      maxLines: widget.maxLines,
-      style: widget.style,
-      selectionWidthStyle: ui.BoxWidthStyle.tight,
-      decoration: InputDecoration(
-        labelText: widget.labelText,
-        isDense: true,
-        border: const OutlineInputBorder(),
+    child: DecoratedBox(
+      decoration: BoxDecoration(
+        color: gaiaFieldFill,
+        borderRadius: BorderRadius.circular(GaiaRadius.row),
+      ),
+      child: GaiaAuroraEdge(
+        focusNode: _focus,
+        child: TextField(
+          controller: widget.controller,
+          focusNode: _focus,
+          minLines: 1,
+          maxLines: widget.maxLines,
+          style: widget.style,
+          selectionWidthStyle: ui.BoxWidthStyle.tight,
+          decoration: InputDecoration(
+            labelText: widget.labelText,
+            isDense: true,
+            // The box above is the fill and the aurora the edge.
+            filled: false,
+            border: InputBorder.none,
+            enabledBorder: InputBorder.none,
+            focusedBorder: InputBorder.none,
+            contentPadding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+          ),
+        ),
       ),
     ),
   );

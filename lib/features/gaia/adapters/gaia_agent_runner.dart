@@ -234,6 +234,11 @@ class GaiaRunException implements Exception {
   String toString() => message;
 }
 
+/// Whether a failed turn's [text] says the CLI printed output Gaia couldn't
+/// parse, as an update changing its event shapes would (§5.1).
+bool gaiaRunUnreadable(String text) =>
+    text.startsWith('Unreadable output from ');
+
 /// An image going with a turn (§9.3): the `[image N]` it's referred to by,
 /// and the file holding it.
 typedef GaiaImageInput = ({int label, String path, String mimeType});

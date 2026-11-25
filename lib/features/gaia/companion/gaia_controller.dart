@@ -1465,6 +1465,11 @@ class GaiaController extends ChangeNotifier {
   var cliVersions = <String, GaiaCliVersion?>{};
   var cliChecked = false;
 
+  /// Adapters whose CLI printed output Gaia couldn't parse since its version
+  /// was last read: the header's untested-CLI chip shows only for these, as
+  /// an untested version that parses is no cause for it.
+  var unreadableClis = <String>{};
+
   /// Connects to a host, or throws: [connectivity]'s probe. Null, as in
   /// tests, for no probing at all.
   final Future<void> Function(String host)? _reach;
@@ -2303,9 +2308,14 @@ class GaiaController extends ChangeNotifier {
   Future<void> _recheckCli(String adapter) async {
     final read = _cliVersions[adapter];
     if (read == null || !cliChecked) return;
+    final marked = unreadableClis;
     final version = await read();
     if (version == null || version == cliVersions[adapter]) return;
     cliVersions = {...cliVersions, adapter: version};
+    // Only a mark from before the read: one set since is this version's.
+    if (identical(unreadableClis, marked)) {
+      unreadableClis = {...unreadableClis}..remove(adapter);
+    }
     notifyListeners();
   }
 
@@ -2996,14 +3006,16 @@ class GaiaController extends ChangeNotifier {
     for (final row in rows) GaiaTokenRow.fromJson(row as Map),
   ];
 
-  /// Counts what the sky saw (GAIA_STATS_HLD.md §3): a rare satellite or
-  /// aurora at once, meteors a minute at a time.
+  /// Counts what the sky saw (GAIA_STATS_HLD.md §3): a rare satellite,
+  /// aurora or comet at once, meteors a minute at a time.
   void noteSighting(GaiaSighting sighting) {
     switch (sighting) {
-      case (satellite: final GaiaSatellite satellite, aurora: _):
+      case (satellite: final GaiaSatellite satellite, aurora: _, comet: _):
         _pipe.notify('statsSeen', {'kind': 'satellite', 'id': satellite.name});
-      case (satellite: _, aurora: final GaiaRareAurora aurora):
+      case (satellite: _, aurora: final GaiaRareAurora aurora, comet: _):
         _pipe.notify('statsSeen', {'kind': 'aurora', 'id': aurora.name});
+      case (satellite: _, aurora: _, comet: true):
+        _pipe.notify('statsSeen', {'kind': 'comet'});
       default:
         _meteorsSeen++;
         _meteorsSend ??= Timer(const Duration(minutes: 1), _sendMeteors);
@@ -4198,19 +4210,23 @@ class GaiaController extends ChangeNotifier {
   String? _forkingAt;
 
   /// Debug menu: the header's untested-CLI chip for the next message's CLI,
-  /// as it reads after an update past the tested range, for eight seconds.
+  /// as it reads after an update past the tested range breaks parsing, for
+  /// eight seconds.
   void previewUntestedCli() {
     final adapter = agentFor(nextTier)?.adapter;
     final cli = kGaiaClis[adapter];
     if (adapter == null || cli == null || !cliChecked) return;
     final real = cliVersions[adapter];
+    final wasUnreadable = unreadableClis.contains(adapter);
     final preview = cli.tested.$2;
     cliVersions = {...cliVersions, adapter: preview};
+    unreadableClis = {...unreadableClis, adapter};
     notifyListeners();
     Timer(const Duration(seconds: 8), () {
       // Already put back by an earlier preview's timer.
       if (cliVersions[adapter] != preview) return;
       cliVersions = {...cliVersions, adapter: real};
+      if (!wasUnreadable) unreadableClis = {...unreadableClis}..remove(adapter);
       notifyListeners();
     });
   }
@@ -8030,6 +8046,9 @@ class GaiaController extends ChangeNotifier {
         } else {
           copies?.forEach((image) => unawaited(_deleteQuietly(image.path)));
         }
+      }
+      if (agent != null && script == null && gaiaRunUnreadable('$error')) {
+        unreadableClis = {...unreadableClis, agent.adapter};
       }
       if (account != null && script == null) {
         if (gaiaRunLimited('$error')) {

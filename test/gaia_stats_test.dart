@@ -28,6 +28,7 @@ void main() {
       await counter.add({'kind': 'aurora', 'id': 'gold'});
       await counter.add({'kind': 'meteors', 'n': 3});
       await counter.add({'kind': 'meteors', 'n': 2});
+      await counter.add({'kind': 'comet'});
       await counter.add({'kind': 'chat'});
       await counter.add({'kind': 'day', 'day': '2026-11-22'});
       await counter.add({'kind': 'day', 'day': '2026-11-22'});
@@ -40,6 +41,7 @@ void main() {
       expect(stats.auroras['gold']!.count, 1);
       expect(stats.auroras['gold']!.first, isNotNull);
       expect(stats.meteors, 5);
+      expect(stats.comets, 1);
       expect(stats.chats, 1);
       expect(stats.days, {'2026-11-22', '2026-11-23'});
     },

@@ -113,4 +113,11 @@ void main() {
     );
     expect(gaiaComboFor(GaiaKeybind.abort, const {'abort': ''}), '');
   });
+
+  test('one saved before a fixed key took it is back to its default', () {
+    expect(
+      gaiaComboFor(GaiaKeybind.settings, const {'settings': 'Ctrl+B'}),
+      'Ctrl+,',
+    );
+  });
 }

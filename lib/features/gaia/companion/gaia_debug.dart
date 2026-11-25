@@ -7,6 +7,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:voyager/core/dev/fps_monitor_controller.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
+import 'package:voyager/features/gaia/companion/gaia_comet.dart';
 import 'package:voyager/features/gaia/companion/gaia_moon.dart';
 import 'package:voyager/features/gaia/companion/gaia_sky.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
@@ -153,6 +154,12 @@ class GaiaDebug extends ChangeNotifier {
   /// How a satellite crossing the sky looks.
   var skySatellite = GaiaSatellite.trail;
 
+  /// How the sky's comets look.
+  var skyComet = GaiaCometLook.greatV3;
+
+  /// The head on the sky's comets.
+  var skyCometHead = GaiaCometHead.shellsStarburst;
+
   /// How the sky leaves once a prompt is sent.
   var skyExit = GaiaSkyExit.blinkOut;
 
@@ -177,6 +184,10 @@ class GaiaDebug extends ChangeNotifier {
   /// Bumped by the sky panel's Send satellite, which sends the chosen
   /// satellite across. Not kept.
   var skySatelliteTest = 0;
+
+  /// Bumped by the sky panel's Send comet, which sends a comet up. Not
+  /// kept.
+  var skyCometTest = 0;
 
   /// The step the sky panel's tour is at ([GaiaController.playSkyTour]),
   /// or null when none is running. Not kept.
@@ -241,6 +252,10 @@ class GaiaDebug extends ChangeNotifier {
       skySatellite =
           GaiaSatellite.values.asNameMap()[json['skySatellite']] ??
           skySatellite;
+      skyComet = GaiaCometLook.values.asNameMap()[json['skyComet']] ?? skyComet;
+      skyCometHead =
+          GaiaCometHead.values.asNameMap()[json['skyCometHead']] ??
+          skyCometHead;
       skyAuroraExit =
           GaiaAuroraExit.values.asNameMap()[json['skyAuroraExit']] ??
           skyAuroraExit;
@@ -383,6 +398,11 @@ class GaiaDebug extends ChangeNotifier {
   Future<void> setSkySatellite(GaiaSatellite value) =>
       _set(() => skySatellite = value);
 
+  Future<void> setSkyComet(GaiaCometLook value) => _set(() => skyComet = value);
+
+  Future<void> setSkyCometHead(GaiaCometHead value) =>
+      _set(() => skyCometHead = value);
+
   Future<void> setSkyExit(GaiaSkyExit value) => _set(() => skyExit = value);
 
   Future<void> setSkyPlainBlink(bool value) =>
@@ -406,6 +426,11 @@ class GaiaDebug extends ChangeNotifier {
 
   void testSkySatellite() {
     skySatelliteTest++;
+    notifyListeners();
+  }
+
+  void testSkyComet() {
+    skyCometTest++;
     notifyListeners();
   }
 
@@ -433,6 +458,8 @@ class GaiaDebug extends ChangeNotifier {
       skyRareColours = defaults.skyRareColours;
       skyAuroraExit = defaults.skyAuroraExit;
       skySatellite = defaults.skySatellite;
+      skyComet = defaults.skyComet;
+      skyCometHead = defaults.skyCometHead;
       skyExitTime = defaults.skyExitTime;
       skyExit = defaults.skyExit;
       skyPlainBlink = defaults.skyPlainBlink;
@@ -504,6 +531,8 @@ class GaiaDebug extends ChangeNotifier {
           'skyEventInterval': skyEventInterval,
           'skyAurora': skyAurora,
           'skySatellite': skySatellite.name,
+          'skyComet': skyComet.name,
+          'skyCometHead': skyCometHead.name,
           'skyAuroraExit': skyAuroraExit.name,
           'skyAuroraDrift': skyAuroraDrift,
           'skyRareAurora': skyRareAurora,
@@ -841,6 +870,7 @@ gaiaStatsPreviews() {
         satellites: {'hubble': seen(2, 9), 'dish': seen(5, 20)},
         auroras: {'twilight': seen(1, 4), 'crimson': seen(3, 18)},
         meteors: 148,
+        comets: 1,
         chats: 31,
         days: days(12),
       ),
@@ -861,6 +891,7 @@ gaiaStatsPreviews() {
           'crimson': seen(11, 210),
         },
         meteors: 9620,
+        comets: 7,
         chats: 1380,
         days: days(214),
       ),
@@ -888,6 +919,7 @@ gaiaStatsPreviews() {
             colours: seen(123456, 3650),
         },
         meteors: 98765432,
+        comets: 123456,
         chats: 1234567,
         days: days(3650),
       ),

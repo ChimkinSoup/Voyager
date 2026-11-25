@@ -93,6 +93,7 @@ class GaiaStatsCounter {
       {'kind': 'meteors', 'n': final int n} => {
         'meteors': FieldValue.increment(n),
       },
+      {'kind': 'comet'} => {'comets': FieldValue.increment(1)},
       {'kind': 'chat'} => {'chats': FieldValue.increment(1)},
       // A day is set, not counted, so two desktops on one day count it once.
       {'kind': 'day', 'day': final String day} => {

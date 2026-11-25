@@ -13,6 +13,7 @@ import 'package:voyager/features/gaia/companion/gaia_appear.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_button_studies.dart';
 import 'package:voyager/features/gaia/companion/gaia_card_view.dart';
+import 'package:voyager/features/gaia/companion/gaia_comet_studies.dart';
 import 'package:voyager/features/gaia/companion/gaia_control_showcase.dart';
 import 'package:voyager/features/gaia/companion/gaia_memory_card.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
@@ -25,6 +26,7 @@ import 'package:voyager/features/gaia/companion/gaia_orb_studio.dart';
 import 'package:voyager/features/gaia/companion/gaia_notch.dart';
 import 'package:voyager/features/gaia/companion/gaia_red_orb_studies.dart';
 import 'package:voyager/features/gaia/companion/gaia_settings_panel.dart';
+import 'package:voyager/features/gaia/companion/gaia_shell_studies.dart';
 import 'package:voyager/features/gaia/companion/gaia_stats.dart';
 import 'package:voyager/features/gaia/companion/gaia_text_field.dart';
 import 'package:voyager/features/gaia/companion/gaia_text_field_studies.dart';
@@ -112,10 +114,14 @@ class _DebugMenuState extends State<_DebugMenu> {
         const GaiaTextFieldStudies(),
         heading('Button studies'),
         const GaiaButtonStudies(),
+        heading('Menu and capsule studies'),
+        GaiaShellStudies(controller: controller),
         heading('Red layered orb studies'),
         const GaiaRedOrbStudies(),
         heading('Orb studio'),
         const GaiaOrbStudio(),
+        heading('Comet studies'),
+        GaiaCometStudies(debug: controller.debug),
         heading('Thinking and replying studies'),
         const GaiaOrbMotionStudies(),
         heading('Astral message animations'),
@@ -486,8 +492,9 @@ class _DebugMenuState extends State<_DebugMenu> {
         heading('Untested CLI'),
         Text(
           "The header chip shown when the next message's CLI is past its "
-          'tested range, as after an update: here it reads the first untested '
-          'version for eight seconds. Nothing is run.',
+          "tested range and printed output Gaia couldn't read, as after an "
+          'update: here it reads the first untested version for eight '
+          'seconds. Nothing is run.',
           style: muted,
         ),
         const SizedBox(height: 8),

@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:voyager/core/utils/moon.dart';
+import 'package:voyager/features/gaia/companion/gaia_comet.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_moon.dart';
 import 'package:voyager/features/gaia/companion/gaia_settings_panel.dart';
@@ -124,11 +125,19 @@ enum GaiaRareAurora {
 
 /// Something seen on the sky that the lifetime stats count
 /// (GAIA_STATS_HLD.md §3): a rare satellite, the rare aurora by its colours,
-/// or, with neither, a meteor.
-typedef GaiaSighting = ({GaiaSatellite? satellite, GaiaRareAurora? aurora});
+/// a [comet], or, with none of them, a meteor.
+typedef GaiaSighting = ({
+  GaiaSatellite? satellite,
+  GaiaRareAurora? aurora,
+  bool comet,
+});
 
 /// Seconds a rare satellite is in view, while seen, before it counts.
 const kGaiaSightingSeconds = 3.0;
+
+/// The average minutes of sky shown, and ticking, from one comet to the
+/// next.
+const kGaiaCometMinutes = 150.0;
 
 /// A meteor shower on the sky: as the real calendar has one tonight, or
 /// held at a strength.
@@ -258,10 +267,15 @@ class GaiaSky extends StatefulWidget {
     this.exitTest = 0,
     this.burstTest = 0,
     this.satelliteTest = 0,
+    this.cometTest = 0,
+    this.cometLook = GaiaCometLook.greatV3,
+    this.cometHead = GaiaCometHead.shellsStarburst,
+    @visibleForTesting this.comets = true,
     this.top = 0,
     this.left,
     this.onSighting,
     @visibleForTesting this.random,
+    @visibleForTesting this.now = DateTime.now,
     required this.child,
   });
 
@@ -358,6 +372,17 @@ class GaiaSky extends StatefulWidget {
   /// A change sends a [satellite] across at once, however many are up.
   final int satelliteTest;
 
+  /// A change sends a comet up at once, in place of any there.
+  final int cometTest;
+
+  final GaiaCometLook cometLook;
+
+  /// The head on [cometLook]'s tails.
+  final GaiaCometHead cometHead;
+
+  /// Comets come now and then; false, never by themselves.
+  final bool comets;
+
   /// As [GaiaStarfield]'s: the sky keeps below this.
   final double top;
 
@@ -370,6 +395,9 @@ class GaiaSky extends StatefulWidget {
 
   /// The sky's rolls; null, a [Random] of its own.
   final Random? random;
+
+  /// The time of day, for how long the sky has been away.
+  final DateTime Function() now;
 
   final Widget child;
 
@@ -412,6 +440,15 @@ const _trainGap = 14.0;
 /// How much larger than drawn the detailed craft are: the ISS, array,
 /// telescope and dish.
 const _craftScale = 1.5;
+
+/// Seconds a comet takes to fade in, and to fade out; and the least and
+/// most it's up, however fast the sky turns.
+const _cometFade = 12.0;
+const _cometLeast = 40.0;
+const _cometMost = 240.0;
+
+/// How long a comet waits for the sky to come back.
+const _cometKept = Duration(minutes: 30);
 
 /// Seconds the sky's turning takes to ease up, or to coast down, by about
 /// two thirds: as a heavy wheel's would, never starting or stopping dead.
@@ -465,7 +502,9 @@ class _GaiaSkyState extends State<GaiaSky> with SingleTickerProviderStateMixin {
     if (oldWidget.satelliteTest != widget.satelliteTest) {
       _sky.sendSatellite(anyway: true);
     }
+    if (oldWidget.cometTest != widget.cometTest) _sky.sendComet();
     final test = oldWidget.exitTest != widget.exitTest && widget.shown;
+    if (oldWidget.shown != widget.shown) _sky.away(widget.now(), widget.shown);
     if ((oldWidget.shown && !widget.shown) || test) {
       if (_sky.exiting != null) {
         _sky.returning = false;
@@ -532,6 +571,9 @@ class _GaiaSkyState extends State<GaiaSky> with SingleTickerProviderStateMixin {
       ..aurora = widget.aurora
       ..satellite = widget.satellite
       ..rareSatellites = widget.rareSatellites
+      ..cometLook = widget.cometLook
+      ..cometHead = widget.cometHead
+      ..comets = widget.comets
       ..auroraExit = widget.auroraExit
       ..auroraDrift = widget.auroraDrift
       ..forceRare = widget.rareAurora
@@ -1507,6 +1549,34 @@ class _Streak {
 /// above the window, just wide enough to cover it: as the sky turns, what
 /// leaves one side of the sector comes back at the other, out of sight.
 /// Notifies when it has moved.
+/// A comet among the stars, turning with them: its angle about the pole
+/// and the sky's [spin] when it came, its distance from the pole, and how
+/// long it's up. While the sky is away it holds its place on the window,
+/// [spin] moving with the sky's, and doesn't age.
+class _Comet {
+  _Comet({
+    required this.theta,
+    required this.spin,
+    required this.r,
+    required this.life,
+    required this.scale,
+    required this.countable,
+  });
+
+  final double theta, r, life;
+  double spin;
+
+  /// Its size against the usual.
+  final double scale;
+
+  /// A natural roll not yet counted, rather than a test one.
+  bool countable;
+  var age = 0.0;
+
+  /// Seconds it has been in view while sightings count.
+  var seen = 0.0;
+}
+
 class _Sky extends ChangeNotifier {
   _Sky(this._random) {
     for (var i = 0; i < _pool; i++) {
@@ -1567,6 +1637,12 @@ class _Sky extends ChangeNotifier {
 
   final constellations = <_Constellation>[];
   final streaks = <_Streak>[];
+
+  /// The comet up just now; null, none.
+  _Comet? comet;
+  var cometLook = GaiaCometLook.greatV3;
+  var cometHead = GaiaCometHead.shellsStarburst;
+  var comets = true;
 
   var shown = false;
 
@@ -1658,6 +1734,7 @@ class _Sky extends ChangeNotifier {
   var _nextEvent = 4.0;
   var _nextSatellite = 10.0;
   var _nextShower = 2.0;
+  late var _nextComet = _cometWait();
 
   /// This sky's aurora is the rare one, as rolled when it came.
   var _rare = false;
@@ -1824,6 +1901,22 @@ class _Sky extends ChangeNotifier {
     super.dispose();
   }
 
+  /// When the sky last went away, while it's away.
+  DateTime? _left;
+
+  /// The sky going away at [now], or, with [back], coming back: without its
+  /// comet if it's been away too long.
+  void away(DateTime now, bool back) {
+    if (!back) {
+      _left = now;
+      return;
+    }
+    if (_left case final left? when now.difference(left) > _cometKept) {
+      comet = null;
+    }
+    _left = null;
+  }
+
   /// Comes in with a new chat: an aurora of its own, now and then the rare
   /// one, and a radiant somewhere new.
   void begin() {
@@ -1874,7 +1967,8 @@ class _Sky extends ChangeNotifier {
     // Easing up from rest; then turning on as it goes, so the starfield
     // turning with it carries on at the same pace.
     speed += (1 - speed) * (1 - exp(-dt / _coast));
-    spin += rotation * dt * speed;
+    final turn = rotation * dt * speed;
+    spin += turn;
     _auroraClock += dt * auroraDrift;
     for (var i = cleared.length - 1; i >= 0; i--) {
       final (rect, alpha) = cleared[i];
@@ -1907,6 +2001,7 @@ class _Sky extends ChangeNotifier {
     if (!size.isEmpty) {
       _stepDrawing(dt);
       _stepStreaks(dt);
+      _stepComet(dt, turn);
       _stepSparkles(dt);
       _countAurora();
     }
@@ -1921,13 +2016,13 @@ class _Sky extends ChangeNotifier {
     }
     if (!_counting) return;
     _auroraCounted = true;
-    onSighting!((satellite: null, aurora: _rolledColours));
+    onSighting!((satellite: null, aurora: _rolledColours, comet: false));
   }
 
   /// Counts a meteor just sent across, not from a test burst.
   void _countMeteor() {
     if (!_counting) return;
-    onSighting!((satellite: null, aurora: null));
+    onSighting!((satellite: null, aurora: null, comet: false));
   }
 
   /// Still, as it is when not ticking: there, or gone.
@@ -2026,7 +2121,7 @@ class _Sky extends ChangeNotifier {
       s.seen += dt;
       if (s.seen < kGaiaSightingSeconds) continue;
       s.countable = false;
-      onSighting!((satellite: s.satellite, aurora: null));
+      onSighting!((satellite: s.satellite, aurora: null, comet: false));
     }
     streaks.removeWhere((s) => s.age >= s.life);
     if (exiting != null || !shown) return;
@@ -2065,6 +2160,78 @@ class _Sky extends ChangeNotifier {
     if (_nextShower > 0) return;
     _nextShower = -log(1 - _random.nextDouble()) / burstRate;
     _startBurst();
+  }
+
+  void _stepComet(double dt, double turn) {
+    if (comet case final c? when !shown) {
+      // Kept for the next empty chat, just where it was.
+      c.spin += turn;
+      return;
+    }
+    if (comet case final c?) {
+      c.age += dt;
+      final view = Rect.fromLTRB(from, 0, size.width, size.height);
+      if (c.countable && _counting && view.contains(cometAt(c))) {
+        c.seen += dt;
+        if (c.seen >= kGaiaSightingSeconds) {
+          c.countable = false;
+          onSighting!((satellite: null, aurora: null, comet: true));
+        }
+      }
+      if (c.age >= c.life) comet = null;
+      return;
+    }
+    if (exiting != null || !shown || !comets) return;
+    _nextComet -= dt;
+    if (_nextComet > 0) return;
+    _nextComet = _cometWait();
+    comet = _newComet(countable: true);
+  }
+
+  /// A comet now, in place of any up, if the sky is up. It doesn't count.
+  void sendComet() {
+    if (size.isEmpty || exiting != null || !shown) return;
+    comet = _newComet(countable: false);
+  }
+
+  /// Seconds of sky until the next comet, spaced at random.
+  double _cometWait() =>
+      -log(1 - _random.nextDouble()) * kGaiaCometMinutes * 60;
+
+  /// A comet coming into view at the left of the sky, where the turning
+  /// carries it across to the right, up about as long as that takes. At
+  /// its lowest it's still high, and above what's kept clear, so the
+  /// greeting doesn't hide it.
+  _Comet _newComet({required bool countable}) {
+    final highest = size.height * 0.18;
+    final lowest = hidden.fold(
+      size.height * 0.45,
+      (low, rect) => min(low, rect.top - 30),
+    );
+    final y = highest + _random.nextDouble() * max(0, lowest - highest);
+    final r = y - _pole.dy;
+    // In from the edges by as far as they fade it.
+    const margin = _SkyPainter._edge * 3;
+    double across(double x) => acos(((x - _pole.dx) / r).clamp(-1.0, 1.0));
+    final down = asin(((margin - _pole.dy) / r).clamp(-1.0, 1.0));
+    final theta = min(across(from + margin), pi - down);
+    final arc = theta - max(across(size.width - margin), down);
+    return _Comet(
+      theta: theta,
+      spin: spin,
+      r: r,
+      life: rotation > 0
+          ? (arc / rotation).clamp(_cometLeast, _cometMost)
+          : _cometMost,
+      scale: 0.85 + _random.nextDouble() * 0.35,
+      countable: countable,
+    );
+  }
+
+  /// Where comet [c] is just now, turned with the stars.
+  Offset cometAt(_Comet c) {
+    final theta = c.theta - (spin - c.spin);
+    return _pole + Offset(cos(theta), sin(theta)) * c.r;
   }
 
   /// A burst of the shower's meteors now, if the sky is up.
@@ -2459,6 +2626,7 @@ class _SkyPainter extends CustomPainter {
     _stars(canvas, size, from, opacity, exiting);
     if (exiting == null) _sparkles(canvas, opacity);
     if (going > 0) {
+      _comet(canvas, size, from, going);
       _moon(canvas, size, going);
       _lines(canvas, going);
       _figure(canvas, going);
@@ -2487,6 +2655,47 @@ class _SkyPainter extends CustomPainter {
         clear,
       );
     }
+  }
+
+  /// The comet, if one is up, as [_Sky.cometLook] and [_Sky.cometHead] have
+  /// it: its tails
+  /// streaming away from the sun below the horizon, the dust tail curving
+  /// back against its way across.
+  void _comet(Canvas canvas, Size size, double from, double fade) {
+    final c = sky.comet;
+    if (c == null) return;
+    // Far off, leaning only as the farthest stars do.
+    final at = sky.cometAt(c) + sky.lean * 0.1;
+    final nearest = min(
+      min(at.dx - from, size.width - at.dx),
+      min(at.dy, size.height - at.dy),
+    );
+    final alpha =
+        fade *
+        min(1.0, min(c.age, c.life - c.age) / _cometFade) *
+        (nearest / (_edge * 3)).clamp(0.0, 1.0) *
+        (1 - 0.4 * sky.moonlight);
+    if (alpha <= 0) return;
+    final len = 150 * c.scale * (size.shortestSide / 700).clamp(0.7, 1.3);
+    final away = at - Offset(size.width / 2, size.height * 2.5);
+    final angle = atan2(away.dy, away.dx);
+    // Its way across, anticlockwise about the pole; the dust tail lags it.
+    final d = at - sky.pole;
+    final bend = d.dx * cos(angle) + d.dy * sin(angle) > 0 ? 1.0 : -1.0;
+    canvas
+      ..save()
+      ..translate(at.dx, at.dy)
+      ..rotate(angle);
+    paintGaiaComet(
+      canvas,
+      sky.cometLook,
+      length: len,
+      bend: bend,
+      time: sky.time,
+      alpha: alpha,
+      head: sky.cometHead,
+    );
+    canvas.restore();
   }
 
   static const _moonSize = 22.0;
@@ -3713,6 +3922,10 @@ class GaiaSkyPanel extends StatelessWidget {
                       onPressed: debug.testSkySatellite,
                       child: const Text('Send satellite'),
                     ),
+                    TextButton(
+                      onPressed: debug.testSkyComet,
+                      child: const Text('Send comet'),
+                    ),
                   ],
                 ),
                 if (debug.skyTour case final step?)
@@ -4086,6 +4299,26 @@ class GaiaSkyPanel extends StatelessWidget {
                                       selected: debug.skySatellite == satellite,
                                       onSelected: (_) =>
                                           debug.setSkySatellite(satellite),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        Row(
+                          children: [
+                            const SizedBox(width: 64, child: Text('Comet')),
+                            Expanded(
+                              child: Wrap(
+                                spacing: 6,
+                                children: [
+                                  for (final look in GaiaCometLook.values)
+                                    ChoiceChip(
+                                      label: Text(look.label),
+                                      visualDensity: VisualDensity.compact,
+                                      selected: debug.skyComet == look,
+                                      onSelected: (_) =>
+                                          debug.setSkyComet(look),
                                     ),
                                 ],
                               ),

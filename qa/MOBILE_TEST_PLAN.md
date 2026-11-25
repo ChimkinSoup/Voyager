@@ -89,7 +89,7 @@ Every desktop rule still applies (`TEST_PLAN.md` "RULES" and the account safety 
 - **Errors:** check the `flutter run` / attach output and `adb logcat` (filter `flutter`, `AndroidRuntime`, `FATAL`) for `EXCEPTION CAUGHT`, `RenderFlex overflowed`, `Another exception`, ANRs and native crashes after each flow. A FlutterError is a bug even if the UI looks fine. The app's error log lives in the app's documents directory on Android (`app_data_directory.dart`); M0 records its path.
 - **"Survives restart"** on the phone means `am force-stop` → relaunch, then re-check the UI and the DB. **"Survives process death"** is different and matters more on Android: Home → `am kill com.example.voyager` (it kills only a backgrounded app) → reopen from Recents. **"Cold re-login"** = sign out → `pm clear` → sign in again → wait for the startup pull.
 - **HLD docs** are listed per phase. A mismatch between the HLD and the app is worth logging. Many HLDs have an Android paragraph; read it.
-- **Bug severity:** as on desktop (Blocker, Major, Minor, Cosmetic). Tag mobile bugs `[M<phase>]` in the title, e.g. `### BUG-384 [M5] …`. **Next bug ID: BUG-392.** **Next free account: qa-131**.
+- **Bug severity:** as on desktop (Blocker, Major, Minor, Cosmetic). Tag mobile bugs `[M<phase>]` in the title, e.g. `### BUG-384 [M5] …`. **Next bug ID: BUG-401.** **Next free account: qa-131**.
 
 ### The five dimensions (mobile)
 
@@ -217,8 +217,8 @@ Add these to PROGRESS.md §6 in M0. Every desktop MANUAL-ONLY row still applies.
 | # | Phase | Desktop reference | Status |
 |---|---|---|---|
 | M0 | Setup: phone, harness, background operation (redo on the OnePlus 12R) | Phase 0 | Done |
-| M1 | Install, first run, auth & account lifecycle | P1 | Not Started |
-| M2 | Phone shell, navigation, Back, rotation & sheets | P2 | Not Started |
+| M1 | Install, first run, auth & account lifecycle | P1 | Done |
+| M2 | Phone shell, navigation, Back, rotation & sheets | P2 | Done |
 | M3 | Text input on the phone: soft keyboard, autocorrect, snippets, formatting, images | P3, P4 | Not Started |
 | M4 | Notifications, reminders, inbox, Secure Notes & devices | P6 (+ P5's reminder parts) | Not Started |
 | M5 | Journal | P7 | Not Started |
@@ -345,30 +345,37 @@ Keep this table and each phase's **Status** line in sync. M1–M3 come first bec
 ---
 
 ## Phase M2 — Phone shell, navigation, Back, rotation & sheets
-- **Status:** Not Started
+- **Status:** Done (2026-11-24 19:31–20:37, Juno's OnePlus 12R, debug build of `972fd4d8` + uncommitted Gaia work in `lib/features/gaia/`; qa-130 reused)
 - **Desktop reference:** P2. Desktop-only items there (window, tray, Ctrl+Tab, second instance) are n/a on the phone; this phase checks they're absent rather than broken.
 - **Scope:** the compact shell (`_CompactShell`, `_CompactStatusStrip`, `ShellBottomNav`, More sheet), the system Back chain, predictive Back, page state across switches, the switch between compact and expanded shells (rotation, tablet size), sheets and dialogs on the phone, system insets, overlays (workout island, FPS counter, cache status), the weather button and forecast sheet, connectivity and sync indicators, and the desktop-only pieces that must be absent.
 - **HLD docs:** DESIGN.md, BACKGROUND.md, VOYAGER_SHEET_DISMISS_HLD.md, SCOPE_SWITCHER_HLD.md, GLASS_BUTTON.md
 - **Flows:**
-  - [ ] **Bottom bar:** the first four visible destinations in nav order, plus More. The selected item shows in the accent colour. Every item navigates. More opens a sheet listing the rest in order; tapping one navigates and closes the sheet; the bar shows More selected while on one of those pages (record what it shows).
-  - [ ] Nav order and hidden pages (set in Settings → navigation pages): the bar and the More sheet follow at once. Hide pages until fewer than five remain: is More still shown? Hide all but Settings.
-  - [ ] **Back chain** from each page: a pushed route (e.g. a LeetCode session, a Study session) pops first; then an open sheet or dialog; then Journal/Dreams' editor (Back interceptor) returns to the list; then a non-home section goes to the first section; then Back at home leaves the app (`SystemNavigator.pop`). Reopen from Recents: same page and state.
-  - [ ] **Predictive Back** (`enableOnBackInvokedCallback`): the back-swipe preview shows the right destination, and cancelling the swipe midway leaves everything as it was.
-  - [ ] Page state kept across bottom-bar switches: a scrolled To-Do list, an unsaved journal body, a To-Do composer draft, the forecast sheet's selected day (as P2).
-  - [ ] **Status strip:** clock updates on the minute (desktop BUG-007 was lag; compare), weather icon and temperature after setting a location (M21 sets it), the forecast sheet opens as a phone sheet, picking a day redraws the chart, the sheet drags down to close. The connectivity badge appears in airplane mode and clears after. The sync activity icon shows during uploads.
-  - [ ] **Inbox bell** in the strip opens the inbox as a phone surface (details in M4).
-  - [ ] **Rotation:** rotate to landscape on each page. At ≥600 dp the shell becomes the rail; the current page, scroll position, open editor and drafts survive. Rotate back. Repeat with a sheet open, a dialog open and the keyboard up. Then rotate 10 times quickly.
-  - [ ] **Tablet size** (`wm size 1600x2560`, density 320): expanded shell in portrait, the desktop layouts of every page on a touch screen. Hover-only controls are a problem here: list any action that has no touch route.
-  - [ ] **Sheets:** every sheet shows a grab handle and drags down to close on Android. Where a sheet holds an unsaved form, a drag asks first (`dragAsksFirst`) or keeps the draft. Try the LeetCode track form, the Study card editor, the Study import, the workout target editor and the finance transaction sheet (the HLD's audit list). Back closes the top sheet, not the page.
-  - [ ] **Dialogs** at 360 dp: every dialog fits or scrolls, buttons are reachable with the keyboard up, and a tap on the scrim behaves as on desktop.
-  - [ ] **System insets:** content clears the status bar, the cutout and the gesture bar. The bottom bar sits above the gesture bar with no gap or overlap. Try 3-button navigation too (Settings → System → Gestures).
-  - [ ] **Workout island** (M17 starts a workout): it sits above the page and doesn't cover the bottom bar.
-  - [ ] Dev page (shown via nav settings): the FPS counter and cache-status overlays draw correctly in compact.
-  - [ ] **Desktop-only pieces absent:** Settings shows "Global hotkeys: Available on Windows only" and no Start with Windows, folder backups or heat watch; no Caps Lock mark; no tray; no Gaia window hotkeys. The shortcuts dialog (Ctrl+/) is unreachable on Android (shell shortcuts off): confirm nothing in the UI points to it.
-  - [ ] Rapid bottom-bar tapping (20 taps, 60 ms apart) ends on the last tapped page with no errors.
-  - [ ] Recents: the app's thumbnail shows the current page, except while a vault is unlocked (M4/M18, `FLAG_SECURE`).
-- **Five-dimension sweep:** D3 is the heart of this phase: every size in the list. D4: Back everywhere, plus a hardware-keyboard spot check that Ctrl+Tab and Ctrl+/ do nothing harmful. D5: rotate and kill mid-navigation; Back spam (10 presses in 1 s) from a deep route.
-- **Skipped/blocked:** —
+  - [x] **Bottom bar** → Journal, Dreams, To-Do, Calendar + More; the selected item gets the accent outline and label; every item navigates. More opens a full-height sheet (handle, scrolls) listing Search … Settings in nav order; a row navigates and closes it; while on an overflow page the bar shows **More** selected.
+  - [x] Nav order and hidden pages → hiding Dreams and dragging Calendar to the top changed the bar and the More sheet at once. With 3 pages visible (by eval: Journal, To-Do, Settings) More disappears and Settings sits in the bar; with only Settings the bar has one item, and a relaunch with the custom startup page (To-Do) hidden opens Settings. **BUG-393**: the dialog's list can't be scrolled by touch (every swipe reorders), so Jobs … Settings can't be reached; labels break mid-word. (Dev is hidden by default; restored to the defaults afterwards.)
+  - [x] **Back chain** → **BUG-392 (Major)**: Back on any section but Journal (Dreams, Settings) and Back in the journal editor *quit the app* (`wm_finish_activity … app-request`); the shell's `PopScope` sits on the outer `ShellRoute`'s navigator, so go_router never reaches `_handleSystemBack`. A modal sheet (More, transaction editor) and the inbox popover do close on Back first. The journal title had autosaved. Reopening restarts on the startup page, not the page left. Pushed routes (LeetCode/Study sessions) weren't reached (no data; M13/M16).
+  - [~] **Predictive Back** → the edge back-swipe (`input swipe` from x=3) closes the More sheet like Back. A cancelled half-swipe can't be scripted with `input swipe` (it always lifts at the end): not run.
+  - [x] Page state across bottom-bar switches → a scrolled To-Do list (23 tasks), its composer draft, and the journal editor with an unsaved body all survived Journal ↔ Calendar ↔ To-Do switches. (The forecast is a dialog that closes, so there's no selected day to keep: BUG-396.)
+  - [x] **Status strip** → clock: sampled every ~2 s across three minute boundaries, it flipped within 2 s each time (one earlier 7:41-vs-7:42 reading after a dialog didn't reproduce with the More sheet). Weather icon and 4° after setting Chicago, US; the forecast opens as a centred dialog, picking a day redraws the chart, a drag doesn't close it (**BUG-396**). Offline badge (red Wi-Fi) 71 s after airplane on (two failed probes, as the Dev text says), cleared 18 s after airplane off. The sync activity icon wasn't caught during an upload (gone before `find` ran).
+  - [x] **Inbox bell** → opens the inbox as a floating card under the strip (reminder field, Scheduled +, Log stats); Back closes it. Details in M4.
+  - [x] **Rotation** → landscape (`user_rotation 1`; auto-rotate had to be turned off first) switches to the rail at 794 dp; To-Do's scroll position and draft and the journal editor survive and come back on rotating back. The rail fits only ~2 destinations at 361 dp tall and scrolls by touch. In landscape the journal editor's body box disappears with a 2.9 px overflow (noted on **BUG-385**). The More sheet stays open across rotation (over the rail). With the keyboard up, rotation keeps the text but drops focus and closes the keyboard. 10 rotations 400 ms apart: no crash, state intact.
+  - [x] **Tablet size** (1600×2560 @ 320) → expanded shell with the full rail; To-Do, Journal (split view) and Calendar render their desktop layouts fine. Touch routes: `ContextMenuRegion` opens only on right-click, so every right-click menu is unreachable by touch at any size: **BUG-395 (Major)** (a task can't be deleted, moved or sent to the bottom; Journal's Statistics / Change Journal). Long-press on a task opens the edit panel; on a journal card, the entry.
+  - [x] **Sheets** → More: handle, drags down to close, Back closes. Finance transaction editor: no handle, a drag doesn't move it, Back/✕ close it and the typed amount is kept for the next open (**BUG-400**, HLD says drag + handle on Android). LeetCode track form, Study card editor/import and workout target editor not reached (no data): M13/M16/M17.
+  - [x] **Dialogs** at 361 dp → Navigation pages (BUG-393), Manage lists, forecast (BUG-396) fit; Back closes them.
+  - [~] **System insets** → status bar, punch-hole and gesture bar are clear in portrait and landscape; the bottom bar sits on the gesture inset with no gap. 3-button navigation: `cmd overlay enable-exclusive … navbar.threebutton` set `navigation_mode 0` but OxygenOS drew no buttons, and the switch recreated the activity (the app restarted and an unsaved composer draft was lost, as on any config change Flutter doesn't handle). Restored to gestural; a real 3-button check needs Juno's Settings → System → Gestures.
+  - [~] **Workout island** → "Start today" needs a planned day ("Nothing is planned for that day yet"): moved to M17.
+  - [x] Dev page → FPS HUD and cache-status card both ignore the compact insets (**BUG-394**, Cosmetic): HUD over the status bar and bell (taps pass through), cache card over the bottom bar (blocks To-Do) and off the right edge.
+  - [x] **Desktop-only pieces absent** → Editing shows "Global hotkeys: Available on Windows only", no hotkey rows, no Start with Windows; Data has no folder backups or heat watch; no tray. But the "Caps Lock indicator" switch is still listed (**BUG-399**, Cosmetic). Ctrl+Tab and Ctrl+/ (`input keycombination 113 61` / `113 76`) did nothing.
+  - [x] Rapid bottom-bar tapping → 20 taps through the guard (~0.5 s apart; `phone.ps1` can't do 60 ms): no errors; the final page was To-Do, but the order of concurrent guarded taps isn't guaranteed, so "ends on the last tapped page" isn't proven.
+  - [ ] Recents thumbnail → not run: the Recents screen shows Juno's other apps.
+- **Five-dimension sweep:**
+  - D1: the flows above by touch; BUG-392 and BUG-395 are the functional gaps.
+  - D2: 22 tasks typed through the composer + "M2 add check", the journal body edit, weather location, nav-order/hidden-page changes (restored) all in SQLite; outbox 0 at every check; process death on Finance → relaunch on To-Do (custom startup) with 24 tasks, both entries, Dark, `last_seen_nav_page=/finance`. No desktop profile holds qa-130.
+  - D3: 361 dp, 360×640 dp (fine), landscape (rail; BUG-385 note), tablet (fine), font 1.3 (fine), font 2.0 (**BUG-397**), keyboard up (**BUG-398**: the bar stays above the keyboard and hid "Save location"), insets (fine; 3-button not drawn). Light spot-check of To-Do and the More sheet: legible, status icons dark.
+  - D4: Back everywhere (BUG-392); touch-only routes (BUG-395, BUG-393); sheet drag (BUG-400); hardware Ctrl+Tab / Ctrl+/ harmless; edge swipe = Back.
+  - D5: airplane mode (badge on/off), rotation ×10, process death mid-navigation, rotation with the keyboard up, nav-mode config change (activity recreated). Back spam from a deep route wasn't run separately: with BUG-392 the second Back already leaves the app.
+- **Test data:** qa-130: 23 more tasks ("M2 task 01…22", "M2 add check") in To-do, entry "M2 back draft" (body "unsaved body M2"), weather location Chicago, Illinois, US; nav order/hidden pages and Dev toggles back to defaults.
+- **Harness notes:** auto-rotate was on at session start (`accelerometer_rotation 1`), so `user_rotation` did nothing until it was set to 0. `phone.ps1 key` has no key-combination form; `key '0; input keycombination 113 61'` goes through its guard. The nav-pages tile scrolls off the Appearance tab; `find` lists offstage pages' texts too (e.g. To-Do rows on Settings).
+- **Skipped/blocked:** Recents thumbnail (privacy), cancelled predictive-back swipe (not scriptable), workout island (M17), pushed-route Back and the other HLD editors (M13/M16/M17), a real 3-button bar (OxygenOS).
 
 ---
 

@@ -536,6 +536,8 @@ void main() {
     // Picked again, it comes off.
     await pick('/btw hi /btw');
     expect(controller.draft.text, 'hi ');
+    // Past the undo history's half-second throttle on the last edit.
+    await tester.pump(const Duration(milliseconds: 500));
   });
 
   testWidgets('the palette stands in for them while it shows', (tester) async {
@@ -554,6 +556,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(GaiaPalette), findsNothing);
     expect(answerShown(tester), 'Newer answer.');
+    // Past the undo history's half-second throttle on the last edit.
+    await tester.pump(const Duration(milliseconds: 500));
   });
 
   testWidgets('they grow in as they open, but neither they nor the palette '
@@ -581,6 +585,8 @@ void main() {
     await tester.pump();
     expect(tester.getSize(find.byType(GaiaBtwDock)).height, open);
     await tester.pumpAndSettle();
+    // Past the undo history's half-second throttle on the last edit.
+    await tester.pump(const Duration(milliseconds: 500));
   });
 
   testWidgets('a click in the composer keeps them open; one outside both '

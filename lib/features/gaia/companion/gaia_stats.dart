@@ -118,6 +118,7 @@ Future<void> showGaiaStats(
                             (compact(stats?.days.length), 'Days active'),
                             (compact(stats?.chats), 'Chats started'),
                             (compact(stats?.meteors), 'Meteors seen'),
+                            (compact(stats?.comets), 'Comets seen'),
                             (
                               compact(
                                 tokens?.fold<int>(
@@ -128,11 +129,11 @@ Future<void> showGaiaStats(
                               'Lifetime tokens',
                             ),
                           ]),
-                          heading('Rare satellites', 4),
+                          heading('Rare satellites', 5),
                           _Tiles([
                             for (final (i, look) in gaiaStatsSatellites.indexed)
                               _Rise(
-                                order: 4 + i,
+                                order: 5 + i,
                                 child: _SeenTile(
                                   name: _satelliteNames[look]!,
                                   seen: stats?.satellites[look.name],
@@ -150,11 +151,11 @@ Future<void> showGaiaStats(
                                 ),
                               ),
                           ]),
-                          heading('Rare auroras', 8),
+                          heading('Rare auroras', 9),
                           _Tiles([
                             for (final (i, colours) in gaiaStatsAuroras.indexed)
                               _Rise(
-                                order: 8 + i,
+                                order: 9 + i,
                                 child: _SeenTile(
                                   name: _auroraNames[colours]!,
                                   seen: stats?.auroras[colours.name],
@@ -167,9 +168,9 @@ Future<void> showGaiaStats(
                                 ),
                               ),
                           ]),
-                          heading('Lifetime tokens', 12),
+                          heading('Lifetime tokens', 13),
                           _Rise(
-                            order: 12,
+                            order: 13,
                             child: tokens == null
                                 ? Text('Not read yet', style: muted)
                                 : Column(
@@ -263,7 +264,7 @@ class _Tiles extends StatelessWidget {
 }
 
 /// The headline numbers, each over its label, in columns split by hairlines:
-/// four across, or two rows of two when narrow.
+/// five across, or rows of two when narrow.
 class _Headlines extends StatelessWidget {
   const _Headlines(this.items);
 
@@ -274,7 +275,7 @@ class _Headlines extends StatelessWidget {
     final theme = Theme.of(context);
     return LayoutBuilder(
       builder: (context, constraints) {
-        final perRow = constraints.maxWidth < 360 ? 2 : 4;
+        final perRow = constraints.maxWidth < 360 ? 2 : 5;
         return Column(
           spacing: 16,
           children: [

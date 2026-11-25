@@ -4076,6 +4076,7 @@ Entry format:
 - Actual: with the keyboard up, the editor shows Title, Mood and the date row, then a yellow-and-black "BOTTOM OVERFLOWED BY 41 PIXELS" band where the body should be, and the quote line squeezed against the bottom nav (`qa/shots/m0p-entry.png`). The run log and `voyager_errors.log` say `A RenderFlex overflowed by 22 pixels on the bottom` (logical px). Tapping where the body hint peeks out above the nav doesn't focus it. With the keyboard down the body is a normal field (`m0p-nokbd.png`); tap it and the keyboard comes up, the body collapses again, and typed text goes into a field that can't be seen (`m0p-body2.png`: the field held the 46 typed characters, none visible). The bottom nav stays above the keyboard and takes ~160 dp of what's left.
 - Expected: with the keyboard up, the focused body stays visible with the caret in view (`adjustResize`; MOBILE_TEST_PLAN.md D3 "soft keyboard open"), e.g. the header rows scroll away or the bottom nav hides while the keyboard is up.
 - Notes: not seen on the emulator (411×914 dp), which had ~120 dp more height. Text typed blind is saved: the entry reached the DB and the outbox drained. A release build would hide the band, not the missing room (not checked). Every short phone in portrait is affected; M3/M5 should re-check after a fix, and check Dreams' editor, which has the same compact layout. Not fixed (audit rule).
+- Notes (2026-11-24, M2): also without the keyboard in landscape (361 dp tall, expanded shell): the journal editor's body box disappears entirely and the run log shows `A RenderFlex overflowed by 2.9 pixels on the bottom` (`m2-land-journal.png`); the text is still there after rotating back.
 
 ### BUG-386 [M0] Opening the soft keyboard on any page makes the kept-alive Calendar page throw `Invalid argument(s): 0.0`
 - Severity: Minor
@@ -4126,4 +4127,77 @@ Entry format:
 - Expected: the first-run prompt is legible (one clear "Set your birth date in Settings", or labels that fit the width).
 - Notes: with a birth date the values are short and may fit; M12 checks the page with data. Not fixed (audit rule).
 
-<!-- Last ID: BUG-391. -->
+### BUG-392 [M2] Android Back on any page but the first, and in the Journal/Dreams editor, quits the app instead of stepping back
+- Severity: Major
+- Found: 2026-11-24, MOBILE_TEST_PLAN.md M2 (OnePlus 12R, Android 16, 361×794 dp, gesture nav; debug build of `972fd4d8` + uncommitted Gaia work in `lib/features/gaia/`; qa-130)
+- Steps: (a) bottom bar → Dreams (or More → Settings), press Back (`input keyevent 4`). (b) Journal → New entry, type a title, Back once (hides the keyboard), Back again.
+- Actual: both times Voyager closes to the launcher. `logcat -b events` shows `wm_finish_activity … MainActivity,app-request` and the task is removed, i.e. Flutter's `SystemNavigator.pop` finished the activity. Reopening starts the app afresh on the startup page (To-Do here), so the page you were on is lost. The journal title had already autosaved ("M2 back draft" was in the list after relaunch), so no text was lost in this case. A modal sheet (More) still closes on Back as it should.
+- Expected: `_handleSystemBack` (`app_shell.dart:132`): the editor's Back interceptor returns to the list first, a non-home section goes to the first section (Journal), and only Back on Journal's list leaves the app (MOBILE_TEST_PLAN.md M2 "Back chain").
+- Cause (by VM eval): the `StatefulShellRoute` is nested inside the outer `ShellRoute` that adds `DesktopWindowFrame` (`app_router.dart`, since `0acb5916`). AppShell's `PopScope(canPop: false)` therefore registers on a route of the outer shell's navigator, not the root one: `identical(ModalRoute.of(appShell).navigator, routerDelegate.navigatorKey.currentState)` = false, and neither navigator can pop. go_router's `popRoute` finds no branch navigator that can pop, calls `maybePop` on the root navigator, whose only route has no `PopScope`, so it reports "not handled" and the framework calls `SystemNavigator.pop`. `onPopInvokedWithResult` never runs, so neither `ShellBackInterceptors` nor the go-home step is reached.
+- Notes: every Back step that goes through `_handleSystemBack` is affected: the Journal and Dreams editors' interceptors and the section → home step. Not fixed (audit rule).
+
+### BUG-393 [M2] Navigation pages dialog on a phone: the list can't be scrolled by touch, so the last seven pages can't be hidden or shown; labels break mid-word
+- Severity: Minor
+- Found: 2026-11-24, MOBILE_TEST_PLAN.md M2 (OnePlus 12R, Android 16, 361×794 dp; debug build of `972fd4d8` + uncommitted Gaia work; qa-130)
+- Steps: Settings → Appearance → Navigation pages. Swipe up on the list to reach Jobs … Settings (anywhere on a row, also starting on the eye button).
+- Actual: the dialog shows 10 of the 17 rows (Journal … Rankings). Every swipe on the list starts a reorder instead of scrolling: the first swipe moved Rankings up to third place, the second moved LeetCode up (`m2-navdialog-swipe.png`, `m2-navdialog-swipe2.png`). Each row is a `ReorderableDragStartListener` (immediate drag, `settings_page.dart` `_showReorderNavDialog`), and the rows fill the list's width, so there is no place to start a scroll. Jobs, Study, Workout, Photos, Gaia, Demo and Settings can't be reached to hide or show them (dragging a row to the bottom edge to make the list auto-scroll is the only way, and isn't discoverable). The labels also wrap mid-word in the 320 dp content box: "Calenda / r", "Analyti / cs", "LeetCo / de", "Ranking / s" (`m2-navdialog.png`).
+- Expected: the list scrolls with a swipe on touch (e.g. drag from the ≡ handle only, or a long-press to start a reorder, as Material's touch default does), and labels fit or ellipsize.
+- Notes: hiding and reordering the reachable rows works and the bottom bar and More sheet follow at once. Cancel did discard the accidental reorders. Not fixed (audit rule).
+
+### BUG-394 [M2] The Dev overlays ignore the phone's insets: the FPS HUD sits on the status bar, and the cache-status card covers the bottom bar (and blocks its taps) and runs off the right edge
+- Severity: Cosmetic
+- Found: 2026-11-24, MOBILE_TEST_PLAN.md M2 (OnePlus 12R, Android 16, 361×794 dp, gesture nav; debug build of `972fd4d8` + uncommitted Gaia work; qa-130)
+- Steps: show the Dev page (Settings → Navigation pages), turn on "Show FPS counter" and "Show cache status", go to Journal.
+- Actual: the FPS HUD is drawn from y≈40 px, over the system status icons and the inbox bell (`m2-overlays-journal.png`); taps pass through it (the bell still opened the inbox). The "Cache status" card sits over Dreams, To-Do, Calendar and More in the bottom bar and is clipped at the right screen edge; a tap on To-Do under it did nothing (`m2-bell-under-fps.png`).
+- Expected: in the compact shell both overlays clear the status bar and the bottom bar (SafeArea / the bar's height), as they do beside the rail on desktop.
+- Notes: Dev-only overlays, off by default and the Dev page is hidden by default. Not fixed (audit rule).
+
+### BUG-395 [M2] Right-click menus have no touch route on Android: a task can't be deleted, moved or sent to the bottom, and a journal entry's Statistics / Change Journal can't be reached
+- Severity: Major
+- Found: 2026-11-24, MOBILE_TEST_PLAN.md M2 (OnePlus 12R, Android 16, 361×794 dp and at tablet size 800 dp; debug build of `972fd4d8` + uncommitted Gaia work; qa-130)
+- Steps: To-Do → long-press a task row; Journal → long-press an entry card. Also at tablet size (`wm size 1600x2560`, density 320, expanded shell).
+- Actual: no menu appears. Long-press on a journal card just opens the entry; on a task row it opens the edit panel (tablet) or does nothing visible (phone) (`m2-tab-task-long.png`, `m2-journal-longpress.png`, `m2-todo-longpress2.png`). `ContextMenuRegion` (`context_menu.dart:169`) opens only on `onSecondaryTapUp`, i.e. a mouse right-click; it has no `onLongPress`. So every action that lives only in such a menu is unreachable by touch. Confirmed for: To-Do rows (`todo_page.dart:4407-4468`: Star, Mark complete, **Send to bottom, Due today / tomorrow / Pick a date / Reset due date, Move task to, Delete task**; the task edit panel has no delete button, so a task can't be deleted on the phone at all, and a swipe on a row doesn't delete it either), Journal cards (`journal_page.dart:2856-2875`: **Statistics, Change Journal**, Delete; Delete is also the editor's trash icon), Dreams cards (See statistics, Delete). About 30 files use `ContextMenuRegion` (Study cards, LeetCode, Workout, Finance, Rankings, Calendar day grid, Search, the inbox, Photos, Settings palette …); each page phase should check which of its actions have another route.
+- Expected: a long-press opens the same menu on touch (or every row offers a visible "⋯" `ContextMenuButton`), as MOBILE_TEST_PLAN.md D4 requires ("no hover-only or right-click-only action left without a touch equivalent").
+- Notes: Settings' palette help text still tells phone users to "right-click one to replace every use of it" (noted in M1 for M21). Not fixed (audit rule).
+
+### BUG-396 [M2] The forecast at 361 dp is a centred dialog, not a phone sheet, and its day cards truncate and overflow
+- Severity: Minor
+- Found: 2026-11-24, MOBILE_TEST_PLAN.md M2 (OnePlus 12R, Android 16, 361×794 dp; debug build of `972fd4d8` + uncommitted Gaia work; qa-130, weather location Chicago, US)
+- Steps: set a weather location (Settings → Pages), tap the weather icon in the status strip.
+- Actual: the forecast opens as a centred dialog with a close ✕ (`m2-forecast.png`). A drag down does nothing; Back and ✕ close it. In the five day cards the weekday is cut to "Tu…", "W…", "Th…", the high/low wraps onto two lines and the rain chance is cut ("100" without its %, "0%" half hidden), and the selected card logs `A RenderFlex overflowed by 1.00 pixels on the bottom` with the debug band over it (`m2-forecast-thu.png`). Picking a day redraws the chart as it should.
+- Expected: MOBILE_TEST_PLAN.md M2: "the forecast sheet opens as a phone sheet … the sheet drags down to close", with day cards that fit 361 dp.
+- Notes: today's chart shows only the evening hours (the rest of the day is past), which looks empty at first glance. Not fixed (audit rule).
+
+### BUG-397 [M2] At font scale 2.0 every bottom-bar label overflows
+- Severity: Minor
+- Found: 2026-11-24, MOBILE_TEST_PLAN.md M2 (OnePlus 12R, Android 16, 361×794 dp, Gboard; debug build of `972fd4d8` + uncommitted Gaia work; qa-130)
+- Steps: `settings put system font_scale 2.0`, look at the bottom bar on any page.
+- Actual: all five items log `A RenderFlex overflowed by 1.00 pixels on the bottom` (one 3.0 px) and draw the debug band along the bar; the labels are cut to "Jou", "Drea…", "Cale…", and Journal's selection outline is clipped (`m2-font2-journal.png`). The bar keeps its fixed `shellNavItemHeight` while the label grows.
+- Expected: the bar grows with the text or the labels scale down/ellipsize without overflowing. At 1.3 it fits (`m2-font13.png`); the More sheet at 2.0 is fine (it scrolls).
+- Notes: Not fixed (audit rule).
+
+### BUG-398 [M2] The bottom bar stays on screen above the soft keyboard and covers the controls under a focused field
+- Severity: Minor
+- Found: 2026-11-24, MOBILE_TEST_PLAN.md M2 (OnePlus 12R, Android 16, 361×794 dp, Gboard; debug build of `972fd4d8` + uncommitted Gaia work; qa-130)
+- Steps: Settings → Pages → tap the weather "City" field (or To-Do's Add task, or a journal entry's title).
+- Actual: the compact shell keeps `ShellBottomNav` laid out above the keyboard, taking ~160 px of the ~1,100 px left. The field scrolls into view but the "Save location" button right under it sits behind the bar and can't be tapped until the keyboard is closed (`m2-weather-saved.png`); in To-Do only three tasks stay visible above the composer (`m2-todo-seeded.png`). The keyboard's ✓ did save the location, so there was a way out here.
+- Expected: the bar hides while the keyboard is up (the usual Android pattern), so the space above the keyboard belongs to the page and nothing the user needs is hidden (MOBILE_TEST_PLAN.md D3 "soft keyboard open").
+- Notes: seen in M0 too (`m0-kbd.png`); it adds to BUG-385, where the journal body collapses with the keyboard up. Not fixed (audit rule).
+
+### BUG-399 [M2] Settings on Android shows a "Caps Lock indicator" switch that does nothing there
+- Severity: Cosmetic
+- Found: 2026-11-24, MOBILE_TEST_PLAN.md M2 (OnePlus 12R, Android 16, 361×794 dp, Gboard; debug build of `972fd4d8` + uncommitted Gaia work; qa-130)
+- Steps: Settings → Editing.
+- Actual: "Caps Lock indicator — Shows a mark next to the caret while Caps Lock is on … Windows and Linux only" is listed and can be toggled on the phone (`settings_page.dart`, not gated by platform), while the hotkeys right below it are replaced by "Global hotkeys: Available on Windows only".
+- Expected: hidden on Android like the other desktop-only settings (MOBILE_TEST_PLAN.md M2 "desktop-only pieces absent").
+- Notes: no Start with Windows, folder backups or heat watch appear (checked: Editing and Data tabs). Not fixed (audit rule).
+
+### BUG-400 [M2] The finance transaction editor on Android has no grab handle and can't be dragged down to close, unlike VOYAGER_SHEET_DISMISS_HLD's Android rule
+- Severity: Minor
+- Found: 2026-11-24, MOBILE_TEST_PLAN.md M2 (OnePlus 12R, Android 16, 361×794 dp; debug build of `972fd4d8` + uncommitted Gaia work; qa-130)
+- Steps: Finance → + (Log transaction), type an amount, close the keyboard, drag the sheet down from its title row.
+- Actual: no grab pill is drawn and the drag does nothing (`m2-fin-drag2.png`). Back and ✕ close it; the typed amount was kept and shown again on reopening (`m2-fin-reopen.png`), so nothing was lost.
+- Expected: VOYAGER_SHEET_DISMISS_HLD.md classes Finance transaction as an `editor` and says "Drag stays on for Android … if drag remains on, keep or add a real handle so the gesture stays discoverable" (MOBILE_TEST_PLAN.md M2 "every sheet shows a grab handle and drags down to close on Android").
+- Notes: the More sheet does have a handle and drags closed. The LeetCode track form, Study card editor/import and workout target editor (the HLD's other editors) weren't reached in M2; their pages' phases (M13, M16, M17) should check them. Not fixed (audit rule).
+
+<!-- Last ID: BUG-400. -->

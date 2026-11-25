@@ -209,6 +209,27 @@ class _GaiaButtonState extends State<GaiaButton> {
   }
 }
 
+/// Draws the [GaiaGlowRing]s under it with [builder] instead: the debug
+/// menu's shell studies, trying other looks on the real notch and menu.
+class GaiaRingLook extends InheritedWidget {
+  const GaiaRingLook({super.key, required this.builder, required super.child});
+
+  final Widget Function({
+    required double radius,
+    required bool hovered,
+    required double backdrop,
+    required Color accent,
+    required Widget child,
+  })
+  builder;
+
+  static GaiaRingLook? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<GaiaRingLook>();
+
+  @override
+  bool updateShouldNotify(GaiaRingLook old) => old.builder != builder;
+}
+
 /// The ring of light round Gaia's notch, menus and date picker: a dark fill
 /// in a thin ring that the light circles. Near the cursor the light swings
 /// round to face it; while [hovered], it centres on the cursor, widens, and
@@ -277,7 +298,9 @@ class _GaiaGlowRingState extends State<GaiaGlowRing>
   // Hovered, it runs regardless, so the light follows the cursor over a
   // floater left in front of another app.
   void _sync() {
-    final run = GaiaAmbient.of(context) || widget.hovered;
+    final run =
+        GaiaRingLook.maybeOf(context) == null &&
+        (GaiaAmbient.of(context) || widget.hovered);
     if (run == _ticker.isActive) return;
     if (run) {
       _lastTick = Duration.zero;
@@ -347,6 +370,15 @@ class _GaiaGlowRingState extends State<GaiaGlowRing>
     final outer = widget.radius;
     final accent = widget.color ?? colors.primary;
     final backdrop = widget.backdrop;
+    if (GaiaRingLook.maybeOf(context) case final look?) {
+      return look.builder(
+        radius: outer,
+        hovered: widget.hovered,
+        backdrop: backdrop,
+        accent: accent,
+        child: widget.child,
+      );
+    }
     return Container(
       decoration: BoxDecoration(
         color: GaiaInk.hairline.withValues(

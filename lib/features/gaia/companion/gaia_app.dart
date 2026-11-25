@@ -30,6 +30,7 @@ import 'package:voyager/core/vim/vim_enabled_scope.dart';
 import 'package:voyager/core/vim/vim_text_scope.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
 import 'package:voyager/features/gaia/adapters/gaia_clis.dart';
+import 'package:voyager/features/gaia/companion/gaia_aurora_edge.dart';
 import 'package:voyager/features/gaia/companion/gaia_btw.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_card_view.dart';
@@ -399,6 +400,8 @@ class _GaiaShell extends StatelessWidget {
     // only ever one (§2.2).
     final source = panelShown && controller.showingSource != null;
     final asking = source || (panelShown && controller.asking != null);
+    // The sidebar layout's, set as it builds, for Ctrl+B.
+    VoidCallback? toggleSidebar;
     Widget chat({bool sidebarShown = false, VoidCallback? toggleSidebar}) =>
         Column(
           children: [
@@ -433,6 +436,8 @@ class _GaiaShell extends StatelessWidget {
         },
         GaiaFixedKey.search.activator: () =>
             showGaiaSearch(context, controller),
+        if (!floater && !panelShown)
+          GaiaFixedKey.sidebar.activator: () => toggleSidebar?.call(),
         GaiaFixedKey.debugMenu.activator: () =>
             showGaiaDebugMenu(context, controller),
         if (parseGaiaCombo(
@@ -511,6 +516,9 @@ class _GaiaShell extends StatelessWidget {
                       exitTest: controller.debug.skyExitTest,
                       burstTest: controller.debug.skyBurstTest,
                       satelliteTest: controller.debug.skySatelliteTest,
+                      cometTest: controller.debug.skyCometTest,
+                      cometLook: controller.debug.skyComet,
+                      cometHead: controller.debug.skyCometHead,
                       top: kGaiaHeaderHeight + 1,
                       left: floater || panelShown
                           ? null
@@ -539,10 +547,13 @@ class _GaiaShell extends StatelessWidget {
                                         ).scaffoldBackgroundColor,
                                         child: _Sidebar(controller: controller),
                                       ),
-                                      chat: (shown, toggle) => chat(
-                                        sidebarShown: shown,
-                                        toggleSidebar: toggle,
-                                      ),
+                                      chat: (shown, toggle) {
+                                        toggleSidebar = toggle;
+                                        return chat(
+                                          sidebarShown: shown,
+                                          toggleSidebar: toggle,
+                                        );
+                                      },
                                     ),
                                   ),
                                 ),
@@ -864,7 +875,8 @@ class _Header extends StatelessWidget {
         ? null
         : version == null
         ? '${cli.name} not found'
-        : isVersionInRange(version, cli.tested)
+        : isVersionInRange(version, cli.tested) ||
+              !controller.unreadableClis.contains(adapter)
         ? null
         : 'Untested ${cli.name} ${version.$1}.${version.$2}.${version.$3}';
     final floater = controller.layout != GaiaMode.window;
@@ -896,10 +908,13 @@ class _Header extends StatelessWidget {
               const SizedBox(width: 10),
             ] else if (toggleSidebar case final toggle?) ...[
               const SizedBox(width: 12),
-              GaiaButton(
-                icon: Icons.view_sidebar_outlined,
-                size: 34,
-                onPressed: toggle,
+              Tooltip(
+                message: 'Toggle sidebar (Ctrl+B)',
+                child: GaiaButton(
+                  icon: Icons.view_sidebar_outlined,
+                  size: 34,
+                  onPressed: toggle,
+                ),
               ),
               const SizedBox(width: 10),
             ] else
@@ -1521,46 +1536,64 @@ class _SidebarState extends State<_Sidebar> {
   }
 
   /// The name being typed, in its row's own text style, as its name was,
-  /// in Gaia's field: its fill, and its edge lit in the accent. Out past
+  /// in Gaia's field: its fill, and its aurora edge, scaled down. Out past
   /// the name on both sides by its padding, and the text collapsed and
   /// centred as the name is, so the text stays put.
   Widget _renameField() => LayoutBuilder(
     builder: (context, constraints) => OverflowBox(
       maxWidth: constraints.maxWidth + 8,
-      child: Container(
-        height: 30,
-        // With the 1 of the edge, the 4 it's out by.
-        padding: const EdgeInsets.symmetric(horizontal: 3),
-        alignment: Alignment.centerLeft,
-        decoration: BoxDecoration(
-          color: gaiaFieldFill,
-          borderRadius: BorderRadius.circular(GaiaRadius.chip),
-          border: Border.all(
-            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.6),
+      child: GaiaAuroraEdge(
+        focusNode: _renameFocus,
+        radius: GaiaRadius.chip,
+        scale: 0.5,
+        child: Container(
+          height: 30,
+          // The 4 it's out by.
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          alignment: Alignment.centerLeft,
+          decoration: BoxDecoration(
+            color: gaiaFieldFill,
+            borderRadius: BorderRadius.circular(GaiaRadius.chip),
           ),
-        ),
-        child: TextField(
-          controller: _rename,
-          focusNode: _renameFocus,
-          autofocus: true,
-          // Not merged over the theme's text style, whose line height and
-          // spacing would move the text.
-          style: DefaultTextStyle.of(context).style.copyWith(
-            inherit: false,
-            textBaseline: TextBaseline.alphabetic,
+          // A click on another field, such as the composer, isn't outside:
+          // every field's tap region is in one group. Its focus going is.
+          child: Focus(
+            canRequestFocus: false,
+            skipTraversal: true,
+            // Not when the window does: Flutter parks focus on the root
+            // while the app's inactive, and gives it back on resume.
+            onFocusChange: (focused) {
+              if (!focused &&
+                  (WidgetsBinding.instance.lifecycleState ??
+                          AppLifecycleState.resumed) ==
+                      AppLifecycleState.resumed) {
+                _endRename(keep: true);
+              }
+            },
+            child: TextField(
+              controller: _rename,
+              focusNode: _renameFocus,
+              autofocus: true,
+              // Not merged over the theme's text style, whose line height and
+              // spacing would move the text.
+              style: DefaultTextStyle.of(context).style.copyWith(
+                inherit: false,
+                textBaseline: TextBaseline.alphabetic,
+              ),
+              decoration: const InputDecoration(
+                isCollapsed: true,
+                // The box above is the fill: the theme's would show as a faint
+                // one round the text.
+                filled: false,
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+              ),
+              contextMenuBuilder: gaiaTextMenu,
+              onSubmitted: (_) => _endRename(keep: true),
+              onTapOutside: (_) => _endRename(keep: true),
+            ),
           ),
-          decoration: const InputDecoration(
-            isCollapsed: true,
-            // The box above is the fill: the theme's would show as a faint
-            // one round the text.
-            filled: false,
-            border: InputBorder.none,
-            enabledBorder: InputBorder.none,
-            focusedBorder: InputBorder.none,
-          ),
-          contextMenuBuilder: gaiaTextMenu,
-          onSubmitted: (_) => _endRename(keep: true),
-          onTapOutside: (_) => _endRename(keep: true),
         ),
       ),
     ),
@@ -4507,26 +4540,45 @@ class _ChapterDivider extends StatelessWidget {
                 const SingleActivator(LogicalKeyboardKey.escape): () =>
                     onEndRename(keep: false),
               },
-              child: TextField(
-                controller: rename,
+              // Out past the title a little, as it has no box of its own.
+              child: GaiaAuroraEdge(
                 focusNode: renameFocus,
-                style: style,
-                decoration: const InputDecoration(
-                  isCollapsed: true,
-                  filled: false,
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
+                radius: GaiaRadius.chip,
+                scale: 0.5,
+                outset: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                // As the sidebar's rename: a click on the composer isn't
+                // outside, but its focus going is.
+                child: Focus(
+                  canRequestFocus: false,
+                  skipTraversal: true,
+                  onFocusChange: (focused) {
+                    if (!focused &&
+                        (WidgetsBinding.instance.lifecycleState ??
+                                AppLifecycleState.resumed) ==
+                            AppLifecycleState.resumed) {
+                      onEndRename(keep: true);
+                    }
+                  },
+                  child: TextField(
+                    controller: rename,
+                    focusNode: renameFocus,
+                    style: style,
+                    decoration: const InputDecoration(
+                      isCollapsed: true,
+                      filled: false,
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                    ),
+                    contextMenuBuilder: gaiaTextMenu,
+                    onSubmitted: (_) => onEndRename(keep: true),
+                    onTapOutside: (_) => onEndRename(keep: true),
+                  ),
                 ),
-                contextMenuBuilder: gaiaTextMenu,
-                onSubmitted: (_) => onEndRename(keep: true),
-                onTapOutside: (_) => onEndRename(keep: true),
               ),
             ),
           )
-        : Flexible(
-            child: Text(title, style: style, overflow: TextOverflow.ellipsis),
-          );
+        : null;
     final menu = this.menu;
     return GestureDetector(
       onSecondaryTapUp: menu == null
@@ -4534,16 +4586,31 @@ class _ChapterDivider extends StatelessWidget {
           : (details) => showGaiaMenu(context, details.globalPosition, menu()),
       child: Padding(
         padding: const EdgeInsets.only(bottom: 12),
-        child: Row(
-          children: [
-            const Expanded(child: Divider()),
-            const SizedBox(width: 8),
-            Icon(Icons.bookmark, size: 12, color: accent),
-            const SizedBox(width: 4),
-            label,
-            const SizedBox(width: 8),
-            const Expanded(child: Divider()),
-          ],
+        // The title isn't flexible, so the lines split all the room it leaves
+        // and reach both edges; it is capped so a long one still ellipsizes.
+        child: LayoutBuilder(
+          builder: (context, constraints) => Row(
+            children: [
+              const Expanded(child: Divider()),
+              const SizedBox(width: 8),
+              Icon(Icons.bookmark, size: 12, color: accent),
+              const SizedBox(width: 4),
+              label ??
+                  ConstrainedBox(
+                    // The gaps and bookmark, and 24 of line either side.
+                    constraints: BoxConstraints(
+                      maxWidth: max(0, constraints.maxWidth - 32 - 48),
+                    ),
+                    child: Text(
+                      title,
+                      style: style,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              const SizedBox(width: 8),
+              const Expanded(child: Divider()),
+            ],
+          ),
         ),
       ),
     );

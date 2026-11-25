@@ -476,6 +476,8 @@ void main() {
             exitTime: 1,
             satellite: satellite,
             rareSatellites: false,
+            // A comet's tail runs off the top too, drawn there and clipped.
+            comets: false,
             child: const SizedBox.expand(),
           ),
       ],
@@ -672,9 +674,12 @@ void main() {
       GaiaSatellite satellite = GaiaSatellite.dot,
       int satelliteTest = 0,
       int burstTest = 0,
+      int cometTest = 0,
+      bool shown = true,
+      DateTime Function() now = DateTime.now,
     }) => GaiaSky(
       active: active,
-      shown: true,
+      shown: shown,
       sent: false,
       rotation: 0,
       stars: 0,
@@ -691,8 +696,10 @@ void main() {
       satellite: satellite,
       satelliteTest: satelliteTest,
       burstTest: burstTest,
+      cometTest: cometTest,
       onSighting: sightings.add,
       random: _Rigged(rare: rolls),
+      now: now,
       child: const SizedBox.expand(),
     );
 
@@ -700,8 +707,10 @@ void main() {
         sightings.map((s) => s.satellite).nonNulls;
     Iterable<GaiaRareAurora> auroras() =>
         sightings.map((s) => s.aurora).nonNulls;
-    int meteors() =>
-        sightings.where((s) => s.satellite == null && s.aurora == null).length;
+    int meteors() => sightings
+        .where((s) => s.satellite == null && s.aurora == null && !s.comet)
+        .length;
+    int comets() => sightings.where((s) => s.comet).length;
 
     testWidgets('a rolled rare satellite counts once, after 3 s in view', (
       tester,
@@ -756,6 +765,55 @@ void main() {
       );
       await frames(tester, 1);
       expect(auroras(), isEmpty);
+      active.value = false;
+    });
+
+    testWidgets('a rolled comet counts once, after 3 s in view', (
+      tester,
+    ) async {
+      // Rigged, the first comet comes at about 90 s.
+      await tester.pumpWidget(counted(eventInterval: 1e6));
+      await frames(tester, 92);
+      expect(comets(), 0);
+      await frames(tester, 2);
+      expect(comets(), 1);
+      await frames(tester, 10);
+      expect(comets(), 1);
+      active.value = false;
+    });
+
+    for (final (minutes, kept) in [(29, true), (31, false)]) {
+      testWidgets(
+        kept
+            ? 'a comet waits out $minutes min in another chat, then counts'
+            : 'a comet is gone after $minutes min in another chat',
+        (tester) async {
+          var now = DateTime(2026, 11, 24, 20);
+          DateTime clock() => now;
+          await tester.pumpWidget(counted(eventInterval: 1e6, now: clock));
+          await frames(tester, 91);
+          // Another chat opened, a while, then a new one.
+          await tester.pumpWidget(
+            counted(eventInterval: 1e6, shown: false, now: clock),
+          );
+          await frames(tester, 1);
+          now = now.add(Duration(minutes: minutes));
+          await tester.pumpWidget(counted(eventInterval: 1e6, now: clock));
+          await frames(tester, 1);
+          expect(comets(), 0);
+          await frames(tester, 4);
+          expect(comets(), kept ? 1 : 0);
+          active.value = false;
+        },
+      );
+    }
+
+    testWidgets("a test comet doesn't count", (tester) async {
+      await tester.pumpWidget(counted(eventInterval: 1e6));
+      await frames(tester, 0.1);
+      await tester.pumpWidget(counted(eventInterval: 1e6, cometTest: 1));
+      await frames(tester, 6);
+      expect(comets(), 0);
       active.value = false;
     });
 
