@@ -1080,6 +1080,9 @@ class _PickRow extends StatefulWidget {
 class _PickRowState extends State<_PickRow> {
   var _hovered = false;
 
+  /// What's chosen: the menu opens under its start, at the row's foot.
+  final _valueKey = GlobalKey();
+
   @override
   Widget build(BuildContext context) => MouseRegion(
     cursor: SystemMouseCursors.click,
@@ -1087,8 +1090,17 @@ class _PickRowState extends State<_PickRow> {
     onExit: (_) => setState(() => _hovered = false),
     child: GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTapUp: (details) =>
-          showGaiaMenu(context, details.globalPosition, widget.items),
+      onTapUp: (_) {
+        final row = context.findRenderObject()! as RenderBox;
+        final value =
+            _valueKey.currentContext!.findRenderObject()! as RenderBox;
+        final start = value.localToGlobal(Offset.zero).dx;
+        showGaiaMenu(
+          context,
+          Offset(start, row.localToGlobal(Offset(0, row.size.height)).dy),
+          widget.items,
+        );
+      },
       child: AnimatedContainer(
         duration: GaiaMotion.quick,
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
@@ -1109,6 +1121,7 @@ class _PickRowState extends State<_PickRow> {
             ),
             Expanded(
               child: Text(
+                key: _valueKey,
                 widget.value,
                 overflow: TextOverflow.ellipsis,
                 style: GaiaType.row.copyWith(color: GaiaInk.muted),

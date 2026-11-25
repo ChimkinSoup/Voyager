@@ -6,6 +6,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 enum class GaiaEffectStyle { kClassic, kAstral, kEcho, kGlide };
@@ -43,17 +44,33 @@ class GaiaControlBorder {
   // Moves it to |at| as well, if given, at its new size.
   void PaintNotch(const POINT* at = nullptr);
   void SetButtonState(bool hover, bool pressed);
+  // Shrinks the notch to a strip while the user's cursor is near it, and
+  // opens it again when they push the cursor into the strip.
+  void FollowCursor(POINT cursor);
+  // A frame of the notch shrinking or opening.
+  void StepOpen();
 
   std::function<void()> on_revoke_;
   std::vector<HWND> windows_;
   HWND notch_ = nullptr;
   HWND button_window_ = nullptr;
   HMONITOR notch_monitor_ = nullptr;
+  POINT notch_at_ = {};
   SIZE notch_size_ = {};
   RECT button_ = {};  // In the notch's client area.
   RECT label_rect_ = {};  // Likewise.
   bool hover_ = false;
   bool pressed_ = false;
+  bool collapsed_ = false;
+  // Opened from the strip, and the cursor still on it.
+  bool revealed_ = false;
+  // How open the notch is: 0 the strip, 1 whole. It eases from |open_from_|,
+  // at |open_start_|, to where |collapsed_| says.
+  float open_ = 1;
+  float open_from_ = 1;
+  ULONGLONG open_start_ = 0;
+  // Watches the user's cursor while the border shows.
+  std::thread cursor_watch_;
   std::wstring label_;
   unsigned int accent_ = 0;
   GaiaEffectStyle style_ = GaiaEffectStyle::kAstral;

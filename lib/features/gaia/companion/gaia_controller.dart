@@ -1329,6 +1329,10 @@ class GaiaController extends ChangeNotifier {
   /// (GAIA_PROJECTS_HLD.md §3.2); null for none.
   String? newChatProject;
 
+  /// Whether a new chat is made temporary by its first send, after `/temp`
+  /// in it (GAIA_TEMP_HLD.md §3.2). `/new` or another chat forgets it.
+  var newChatTemporary = false;
+
   /// Voyager's accent, as ARGB: the theme follows it.
   final accent = ValueNotifier(0xFF7C9EFF);
 
@@ -3852,6 +3856,7 @@ class GaiaController extends ChangeNotifier {
     _viewChat(null);
     pickedTier = null;
     newChatProject = null;
+    newChatTemporary = false;
     if (!debug.dummyMode) _utility?.warm(recall: debug.recallPick);
     notifyListeners();
   }
@@ -4039,6 +4044,7 @@ class GaiaController extends ChangeNotifier {
     if (chatId != currentChatId) {
       pickedTier = null;
       newChatProject = null;
+      newChatTemporary = false;
     }
     _viewChat(chatId);
     notifyListeners();
@@ -4395,6 +4401,8 @@ class GaiaController extends ChangeNotifier {
       fork: record,
       forkOf: source.forkOf ?? source.id,
       projectId: source.projectId,
+      // A temporary chat's fork is too (GAIA_TEMP_HLD.md §7).
+      temporaryAt: source.temporaryAt,
     );
     final copies = _copiesInto(forkId, copied, now);
     try {
@@ -4569,6 +4577,7 @@ class GaiaController extends ChangeNotifier {
       forkOf: source.forkOf ?? source.id,
       rewinds: source.rewinds,
       projectId: source.projectId,
+      temporaryAt: source.temporaryAt,
     );
     final copies = _copiesInto(forkId, copied, now);
     final dropped = [
@@ -4947,6 +4956,7 @@ class GaiaController extends ChangeNotifier {
   /// Pins or unpins [chatId], moving it in the list at once: pinned, to the
   /// bottom of its pinned chats.
   Future<void> setPinned(String chatId, bool pinned) async {
+    final wasTemporary = _chat(chatId)?.temporary ?? false;
     chats = [
       for (final c in chats) c.id == chatId ? gaiaPinned(c, pinned, chats) : c,
     ]..sort(gaiaChatListed);
@@ -4959,16 +4969,95 @@ class GaiaController extends ChangeNotifier {
       'pinned': pinned,
       'order': ?order,
     });
+    // Pinned, a temporary one is read up to its last message now, which the
+    // curator goes by (GAIA_TEMP_HLD.md §3.3).
+    if (pinned && wasTemporary) await _refresh();
   }
 
   /// Archives or unarchives [chatId], moving it in the list at once.
   Future<void> setArchived(String chatId, bool archived) async {
+    final wasTemporary = _chat(chatId)?.temporary ?? false;
     chats = [
       for (final c in chats) c.id == chatId ? gaiaArchived(c, archived) : c,
     ]..sort(gaiaChatListed);
     notifyListeners();
     await _request('setArchived', {'chatId': chatId, 'archived': archived});
+    // Unarchived, a temporary one is read up to its last message now, which
+    // the curator goes by (GAIA_TEMP_HLD.md §3.3).
+    if (!archived && wasTemporary) await _refresh();
   }
+
+  /// `/temp` (GAIA_TEMP_HLD.md §3): the chat in view made temporary, or an
+  /// ordinary chat again; in a new chat, the chat its first send makes. The
+  /// suggested memories it threw out, by id, for its toast's Undo; null when
+  /// it turned temporary off.
+  Future<List<String>?> toggleTemporary() async {
+    final chat = currentChat;
+    if (chat == null) {
+      newChatTemporary = !newChatTemporary;
+      notifyListeners();
+      return newChatTemporary ? const [] : null;
+    }
+    final thrown = await setTemporary(chat.id, !chat.temporary);
+    return chat.temporary ? null : thrown;
+  }
+
+  /// [chatId] made temporary, or an ordinary chat again with the
+  /// suggestions making it temporary threw out, [restore], brought back
+  /// (GAIA_TEMP_HLD.md §3.1, §3.3). Those it threw out, by id.
+  Future<List<String>> setTemporary(
+    String chatId,
+    bool temporary, {
+    List<String> restore = const [],
+  }) async {
+    chats = [
+      for (final c in chats)
+        c.id != chatId
+            ? c
+            : temporary
+            ? gaiaTemporary(c)
+            : gaiaArchived(c, false),
+    ]..sort(gaiaChatListed);
+    // Never read for memories from now on (§5).
+    if (temporary) _curateSoon.remove(chatId)?.cancel();
+    notifyListeners();
+    final Object? result;
+    try {
+      result = await _pipe.request('setTemporary', {
+        'chatId': chatId,
+        'temporary': temporary,
+        'restore': restore,
+      });
+    } on GaiaPipeException catch (error) {
+      debugPrint('[gaia] setTemporary not saved: $error');
+      await _refresh();
+      rethrow;
+    }
+    // Read up to its last message now, which the curator goes by (§3.3).
+    if (!temporary) await _refresh();
+    return [...?((result as Map?)?['thrown'] as List?)?.cast<String>()];
+  }
+
+  /// What `/temp`'s toast says once [toggleTemporary] threw out [thrown];
+  /// null for turned off.
+  ({String title, String body}) temporaryNote(List<String>? thrown) =>
+      thrown == null
+      ? (
+          title: 'Not temporary',
+          body:
+              "It stays on the chat lists, and what's said from now on can "
+              'become a memory.',
+        )
+      : (
+          title: 'Temporary chat',
+          body:
+              "It's archived when you leave, and nothing in it becomes a "
+              'memory.${switch (thrown.length) {
+                0 => '',
+                1 => ' 1 suggested memory from it was thrown out.',
+                final n => ' $n suggested memories from it were thrown out.',
+              }}',
+        );
 
   /// [chatId] dragged in the sidebar to [order] (`GaiaChat.order`).
   Future<void> reorderChat(String chatId, double order) async {
@@ -5286,6 +5375,14 @@ class GaiaController extends ChangeNotifier {
       // elsewhere, as a popped queue's, there's nothing to pick from.
       case GaiaBuiltin.project:
         break;
+      // Sent from elsewhere, as a popped queue's: its toast has no Undo.
+      case GaiaBuiltin.temp:
+        try {
+          final note = temporaryNote(await toggleTemporary());
+          _note(note.title, note.body);
+        } on GaiaPipeException catch (error) {
+          _note('Temporary chat not changed', '$error', error: true);
+        }
       case GaiaBuiltin.usage:
         _usageOpens.add(null);
       case GaiaBuiltin.stats:
@@ -5996,6 +6093,7 @@ class GaiaController extends ChangeNotifier {
       fork: record,
       forkOf: source.forkOf ?? source.id,
       projectId: source.projectId,
+      temporaryAt: source.temporaryAt,
     );
     final messages = [
       ..._copiesInto(forkId, copied, now),
@@ -6716,6 +6814,8 @@ class GaiaController extends ChangeNotifier {
         updatedAt: sentAt,
         lastMessageAt: sentAt,
         archivedAt: about == null ? null : sentAt,
+        // After `/temp` in the new chat (GAIA_TEMP_HLD.md §3.2).
+        temporaryAt: remote == null && newChatTemporary ? sentAt : null,
         tier:
             remote?.tier ??
             (remote == null ? nextTier : defaultTier ?? lastTier),
@@ -6730,6 +6830,7 @@ class GaiaController extends ChangeNotifier {
               }
             : const {},
       );
+      if (remote == null) newChatTemporary = false;
       // Not an Ask Gaia chat's: the new chat's draft keeps them.
       if (remote == null && about == null) {
         // The next new chat draws a line of its own.
@@ -6839,6 +6940,7 @@ class GaiaController extends ChangeNotifier {
       // A new chat's choices go back with its draft, if that's in view.
       if (isNew && currentChatId == null && !aborted) {
         newChatProject = project(chat?.projectId)?.id;
+        newChatTemporary = chat?.temporary ?? false;
         if (chat?.grants[_deviceId] case final grant?) {
           _newChatSeesScreen = grant.seeScreen;
           _newChatCanControl = grant.canControl;
@@ -8101,7 +8203,9 @@ class GaiaController extends ChangeNotifier {
     final due = <String>[];
     for (final chat in chats) {
       final idle = now.difference(chat.lastMessageAt);
-      if (idle > kGaiaCurateMissedWithin || _curateSoon.containsKey(chat.id)) {
+      if (idle > kGaiaCurateMissedWithin ||
+          _curateSoon.containsKey(chat.id) ||
+          chat.temporary) {
         continue;
       }
       final mine = _ranLast(chat);
@@ -8126,8 +8230,14 @@ class GaiaController extends ChangeNotifier {
   /// summary is brought up to date (GAIA_PROJECTS_HLD.md §5.5).
   Future<void> _idle(String chatId) async {
     final chat = _chat(chatId);
-    // Neither reads a chat another device went on with.
-    if (_utility == null || chat == null || _ranLast(chat) == null) return;
+    // Neither reads a chat another device went on with, nor a temporary one
+    // (GAIA_TEMP_HLD.md §5).
+    if (_utility == null ||
+        chat == null ||
+        chat.temporary ||
+        _ranLast(chat) == null) {
+      return;
+    }
     final shown = await _shownMessages(chatId);
     if (shown == null) return;
     await _curate(chatId, shown);
@@ -8169,8 +8279,11 @@ class GaiaController extends ChangeNotifier {
   }) async {
     final utility = _utility;
     final chat = _chat(chatId);
+    // Nor a temporary one's: it's the chat as other chats see it
+    // (GAIA_TEMP_HLD.md §7).
     if (utility == null ||
         chat == null ||
+        chat.temporary ||
         project(chat.projectId) == null ||
         (!moved && _ranLast(chat) == null) ||
         aborted ||

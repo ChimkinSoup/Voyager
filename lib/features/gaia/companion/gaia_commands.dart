@@ -54,6 +54,15 @@ enum GaiaBuiltin {
   /// [gaiaProjectPick] (GAIA_PROJECTS_HLD.md §7.5).
   project('project', 'Move this chat to a project', aliases: {'move'}),
 
+  /// On or off for the chat in view, or a new chat's first send
+  /// (GAIA_TEMP_HLD.md §3).
+  temp(
+    'temp',
+    'Make this chat temporary: archived when you leave, never read for '
+        'memories',
+    aliases: {'temporary'},
+  ),
+
   /// Gaia's usage bars rather than the CLI's own text, which is laid out
   /// for a terminal (GAIA_NATIVE_COMMANDS.md §5).
   usage('usage', 'Show plan usage for the next message\'s accounts'),

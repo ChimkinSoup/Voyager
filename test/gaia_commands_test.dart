@@ -187,6 +187,7 @@ void main() {
       'this',
       'btw',
       'project',
+      'temp',
       'usage',
       'stats',
       'control-off',

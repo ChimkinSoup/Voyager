@@ -163,6 +163,9 @@ class GaiaDebug extends ChangeNotifier {
   /// Seconds its exit lasts.
   var skyExitTime = 1.0;
 
+  /// Where the debug menu was scrolled to when it last closed.
+  var menuScroll = 0.0;
+
   /// Bumped by the sky panel's Play exit, which plays the exit in place.
   /// Not kept.
   var skyExitTest = 0;
@@ -259,6 +262,7 @@ class GaiaDebug extends ChangeNotifier {
       skyExit = GaiaSkyExit.values.asNameMap()[json['skyExit']] ?? skyExit;
       skyPlainBlink = json['skyPlainBlink'] != false;
       skyExitTime = number('skyExitTime', skyExitTime, 0.3, 4);
+      menuScroll = number('menuScroll', menuScroll, 0, double.infinity);
     } catch (error) {
       debugPrint('[gaia] debug settings unreadable, using defaults: $error');
     }
@@ -387,6 +391,9 @@ class GaiaDebug extends ChangeNotifier {
   Future<void> setSkyExitTime(double value, {bool save = true}) =>
       _set(() => skyExitTime = value, save: save);
 
+  /// Saves [menuScroll], which the open menu keeps up to date unannounced.
+  Future<void> saveMenuScroll() => _saved = _saved.then((_) => _save());
+
   void testSkyExit() {
     skyExitTest++;
     notifyListeners();
@@ -510,6 +517,7 @@ class GaiaDebug extends ChangeNotifier {
           'skyExit': skyExit.name,
           'skyPlainBlink': skyPlainBlink,
           'skyExitTime': skyExitTime,
+          'menuScroll': menuScroll,
         }),
       );
     } catch (error) {

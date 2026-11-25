@@ -919,14 +919,49 @@ class _Header extends StatelessWidget {
                               compact: constraints.maxWidth < 240,
                             ),
                           Flexible(
-                            child: floater
-                                ? _ChatSwitcher(controller: controller)
-                                : Text(
-                                    controller.currentChat?.title ?? 'New chat',
-                                    style: theme.textTheme.titleSmall,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
+                            child: _ChatSwitcher(controller: controller),
                           ),
+                          // A click makes it an ordinary chat, as /temp
+                          // does (GAIA_TEMP_HLD.md §4). Narrow, as in the
+                          // floaters: the icon alone.
+                          if (controller.currentChat?.temporary ?? false) ...[
+                            const SizedBox(width: 8),
+                            GaiaButton(
+                              icon: Icons.hourglass_empty,
+                              label: constraints.maxWidth < 320
+                                  ? null
+                                  : 'Temporary',
+                              size: 28,
+                              padding: 10,
+                              iconSize: 14,
+                              tooltip: constraints.maxWidth < 320
+                                  ? 'Temporary: keep this chat'
+                                  : 'Keep this chat',
+                              onPressed: () async {
+                                final List<String>? thrown;
+                                try {
+                                  thrown = await controller.toggleTemporary();
+                                } on GaiaPipeException catch (error) {
+                                  if (!context.mounted) return;
+                                  showGaiaToast(
+                                    context,
+                                    mark: GaiaToastMark.error,
+                                    title: 'Temporary chat not changed',
+                                    body: '$error',
+                                  );
+                                  return;
+                                }
+                                final note = controller.temporaryNote(thrown);
+                                if (!context.mounted) return;
+                                showGaiaToast(
+                                  context,
+                                  mark: GaiaToastMark.done,
+                                  title: note.title,
+                                  body: note.body,
+                                );
+                              },
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -1061,6 +1096,9 @@ class _InboxChip extends StatelessWidget {
   }
 }
 
+/// Between the header's title or crumb and the menu it opens.
+const _titleMenuGap = 6.0;
+
 /// The chat's project before its title in the header (GAIA_PROJECTS_HLD.md
 /// §7.2), "Trip › title" with the folder and name in the accent, saying "no
 /// folder here" when the project's folder is on other devices only; with no
@@ -1122,9 +1160,7 @@ class _ProjectCrumbState extends State<_ProjectCrumb> {
             final crumb = context.findRenderObject()! as RenderBox;
             _menu = showGaiaMenu(
               context,
-              crumb.localToGlobal(
-                Offset(details.localPosition.dx, crumb.size.height),
-              ),
+              crumb.localToGlobal(Offset(0, crumb.size.height + _titleMenuGap)),
               [
                 for (final other in gaiaProjectsListed(
                   controller.chats,
@@ -1208,8 +1244,8 @@ class _ProjectCrumbState extends State<_ProjectCrumb> {
   }
 }
 
-/// The chat's title in a floater's header, which has no sidebar: a click
-/// opens the most recent other chats to switch to, then Search. A click
+/// The chat's title in the header: a click opens the most recent other
+/// chats to switch to, then Search. A click
 /// while the menu is open just closes it.
 class _ChatSwitcher extends StatefulWidget {
   const _ChatSwitcher({required this.controller});
@@ -1247,9 +1283,7 @@ class _ChatSwitcherState extends State<_ChatSwitcher> {
           final title = context.findRenderObject()! as RenderBox;
           _menu = showGaiaMenu(
             context,
-            title.localToGlobal(
-              Offset(details.localPosition.dx, title.size.height),
-            ),
+            title.localToGlobal(Offset(0, title.size.height + _titleMenuGap)),
             [
               for (final chat in recent.take(_shown))
                 GaiaMenuItem(
@@ -1964,7 +1998,13 @@ class _SidebarState extends State<_Sidebar> {
         onPressed: () => _moveMenu([chat], position),
       ),
       GaiaMenuItem(
-        label: chat.archived ? 'Unarchive' : 'Archive',
+        // The temporary chat in view is listed as if it weren't archived
+        // (GAIA_TEMP_HLD.md §4); unarchived, it's an ordinary chat.
+        label: chat.temporary && chat.id == controller.currentChatId
+            ? 'Keep this chat'
+            : chat.archived
+            ? 'Unarchive'
+            : 'Archive',
         icon: chat.archived ? Icons.unarchive_outlined : Icons.archive_outlined,
         onPressed: () => controller.setArchived(chat.id, !chat.archived),
       ),
@@ -2175,7 +2215,14 @@ class _SidebarState extends State<_Sidebar> {
         picked: picked,
         title: renaming
             ? _renameField()
-            : Text(chat.title, overflow: TextOverflow.ellipsis),
+            : Text(
+                chat.title,
+                overflow: TextOverflow.ellipsis,
+                // Dimmed while temporary (GAIA_TEMP_HLD.md §4).
+                style: chat.temporary
+                    ? const TextStyle(color: GaiaInk.faint)
+                    : null,
+              ),
         chevron: open == null
             ? null
             : _ForksChevron(
@@ -2185,11 +2232,18 @@ class _SidebarState extends State<_Sidebar> {
                   setState(() {});
                 },
               ),
-        trailing: chat.pinned || running
+        trailing: chat.pinned || running || chat.temporary
             ? Row(
                 mainAxisSize: MainAxisSize.min,
                 spacing: 8,
                 children: [
+                  if (chat.temporary)
+                    const Icon(
+                      Icons.hourglass_empty,
+                      size: 14,
+                      color: GaiaInk.faint,
+                      semanticLabel: 'Temporary',
+                    ),
                   if (chat.pinned)
                     // Its own context, so the accent changing reaches a tile
                     // that's given back as it was.
@@ -2235,7 +2289,12 @@ class _SidebarState extends State<_Sidebar> {
       for (final project in controller.projects) 'project ${project.id}',
     };
     _rowKeys.removeWhere((key, _) => !rows.contains(key));
-    final sections = gaiaChatSections(controller.chats, controller.projects);
+    // The temporary chat in view stays where it is (GAIA_TEMP_HLD.md §4).
+    final sections = gaiaChatSections(
+      controller.chats,
+      controller.projects,
+      inView: controller.currentChatId,
+    );
     Iterable<String> shownIn(List<GaiaForkGroup> groups) sync* {
       for (final (:chat, :forks) in groups) {
         yield chat.id;
@@ -5649,6 +5708,10 @@ class _ComposerState extends State<_Composer> {
   String? _browseText;
   String? _browseChat;
 
+  /// Each chat's latest `/temp` toast (null: the new chat's), the one whose
+  /// click undoes it.
+  final _tempToasts = <String?, Object>{};
+
   /// A `/word` no command has, turned away once for the draft as it stood
   /// then (GAIA_NATIVE_COMMANDS.md §7): sent again unchanged, it goes.
   ({String word, String? suggestion})? _unknown;
@@ -6387,6 +6450,10 @@ class _ComposerState extends State<_Composer> {
       _openProjects();
       return true;
     }
+    if (builtin == GaiaBuiltin.temp) {
+      await _temp();
+      return true;
+    }
     if (builtin != GaiaBuiltin.controlAuto) {
       await controller.runBuiltin(builtin);
       return true;
@@ -6395,6 +6462,62 @@ class _ComposerState extends State<_Composer> {
     if (controller.hand != GaiaHand.auto) return false;
     controller.noteHand();
     return true;
+  }
+
+  /// `/temp` (GAIA_TEMP_HLD.md §3.1): a click on its toast undoes it,
+  /// bringing back the suggested memories it threw out.
+  Future<void> _temp() async {
+    final controller = widget.controller;
+    final chatId = controller.currentChat?.id;
+    final List<String>? thrown;
+    try {
+      thrown = await controller.toggleTemporary();
+    } on GaiaPipeException catch (error) {
+      if (!mounted) return;
+      showGaiaToast(
+        context,
+        mark: GaiaToastMark.error,
+        title: 'Temporary chat not changed',
+        body: '$error',
+      );
+      return;
+    }
+    if (!mounted) return;
+    // Only the latest /temp's toast for the chat undoes: not one from
+    // before a later /temp.
+    final toast = _tempToasts[chatId] = Object();
+    final shownAt = DateTime.now();
+    final note = controller.temporaryNote(thrown);
+    showGaiaToast(
+      context,
+      mark: GaiaToastMark.done,
+      title: note.title,
+      body: thrown == null ? note.body : '${note.body} Click to undo.',
+      onTap: thrown == null
+          ? null
+          : () {
+              if (!identical(_tempToasts[chatId], toast)) return;
+              final current = controller.currentChat;
+              if (chatId != null) {
+                // Only while it's still temporary.
+                if (controller.chats.any(
+                  (c) => c.id == chatId && c.temporary,
+                )) {
+                  controller
+                      .setTemporary(chatId, false, restore: thrown!)
+                      .ignore();
+                }
+              } else if (current == null) {
+                if (controller.newChatTemporary) {
+                  unawaited(controller.toggleTemporary());
+                }
+              } else if (current.temporary &&
+                  !current.createdAt.isBefore(shownAt)) {
+                // The chat the new chat's first send made since.
+                controller.setTemporary(current.id, false).ignore();
+              }
+            },
+    );
   }
 
   /// One of [gaiaInlineBuiltins], once completed: taken out of the draft
@@ -6857,6 +6980,23 @@ class _ComposerState extends State<_Composer> {
                                     ),
                                   ),
                                 ),
+                              // `/temp` in a new chat, which its first send
+                              // makes temporary (GAIA_TEMP_HLD.md §3.2).
+                              if (controller.currentChat == null &&
+                                  controller.newChatTemporary)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: _ContextChip(
+                                      label: 'Temporary chat',
+                                      icon: Icons.hourglass_empty,
+                                      onRemove: () => unawaited(
+                                        controller.toggleTemporary(),
+                                      ),
+                                    ),
+                                  ),
+                                ),
                               // An Ask Gaia chat's memory, which its first
                               // message carries (GAIA_SETTINGS_HLD.md §7.1).
                               if (controller.draftAbout case final about?)
@@ -7058,7 +7198,10 @@ class _ComposerState extends State<_Composer> {
                                     running &&
                                         gaiaBtwText(_text.text) == null &&
                                         gaiaQueueText(_text.text) == null &&
-                                        gaiaRememberText(_text.text) == null
+                                        gaiaRememberText(_text.text) == null &&
+                                        // And /temp (GAIA_TEMP_HLD.md §3.4).
+                                        gaiaBuiltinIn(_text.text) !=
+                                            GaiaBuiltin.temp
                                     ? GaiaActionIcon(
                                         key: const ValueKey('stop'),
                                         label: 'Stop',

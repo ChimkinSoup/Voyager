@@ -70,7 +70,8 @@ const kGaiaNotificationBtwSeparator = '#btw:';
 /// panel's save), `voyagerHotkeys` (Voyager's own hotkeys by name), `chats`, `putChat {chat}` (a new chat), `setSession
 /// {chatId, adapter, account, sessionId, lastSeq, project}`, `setTier {chatId, tier}`,
 /// `setLastTier {tier}`, `setTitle {chatId, title, from}`, `setPinned {chatId,
-/// pinned}`, `setArchived {chatId, archived}`, `projects`, `putProject {project}`, `renameProject {projectId,
+/// pinned}`, `setArchived {chatId, archived}`, `setTemporary {chatId, temporary,
+/// restore?}` (returns `{thrown}`, GAIA_TEMP_HLD.md §3.1), `projects`, `putProject {project}`, `renameProject {projectId,
 /// name}`, `setProject {chatId, projectId}`, `setProjectFolder {projectId,
 /// path}` (this device's, null to remove it), `deleteProject {projectId,
 /// withChats}`, `deleteChat {chatId}` (returns `{mediaDeletedAt}`),
@@ -1416,6 +1417,21 @@ class GaiaHost {
           params['archived']! as bool,
         );
         return null;
+      case 'setTemporary':
+        final chatId = params['chatId']! as String;
+        final temporary = params['temporary']! as bool;
+        await store.setTemporary(chatId, temporary);
+        // Its suggestions waiting in the inbox are thrown out with it, and
+        // its toast's Undo brings them back (GAIA_TEMP_HLD.md §3.1, §6).
+        final memories = _memories;
+        if (memories != null && temporary) {
+          return {'thrown': await memories.throwOut(chatId)};
+        }
+        for (final id
+            in (params['restore'] as List? ?? const []).cast<String>()) {
+          await memories?.restore(id);
+        }
+        return {'thrown': const <String>[]};
       case 'reorderChat':
         await store.reorderChat(
           params['chatId']! as String,

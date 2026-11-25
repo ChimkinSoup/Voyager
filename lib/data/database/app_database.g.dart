@@ -58334,6 +58334,17 @@ class $GaiaChatsTableTable extends GaiaChatsTable
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _temporaryAtMeta = const VerificationMeta(
+    'temporaryAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> temporaryAt = GeneratedColumn<DateTime>(
+    'temporary_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -58399,6 +58410,7 @@ class $GaiaChatsTableTable extends GaiaChatsTable
     listOrder,
     orderedAt,
     archivedAt,
+    temporaryAt,
     createdAt,
     updatedAt,
     version,
@@ -58539,6 +58551,15 @@ class $GaiaChatsTableTable extends GaiaChatsTable
         archivedAt.isAcceptableOrUnknown(data['archived_at']!, _archivedAtMeta),
       );
     }
+    if (data.containsKey('temporary_at')) {
+      context.handle(
+        _temporaryAtMeta,
+        temporaryAt.isAcceptableOrUnknown(
+          data['temporary_at']!,
+          _temporaryAtMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -58648,6 +58669,10 @@ class $GaiaChatsTableTable extends GaiaChatsTable
         DriftSqlType.dateTime,
         data['${effectivePrefix}archived_at'],
       ),
+      temporaryAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}temporary_at'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -58722,6 +58747,9 @@ class GaiaChatsTableData extends DataClass
 
   /// When it was archived (`GaiaChat.archivedAt`).
   final DateTime? archivedAt;
+
+  /// When `/temp` made it temporary (GAIA_TEMP_HLD.md §2).
+  final DateTime? temporaryAt;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -58745,6 +58773,7 @@ class GaiaChatsTableData extends DataClass
     this.listOrder,
     this.orderedAt,
     this.archivedAt,
+    this.temporaryAt,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -58786,6 +58815,9 @@ class GaiaChatsTableData extends DataClass
     }
     if (!nullToAbsent || archivedAt != null) {
       map['archived_at'] = Variable<DateTime>(archivedAt);
+    }
+    if (!nullToAbsent || temporaryAt != null) {
+      map['temporary_at'] = Variable<DateTime>(temporaryAt);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -58830,6 +58862,9 @@ class GaiaChatsTableData extends DataClass
       archivedAt: archivedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(archivedAt),
+      temporaryAt: temporaryAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(temporaryAt),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -58863,6 +58898,7 @@ class GaiaChatsTableData extends DataClass
       listOrder: serializer.fromJson<double?>(json['listOrder']),
       orderedAt: serializer.fromJson<DateTime?>(json['orderedAt']),
       archivedAt: serializer.fromJson<DateTime?>(json['archivedAt']),
+      temporaryAt: serializer.fromJson<DateTime?>(json['temporaryAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -58891,6 +58927,7 @@ class GaiaChatsTableData extends DataClass
       'listOrder': serializer.toJson<double?>(listOrder),
       'orderedAt': serializer.toJson<DateTime?>(orderedAt),
       'archivedAt': serializer.toJson<DateTime?>(archivedAt),
+      'temporaryAt': serializer.toJson<DateTime?>(temporaryAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -58917,6 +58954,7 @@ class GaiaChatsTableData extends DataClass
     Value<double?> listOrder = const Value.absent(),
     Value<DateTime?> orderedAt = const Value.absent(),
     Value<DateTime?> archivedAt = const Value.absent(),
+    Value<DateTime?> temporaryAt = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -58940,6 +58978,7 @@ class GaiaChatsTableData extends DataClass
     listOrder: listOrder.present ? listOrder.value : this.listOrder,
     orderedAt: orderedAt.present ? orderedAt.value : this.orderedAt,
     archivedAt: archivedAt.present ? archivedAt.value : this.archivedAt,
+    temporaryAt: temporaryAt.present ? temporaryAt.value : this.temporaryAt,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -58979,6 +59018,9 @@ class GaiaChatsTableData extends DataClass
       archivedAt: data.archivedAt.present
           ? data.archivedAt.value
           : this.archivedAt,
+      temporaryAt: data.temporaryAt.present
+          ? data.temporaryAt.value
+          : this.temporaryAt,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -59007,6 +59049,7 @@ class GaiaChatsTableData extends DataClass
           ..write('listOrder: $listOrder, ')
           ..write('orderedAt: $orderedAt, ')
           ..write('archivedAt: $archivedAt, ')
+          ..write('temporaryAt: $temporaryAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -59035,6 +59078,7 @@ class GaiaChatsTableData extends DataClass
     listOrder,
     orderedAt,
     archivedAt,
+    temporaryAt,
     createdAt,
     updatedAt,
     version,
@@ -59062,6 +59106,7 @@ class GaiaChatsTableData extends DataClass
           other.listOrder == this.listOrder &&
           other.orderedAt == this.orderedAt &&
           other.archivedAt == this.archivedAt &&
+          other.temporaryAt == this.temporaryAt &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -59087,6 +59132,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
   final Value<double?> listOrder;
   final Value<DateTime?> orderedAt;
   final Value<DateTime?> archivedAt;
+  final Value<DateTime?> temporaryAt;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -59111,6 +59157,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     this.listOrder = const Value.absent(),
     this.orderedAt = const Value.absent(),
     this.archivedAt = const Value.absent(),
+    this.temporaryAt = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -59136,6 +59183,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     this.listOrder = const Value.absent(),
     this.orderedAt = const Value.absent(),
     this.archivedAt = const Value.absent(),
+    this.temporaryAt = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -59165,6 +59213,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     Expression<double>? listOrder,
     Expression<DateTime>? orderedAt,
     Expression<DateTime>? archivedAt,
+    Expression<DateTime>? temporaryAt,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -59190,6 +59239,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
       if (listOrder != null) 'list_order': listOrder,
       if (orderedAt != null) 'ordered_at': orderedAt,
       if (archivedAt != null) 'archived_at': archivedAt,
+      if (temporaryAt != null) 'temporary_at': temporaryAt,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -59217,6 +59267,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     Value<double?>? listOrder,
     Value<DateTime?>? orderedAt,
     Value<DateTime?>? archivedAt,
+    Value<DateTime?>? temporaryAt,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -59242,6 +59293,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
       listOrder: listOrder ?? this.listOrder,
       orderedAt: orderedAt ?? this.orderedAt,
       archivedAt: archivedAt ?? this.archivedAt,
+      temporaryAt: temporaryAt ?? this.temporaryAt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -59307,6 +59359,9 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
     if (archivedAt.present) {
       map['archived_at'] = Variable<DateTime>(archivedAt.value);
     }
+    if (temporaryAt.present) {
+      map['temporary_at'] = Variable<DateTime>(temporaryAt.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -59346,6 +59401,7 @@ class GaiaChatsTableCompanion extends UpdateCompanion<GaiaChatsTableData> {
           ..write('listOrder: $listOrder, ')
           ..write('orderedAt: $orderedAt, ')
           ..write('archivedAt: $archivedAt, ')
+          ..write('temporaryAt: $temporaryAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -94458,6 +94514,7 @@ typedef $$GaiaChatsTableTableCreateCompanionBuilder =
       Value<double?> listOrder,
       Value<DateTime?> orderedAt,
       Value<DateTime?> archivedAt,
+      Value<DateTime?> temporaryAt,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -94484,6 +94541,7 @@ typedef $$GaiaChatsTableTableUpdateCompanionBuilder =
       Value<double?> listOrder,
       Value<DateTime?> orderedAt,
       Value<DateTime?> archivedAt,
+      Value<DateTime?> temporaryAt,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -94587,6 +94645,11 @@ class $$GaiaChatsTableTableFilterComposer
 
   ColumnFilters<DateTime> get archivedAt => $composableBuilder(
     column: $table.archivedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get temporaryAt => $composableBuilder(
+    column: $table.temporaryAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -94710,6 +94773,11 @@ class $$GaiaChatsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<DateTime> get temporaryAt => $composableBuilder(
+    column: $table.temporaryAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -94808,6 +94876,11 @@ class $$GaiaChatsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<DateTime> get temporaryAt => $composableBuilder(
+    column: $table.temporaryAt,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -94876,6 +94949,7 @@ class $$GaiaChatsTableTableTableManager
                 Value<double?> listOrder = const Value.absent(),
                 Value<DateTime?> orderedAt = const Value.absent(),
                 Value<DateTime?> archivedAt = const Value.absent(),
+                Value<DateTime?> temporaryAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -94900,6 +94974,7 @@ class $$GaiaChatsTableTableTableManager
                 listOrder: listOrder,
                 orderedAt: orderedAt,
                 archivedAt: archivedAt,
+                temporaryAt: temporaryAt,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -94926,6 +95001,7 @@ class $$GaiaChatsTableTableTableManager
                 Value<double?> listOrder = const Value.absent(),
                 Value<DateTime?> orderedAt = const Value.absent(),
                 Value<DateTime?> archivedAt = const Value.absent(),
+                Value<DateTime?> temporaryAt = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -94950,6 +95026,7 @@ class $$GaiaChatsTableTableTableManager
                 listOrder: listOrder,
                 orderedAt: orderedAt,
                 archivedAt: archivedAt,
+                temporaryAt: temporaryAt,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,

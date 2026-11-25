@@ -2164,14 +2164,11 @@ class _ChatRow extends ConsumerWidget {
             ),
             // From the stored chat, not this row's: the companion may have
             // written its session or last message since the row was built.
-            onPressed: () async {
-              final repository = ref.read(gaiaRepositoryProvider);
-              final current = await repository.getChat(chat.id);
-              if (current == null) return;
-              await repository.upsertChat(
-                gaiaPinned(current, !chat.pinned, await repository.listChats()),
-              );
-            },
+            onPressed: () => gaiaSetPinned(
+              ref.read(gaiaRepositoryProvider),
+              chat.id,
+              !chat.pinned,
+            ),
           ),
           PopupMenuButton<VoidCallback>(
             tooltip: 'Move to project',
@@ -2220,19 +2217,11 @@ class _ChatRow extends ConsumerWidget {
               size: 16,
             ),
             // From the stored chat, as Pin is.
-            onPressed: () async {
-              final repository = ref.read(gaiaRepositoryProvider);
-              final current = await repository.getChat(chat.id);
-              if (current == null) return;
-              final all = await repository.listChats();
-              for (final changed in gaiaArchivedWithForks(
-                current,
-                !chat.archived,
-                all,
-              )) {
-                await repository.upsertChat(changed);
-              }
-            },
+            onPressed: () => gaiaSetArchived(
+              ref.read(gaiaRepositoryProvider),
+              chat.id,
+              !chat.archived,
+            ),
           ),
           IconButton(
             tooltip: 'Delete',

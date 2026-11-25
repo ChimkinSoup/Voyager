@@ -223,6 +223,17 @@ class _Main {
           order: (params['order'] as num?)?.toDouble(),
         );
         return null;
+      case 'setTemporary':
+        if (refuseTemporary) throw GaiaPipeException('refused');
+        final chatId = params['chatId']! as String;
+        await store.setTemporary(chatId, params['temporary']! as bool);
+        if (params['temporary'] == true) {
+          return {'thrown': await memories.throwOut(chatId)};
+        }
+        for (final id in (params['restore'] as List).cast<String>()) {
+          await memories.restore(id);
+        }
+        return {'thrown': const <String>[]};
       case 'deleteChat':
         await store.deleteChat(params['chatId']! as String);
         return {'mediaDeletedAt': null};
@@ -562,6 +573,7 @@ class _Main {
 
   /// Whether `setChapter` is refused.
   var refuseChapter = false;
+  var refuseTemporary = false;
 
   /// Each `detachImage`'s reference, in order.
   final detached = <String>[];
@@ -890,6 +902,112 @@ void main() {
         expect((await main.chat()).curatedSeq, 3);
       },
     );
+
+    test('/temp keeps the curator out of a chat; turned off, the curator '
+        "reads only what's said after (GAIA_TEMP_HLD.md §3.3, §5)", () async {
+      final utility = FakeUtilityRunner((_) => '[]');
+      await startCompanion(
+        utility: GaiaUtility(utility),
+        curateAfter: const Duration(milliseconds: 50),
+      );
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send('zqsecret');
+      await settle();
+      await controller.runBuiltin(GaiaBuiltin.temp);
+      await settle();
+      expect((await main.chat()).temporary, isTrue);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await settle();
+      Iterable<String> reads() => [
+        for (final (i, job) in utility.jobs.indexed)
+          if (job.startsWith('You keep')) utility.inputs[i],
+      ];
+      expect(reads(), isEmpty);
+
+      await controller.runBuiltin(GaiaBuiltin.temp);
+      await settle();
+      expect((await main.chat()).temporary, isFalse);
+      expect((await main.chat()).curatedSeq, 1);
+      expect(controller.chats.single.curatedSeq, 1);
+      await controller.send('zqopen');
+      await settle();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await settle();
+      expect(reads(), hasLength(1));
+      expect(reads().single, contains('zqopen'));
+      expect(reads().single, isNot(contains('zqsecret')));
+      expect((await main.chat()).curatedSeq, 3);
+    });
+
+    test('/temp in a new chat makes the chat its first send creates '
+        'temporary; /new forgets it (GAIA_TEMP_HLD.md §3.2)', () async {
+      await startCompanion();
+      await controller.runBuiltin(GaiaBuiltin.temp);
+      expect(controller.newChatTemporary, isTrue);
+      controller.newChat();
+      expect(controller.newChatTemporary, isFalse);
+      await controller.runBuiltin(GaiaBuiltin.temp);
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send('Hi');
+      await settle();
+      expect((await main.chat()).temporary, isTrue);
+      expect(controller.newChatTemporary, isFalse);
+    });
+
+    test('a new chat /temp made, stopped before its run starts, gives its '
+        'message back still temporary (GAIA_TEMP_HLD.md §3.2)', () async {
+      await startCompanion();
+      await controller.runBuiltin(GaiaBuiltin.temp);
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      main.holdLease = Completer();
+      final sending = controller.send('Hi');
+      await settle();
+      expect(controller.newChatTemporary, isFalse);
+      await controller.stop(controller.currentChatId!);
+      main.holdLease!.complete();
+      await sending;
+      await settle();
+
+      expect(await main.store.chats(), isEmpty);
+      expect(controller.draft.text, 'Hi');
+      expect(controller.newChatTemporary, isTrue);
+    });
+
+    test('/temp throws out the waiting suggestions from the chat, and '
+        'setTemporary off with them restores them (GAIA_TEMP_HLD.md §6)',
+        () async {
+      await startCompanion();
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send('Hi');
+      await settle();
+      final chatId = (await main.chat()).id;
+      final waiting = await main.memories.save(
+        'Likes jazz',
+        chatId: chatId,
+        status: GaiaMemoryStatus.proposed,
+      );
+      final thrown = await controller.toggleTemporary();
+      expect(thrown, [waiting!.id]);
+      expect((await main.repository.getMemory(waiting.id))!.isDeleted, isTrue);
+      await controller.setTemporary(chatId, false, restore: thrown!);
+      await settle();
+      expect((await main.repository.getMemory(waiting.id))!.isDeleted, isFalse);
+    });
+
+    test('/temp not saved puts the chat back as stored, and says so', () async {
+      await startCompanion();
+      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+      await controller.send('Hi');
+      await settle();
+      main.refuseTemporary = true;
+      await expectLater(
+        controller.toggleTemporary(),
+        throwsA(isA<GaiaPipeException>()),
+      );
+      expect(controller.currentChat!.temporary, isFalse);
+      expect((await main.chat()).temporary, isFalse);
+    });
 
     test('a chat another device went on with while it waited is left to '
         'that device', () async {

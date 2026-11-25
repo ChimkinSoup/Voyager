@@ -41,9 +41,13 @@ class GaiaProjectReads {
     if (project == null || project.isDeleted) {
       return "This chat isn't in a project.";
     }
+    // A temporary one is left out, so no other chat reads it; this chat
+    // still sees itself (GAIA_TEMP_HLD.md §10.3).
     final chats = [
       for (final other in await _repository.listChats())
-        if (other.projectId == project.id) other,
+        if (other.projectId == project.id &&
+            (!other.temporary || other.id == chatId))
+          other,
     ];
     switch (name) {
       case 'project_chats':

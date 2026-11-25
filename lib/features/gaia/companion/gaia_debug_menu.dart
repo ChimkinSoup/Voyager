@@ -35,10 +35,6 @@ import 'package:voyager/features/gaia/companion/gaia_vanish.dart';
 import 'package:voyager/features/gaia/host/gaia_memories.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 
-/// Keeps the debug menu's scroll offset from one opening to the next, since
-/// each dialog route starts with a bucket of its own.
-final _debugMenuStorage = PageStorageBucket();
-
 /// Gaia's debug menu (Ctrl+Shift+D, or the sidebar's bug): scripted
 /// replies, toast and loading-animation previews and display toggles, kept
 /// on this desktop only.
@@ -52,19 +48,35 @@ Future<void> showGaiaDebugMenu(
       constraints: const BoxConstraints(maxWidth: 520),
       child: ListenableBuilder(
         listenable: Listenable.merge([controller, controller.debug]),
-        builder: (context, _) => PageStorage(
-          bucket: _debugMenuStorage,
-          child: _DebugMenu(controller: controller),
-        ),
+        builder: (context, _) => _DebugMenu(controller: controller),
       ),
     ),
   ),
-);
+).then((_) => controller.debug.saveMenuScroll());
 
-class _DebugMenu extends StatelessWidget {
+class _DebugMenu extends StatefulWidget {
   const _DebugMenu({required this.controller});
 
   final GaiaController controller;
+
+  @override
+  State<_DebugMenu> createState() => _DebugMenuState();
+}
+
+/// Opens where the menu last closed, kept in [GaiaDebug.menuScroll] across
+/// restarts.
+class _DebugMenuState extends State<_DebugMenu> {
+  GaiaController get controller => widget.controller;
+
+  late final ScrollController _scroll = ScrollController(
+    initialScrollOffset: controller.debug.menuScroll,
+  )..addListener(() => controller.debug.menuScroll = _scroll.offset);
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -79,7 +91,7 @@ class _DebugMenu extends StatelessWidget {
       child: Text(text, style: theme.textTheme.titleSmall),
     );
     return ListView(
-      key: const PageStorageKey('gaia debug menu'),
+      controller: _scroll,
       shrinkWrap: true,
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
       children: [

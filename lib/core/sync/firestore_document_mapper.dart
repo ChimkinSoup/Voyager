@@ -4391,6 +4391,7 @@ Map<String, dynamic> gaiaChatToFirestore(GaiaChat chat) => {
   'order': chat.order,
   'orderedAt': _dateToFirestore(chat.orderedAt),
   'archivedAt': _dateToFirestore(chat.archivedAt),
+  'temporaryAt': _dateToFirestore(chat.temporaryAt),
   'createdAt': _dateToFirestoreRequired(chat.createdAt),
   'updatedAt': _dateToFirestoreRequired(chat.updatedAt),
   'version': chat.version,
@@ -4485,6 +4486,10 @@ GaiaChat mergeGaiaChatFromRemote(
     archivedAt: data.containsKey('archivedAt')
         ? parseFirestoreDate(data['archivedAt'])
         : local?.archivedAt,
+    // Present but null when made an ordinary chat again.
+    temporaryAt: data.containsKey('temporaryAt')
+        ? parseFirestoreDate(data['temporaryAt'])
+        : local?.temporaryAt,
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??

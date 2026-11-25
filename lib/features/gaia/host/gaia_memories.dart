@@ -451,6 +451,30 @@ class GaiaMemories {
     return (id: id, state: GaiaCardState.accepted, text: body);
   }
 
+  /// `/temp` (GAIA_TEMP_HLD.md §6): [chatId]'s suggestions still waiting in
+  /// the inbox thrown out, as the inbox's Decline does, so [restore] brings
+  /// them back. Not one a memory card in the chat offers, which the user
+  /// decides there. Their ids.
+  Future<List<String>> throwOut(String chatId) async {
+    final carded = {
+      for (final message in await _repository.listMessages(chatId))
+        for (final part in message.parts)
+          if (part is GaiaMemoryPart) part.memoryId,
+    };
+    final thrown = <String>[];
+    for (final memory in await _repository.listMemories()) {
+      if (memory.sourceChatId != chatId ||
+          memory.isDeleted ||
+          memory.status != GaiaMemoryStatus.proposed ||
+          carded.contains(memory.id)) {
+        continue;
+      }
+      await _repository.upsertMemory(memory.copyWith(deletedAt: utcNow()));
+      thrown.add(memory.id);
+    }
+    return thrown;
+  }
+
   /// Proposed memory [id] back in the inbox, its dismissal undone; its text
   /// then, or null when it's not a dismissed proposal any more.
   Future<String?> restore(String id) async {
@@ -661,6 +685,9 @@ class GaiaMemories {
     int seq,
     List<GaiaFoundMemory> found,
   ) async {
+    // Made temporary since the curator started reading it
+    // (GAIA_TEMP_HLD.md §5): nothing is kept, and it isn't marked read.
+    if ((await _repository.getChat(chatId))?.temporary ?? false) return;
     final settings = await _repository.getSettings();
     final project = await _projectOf(chatId);
     for (final memory in found) {

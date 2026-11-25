@@ -563,9 +563,18 @@ class GaiaChat extends SoftDeletable {
     this.order,
     this.orderedAt,
     this.archivedAt,
+    this.temporaryAt,
   });
 
   final String title;
+
+  /// When `/temp` made it temporary (GAIA_TEMP_HLD.md §2); null for an
+  /// ordinary chat.
+  final DateTime? temporaryAt;
+
+  /// Archived once it's out of view, whatever its messages, and never read
+  /// by the memory curator (GAIA_TEMP_HLD.md §1).
+  bool get temporary => temporaryAt != null;
 
   /// When it was archived; null for never, or unarchived since.
   final DateTime? archivedAt;
@@ -574,10 +583,13 @@ class GaiaChat extends SoftDeletable {
   /// message after [archivedAt] brings it back, except in a chat archived as
   /// it was made ([archivedAt] is [createdAt]), as an Ask Gaia chat is
   /// (GAIA_SETTINGS_HLD.md §7.2): that one stays archived until unarchived.
-  bool get archived => switch (archivedAt) {
-    final at? => at == createdAt || !lastMessageAt.isAfter(at),
-    null => false,
-  };
+  /// A [temporary] one always is (GAIA_TEMP_HLD.md §2).
+  bool get archived =>
+      temporary ||
+      switch (archivedAt) {
+        final at? => at == createdAt || !lastMessageAt.isAfter(at),
+        null => false,
+      };
 
   /// Where it was dragged to in the sidebar, as a [listRank]; null for
   /// none.
@@ -700,6 +712,8 @@ class GaiaChat extends SoftDeletable {
     bool clearOrder = false,
     DateTime? archivedAt,
     bool clearArchivedAt = false,
+    DateTime? temporaryAt,
+    bool clearTemporaryAt = false,
     DateTime? deletedAt,
     bool clearDeletedAt = false,
     int? version,
@@ -707,6 +721,7 @@ class GaiaChat extends SoftDeletable {
     bool touch = true,
   }) => GaiaChat(
     archivedAt: clearArchivedAt ? null : (archivedAt ?? this.archivedAt),
+    temporaryAt: clearTemporaryAt ? null : (temporaryAt ?? this.temporaryAt),
     order: clearOrder ? null : (order ?? this.order),
     orderedAt: clearOrder ? null : (orderedAt ?? this.orderedAt),
     projectId: clearProjectId ? null : (projectId ?? this.projectId),
@@ -758,6 +773,7 @@ class GaiaChat extends SoftDeletable {
     'order': order,
     'orderedAt': orderedAt?.toIso8601String(),
     'archivedAt': archivedAt?.toIso8601String(),
+    'temporaryAt': temporaryAt?.toIso8601String(),
   };
 
   factory GaiaChat.fromJson(Map<String, Object?> json) {
@@ -785,15 +801,19 @@ class GaiaChat extends SoftDeletable {
       order: (json['order'] as num?)?.toDouble(),
       orderedAt: _date(json['orderedAt']),
       archivedAt: _date(json['archivedAt']),
+      temporaryAt: _date(json['temporaryAt']),
     );
   }
 }
 
 /// [chat] archived, and unpinned, as an archived chat isn't; or back on
-/// the lists. Archived no earlier than its last message, which another
-/// device's clock may have put ahead of this one's.
+/// the lists, a temporary one no longer temporary (GAIA_TEMP_HLD.md §3.3).
+/// Archived no earlier than its last message, which another device's clock
+/// may have put ahead of this one's.
 GaiaChat gaiaArchived(GaiaChat chat, bool archived) {
-  if (!archived) return chat.copyWith(clearArchivedAt: true);
+  if (!archived) {
+    return chat.copyWith(clearArchivedAt: true, clearTemporaryAt: true);
+  }
   final now = utcNow();
   final at = now.isBefore(chat.lastMessageAt) ? chat.lastMessageAt : now;
   return chat.copyWith(
@@ -806,8 +826,14 @@ GaiaChat gaiaArchived(GaiaChat chat, bool archived) {
   );
 }
 
+/// [chat] made temporary by `/temp` (GAIA_TEMP_HLD.md §2): unpinned, as an
+/// archived chat is.
+GaiaChat gaiaTemporary(GaiaChat chat) =>
+    chat.copyWith(temporaryAt: utcNow(), pinned: false, clearOrder: true);
+
 /// [chat] as [gaiaArchived] makes it, with those of its forks among [all]
-/// that aren't so already: they're put away, and brought back, with it.
+/// that aren't so already: they're put away, and brought back, with it. A
+/// temporary fork stays as it is, archived whatever its original is.
 List<GaiaChat> gaiaArchivedWithForks(
   GaiaChat chat,
   bool archived,
@@ -817,6 +843,7 @@ List<GaiaChat> gaiaArchivedWithForks(
   for (final fork in all)
     if (fork.forkOf == chat.id &&
         fork.id != chat.id &&
+        !fork.temporary &&
         fork.archived != archived)
       gaiaArchived(fork, archived),
 ];
@@ -830,7 +857,8 @@ int gaiaChatListed(GaiaChat a, GaiaChat b) {
 
 /// [chat] pinned, at the bottom of the pinned chats it's listed with (its
 /// project's, or those in none), or unpinned, back where its recency puts
-/// it. [chats]: the chats there are. An archived chat pinned is unarchived.
+/// it. [chats]: the chats there are. An archived chat pinned is unarchived,
+/// and a temporary one an ordinary chat again (GAIA_TEMP_HLD.md §3.3).
 GaiaChat gaiaPinned(GaiaChat chat, bool pinned, Iterable<GaiaChat> chats) {
   if (!pinned) return chat.copyWith(pinned: false, clearOrder: true);
   final ranks = [
@@ -844,6 +872,7 @@ GaiaChat gaiaPinned(GaiaChat chat, bool pinned, Iterable<GaiaChat> chats) {
   return chat.copyWith(
     pinned: true,
     clearArchivedAt: true,
+    clearTemporaryAt: true,
     order: ranks.isEmpty
         ? chat.lastMessageAt.millisecondsSinceEpoch.toDouble()
         : ranks.reduce(min) - 1000,
@@ -1003,21 +1032,27 @@ typedef GaiaProjectSection = ({
 /// [gaiaForkGroups] does. A chat whose project isn't in [projects] is in
 /// none. Projects go by [GaiaProject.listRank], from their most recent
 /// chat, an empty one's from when it was made. [archived] holds the
-/// archived chats, from every project or none, and only there.
+/// archived chats, from every project or none, and only there, except a
+/// temporary chat [inView], which is listed as if it weren't archived
+/// (GAIA_TEMP_HLD.md §4).
 ({
   List<GaiaForkGroup> pinned,
   List<GaiaProjectSection> projects,
   List<GaiaForkGroup> chats,
   List<GaiaForkGroup> archived,
 })
-gaiaChatSections(List<GaiaChat> chats, List<GaiaProject> projects) {
+gaiaChatSections(
+  List<GaiaChat> chats,
+  List<GaiaProject> projects, {
+  String? inView,
+}) {
   final ordered = [...chats]..sort(gaiaChatListed);
   final live = {for (final project in projects) project.id};
   final loose = <GaiaChat>[];
   final archived = <GaiaChat>[];
   final byProject = <String, List<GaiaChat>>{};
   for (final chat in ordered) {
-    if (chat.archived) {
+    if (chat.archived && !(chat.temporary && chat.id == inView)) {
       archived.add(chat);
     } else if (chat.projectId case final id? when live.contains(id)) {
       (byProject[id] ??= []).add(chat);

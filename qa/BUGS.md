@@ -4067,6 +4067,7 @@ Entry format:
 - Expected: no error. Hotkeys are a no-op on Android (MOBILE_TEST_PLAN.md §0.2, `hotkey_service.dart`), so nothing should touch the plugin there, and the error log should hold only real errors (later phases read it after each flow).
 - Notes: `lib/main.dart:82-87` calls `hotKeyManager.unregisterAll()` with no platform check (only `devProfile == null`). The try/catch catches the method call, but first use of `hotKeyManager` subscribes to the plugin's event channel, which has no Android implementation, and that error is reported by the framework, not thrown to the caller. Not fixed (audit rule).
 - Redo on the OnePlus 12R (2026-11-22, qa-129): the same error on the first launch of a fresh install.
+- Notes (2026-11-24, M1): still logged at every launch (build `33a2fd84`).
 
 ### BUG-385 [M0] On a 794 dp tall phone the journal editor's body collapses to nothing while the soft keyboard is up, so text is typed blind
 - Severity: Major
@@ -4083,5 +4084,46 @@ Entry format:
 - Actual: `widgets library building LayoutBuilder: Invalid argument(s): 0.0`, twice per keyboard opening, from `double.clamp` in `calendarMorphMonthDayLayoutSize` (`calendar_day_grid.dart:1340`) ← `calendarMorphEventFrozenMetrics` ← `CalendarLayoutCache.compute` (`calendar_page.dart:3529`) ← `_CalendarPageState._refreshLayoutCache`. Nothing visible on Journal; the Calendar page itself wasn't looked at with the keyboard up.
 - Expected: no error. The offstage Calendar is laid out in the shrunken viewport, where a month cell's inner height goes negative, and `(15 + 8).clamp(0.0, innerCellHeight)` throws when the upper bound is below the lower one.
 - Notes: error-log noise on every keyboard opening hides real errors in later phases. M8 should check the Calendar page with the keyboard up (its event panel has text fields). Not fixed (audit rule).
+- Notes (2026-11-24, M1): reproduced on qa-130: Search autofocuses its field when opened from More, which raises the keyboard, and the run log showed `Invalid argument(s): 0.0` at once.
 
-<!-- Last ID: BUG-386. -->
+### BUG-387 [M1] The login page can't scroll, so with the keyboard up, in landscape, or at small sizes its buttons and error line are cut off
+- Severity: Major
+- Found: 2026-11-24, MOBILE_TEST_PLAN.md M1 (OnePlus 12R, Android 16, 361×794 dp, Gboard; debug APK of `33a2fd84` + uncommitted `lib/features/gaia/companion/gaia_text_field_studies.dart`; signed out)
+- Steps: on the login page, (a) tap Email, tap the keyboard's ✓ with the fields empty so the error line shows; (b) `wm size 720x1280` + `wm density 320` (360×640 dp) and tap Email; (c) font scale 2.0 and tap Email; (d) rotate to landscape (`user_rotation 1`), no keyboard.
+- Actual: the card is a `Center` → `Card` → `Column` with no scroll view (`login_page.dart` `_buildForm`), so it overflows: (a) "BOTTOM OVERFLOWED BY 23 PIXELS" over Continue with Google / Create account (`qa/shots/m1-pw-focus-vm.png`, `m1-unknown-email.png`); (b) by 165 px: Sign in, Continue with Google and Create account are all under the keyboard, and so is the place where an error line would appear (`m1-login-360-kbd.png`); (c) by 96 px (`m1-login-font2-kbd.png`); (d) by 87 px with **no keyboard**: Sign in half hidden, Create account off screen and unreachable (`m1-login-land.png`). The card also slides up under the status bar whenever the keyboard is up. Logged as `A RenderFlex overflowed by … pixels on the bottom` (run log, `voyager_errors.log`). After a failed attempt `_refocusField` focuses a field again, which raises the keyboard, so on a short screen the error text is hidden right when the user needs it.
+- Expected: the card scrolls (or shrinks) so every control and the error line stay reachable with the keyboard up and in landscape (MOBILE_TEST_PLAN.md M1: "the password field and Sign in button stay reachable (scroll or resize)").
+- Notes: at the phone's own size without the keyboard it fits. Workarounds: the keyboard's ✓ submits, and Back hides the keyboard; in landscape there's none for Create account. The rail shell in landscape doesn't apply here (the login page has no shell). Not fixed (audit rule).
+
+### BUG-388 [M1] The login e-mail field gets a plain-text keyboard with autocorrect, and its ✓ submits the form instead of moving to Password
+- Severity: Minor
+- Found: 2026-11-24, MOBILE_TEST_PLAN.md M1 (OnePlus 12R, Android 16, 361×794 dp, Gboard; debug APK of `33a2fd84` + uncommitted `lib/features/gaia/companion/gaia_text_field_studies.dart`; signed out)
+- Steps: tap Email on the login page; read `dumpsys input_method` (`inputType`, `imeOptions`); type an e-mail and tap the keyboard's action key.
+- Actual: `inputType=0x8001` (text + auto-correct, not `TYPE_TEXT_VARIATION_EMAIL_ADDRESS`), so Gboard shows no @ key or .com and may autocorrect the address; `imeOptions=…06` (Done). The ✓ runs `_submit` with the password still empty: "Email and password are required." appears and focus jumps to Password (`m1-email-done2` / `m1-pw-focus-vm.png`). Neither `LabeledTextField` on the page sets `keyboardType`, `textInputAction` or `autofillHints` (`login_page.dart`). The password field is fine (`0x80081`, Done submits).
+- Expected: e-mail keyboard (`TextInputType.emailAddress`, no autocorrect) with a Next action that moves to Password (MOBILE_TEST_PLAN.md M1 IME item); ideally autofill hints so a password manager can fill both.
+- Notes: a hardware Tab (`keyevent 61`) does move to Password, and Enter in Password submits. Gboard offered no password-manager suggestions on either field. Not fixed (audit rule).
+
+### BUG-389 [M1] Long-press in a login field offers Add to dictionary / Add snippet (no Copy or Paste), and Add to dictionary saves the typed e-mail into the previous account's data
+- Severity: Minor
+- Found: 2026-11-24, MOBILE_TEST_PLAN.md M1 (OnePlus 12R, Android 16, 361×794 dp, Gboard; debug APK of `33a2fd84` + uncommitted `lib/features/gaia/companion/gaia_text_field_studies.dart`; signed out after qa-130, whose local data was still on the device)
+- Steps: sign out. On the login page type an e-mail, long-press it. Tap "Add to dictionary". Pull the DB; then sign in to a different account.
+- Actual: the menu is the app's word menu (Add to dictionary, Add snippet), not the system text toolbar: no Cut/Copy/Paste/Select all, so a password can't be pasted from the menu (`m1-longpress-email.png`). Add to dictionary wrote the 288-character local part as a row in `custom_words_table` and queued it in `pending_uploads_table` (`custom_words`) with nobody signed in. Signing in as qa-129 then raised "Discard unsynced changes? This device holds 1 change(s) from the account signed in before…", i.e. the word was attributed to qa-130; "Discard and sign in" removed it. Had qa-130 signed back in, its dictionary would have received the typed e-mail.
+- Expected: the login fields use the standard text toolbar (Copy/Paste/Select all), and nothing writes user data while signed out.
+- Notes: the same word menu replaces Paste in the journal body (seen in M0, `m0-longpress.png`; M3 checks it there). Gboard's clipboard chip still pastes. Not fixed (audit rule).
+
+### BUG-390 [M1] First visit at 361 dp: the Calendar, LeetCode and Jobs headers overflow to the right
+- Severity: Minor
+- Found: 2026-11-24, MOBILE_TEST_PLAN.md M1 (OnePlus 12R, Android 16, 361×794 dp, Gboard; debug APK of `33a2fd84` + uncommitted `lib/features/gaia/companion/gaia_text_field_studies.dart`; fresh account qa-130)
+- Steps: fresh account; open Calendar from the bottom bar, then LeetCode and Jobs from More. Read the run log.
+- Actual: `A RenderFlex overflowed by 164 pixels on the right` on Calendar: the Week/Month/Year control, the clock button and the calendar name don't fit, the name is cut to "Calenda" with the yellow-and-black band over it (`m1-first-Calendar.png`). LeetCode: `76 pixels on the right` in the Dashboard / Review Deck / Cheat sheet tab row (`m1-first-LeetCode.png`). Jobs: `15 pixels on the right` between "No active applications" and "Include archived" (`m1-first-Jobs.png`).
+- Expected: the compact headers fit 361 dp (they wrap, scroll or shorten), with no FlutterError.
+- Notes: cosmetic squeezes on the same visit, no error: Finance's "Analytic s" tab label wraps mid-word and "+$0.00 vs last m…" is cut; Workout's week columns wrap "Res t". M7/M8/M10/M11/M13 own these pages. Not fixed (audit rule).
+
+### BUG-391 [M1] Life's first-run labels overlap into an unreadable heap at 361 dp
+- Severity: Minor
+- Found: 2026-11-24, MOBILE_TEST_PLAN.md M1 (OnePlus 12R, Android 16, 361×794 dp, Gboard; debug APK of `33a2fd84` + uncommitted `lib/features/gaia/companion/gaia_text_field_studies.dart`; fresh account qa-130, no birth date)
+- Steps: fresh account → More → Life.
+- Actual: the stat labels around the tree ("[ TASKS LEFT ]", "[ HEART BEATS ]", "[ SLEEP ]", "[ FULL MOONS ]", "[ MOOD ]", "[ KILOMETRES ]") each with "Set your birth date in Settings" are squeezed into two narrow columns one word per line and drawn over each other ("dateSet / Setyour / birth"), so the first-run prompt can't be read (`m1-first-Life.png`). No FlutterError.
+- Expected: the first-run prompt is legible (one clear "Set your birth date in Settings", or labels that fit the width).
+- Notes: with a birth date the values are short and may fit; M12 checks the page with data. Not fixed (audit rule).
+
+<!-- Last ID: BUG-391. -->

@@ -125,6 +125,12 @@ class GaiaDevPipe extends GaiaPipe {
           p['archived']! as bool,
         );
         return null;
+      case 'setTemporary':
+        await _store.setTemporary(
+          p['chatId']! as String,
+          p['temporary']! as bool,
+        );
+        return {'thrown': const <String>[]};
       case 'reorderChat':
         await _store.reorderChat(
           p['chatId']! as String,

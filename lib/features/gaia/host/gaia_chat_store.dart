@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:uuid/uuid.dart';
 import 'package:voyager/core/soft_delete/erasure.dart';
 import 'package:voyager/core/sync/soft_delete_policy.dart';
@@ -152,6 +154,70 @@ Future<void> gaiaMoveChat(
     null => gaiaPinned(moved, true, await repository.listChats()),
   });
 }
+
+/// [chatId] archived or unarchived, with its forks as
+/// [gaiaArchivedWithForks] has them. One that was temporary is an ordinary
+/// chat again, read by the curator up to its last message, so its temporary
+/// part never is (GAIA_TEMP_HLD.md §3.3). Where there's no [GaiaChatStore],
+/// as on the phone.
+Future<void> gaiaSetArchived(
+  GaiaRepository repository,
+  String chatId,
+  bool archived,
+) async {
+  final chat = await repository.getChat(chatId);
+  if (chat == null || chat.archived == archived) return;
+  final all = await repository.listChats();
+  final temporary = {
+    for (final c in [chat, ...all])
+      if (c.temporary) c.id,
+  };
+  for (final changed in gaiaArchivedWithForks(chat, archived, all)) {
+    await repository.upsertChat(
+      temporary.contains(changed.id) && !changed.temporary
+          ? await _readSoFar(repository, changed)
+          : changed,
+    );
+  }
+}
+
+/// [chatId] pinned or unpinned as [gaiaPinned] has it, or pinned to [order]
+/// where that's worked out already. One that was temporary is an ordinary
+/// chat again, read by the curator up to its last message, as
+/// [gaiaSetArchived] has it. Where there's no [GaiaChatStore], as on the
+/// phone.
+Future<void> gaiaSetPinned(
+  GaiaRepository repository,
+  String chatId,
+  bool pinned, {
+  double? order,
+}) async {
+  final chat = await repository.getChat(chatId);
+  if (chat == null || chat.pinned == pinned) return;
+  final changed = pinned && order != null
+      ? chat.copyWith(
+          pinned: true,
+          clearArchivedAt: true,
+          clearTemporaryAt: true,
+          order: order,
+          orderedAt: utcNow(),
+        )
+      : gaiaPinned(chat, pinned, await repository.listChats());
+  await repository.upsertChat(
+    chat.temporary && !changed.temporary
+        ? await _readSoFar(repository, changed)
+        : changed,
+  );
+}
+
+/// [chat] marked read by the curator up to its last message.
+Future<GaiaChat> _readSoFar(GaiaRepository repository, GaiaChat chat) async =>
+    chat.copyWith(
+      curatedSeq: [
+        for (final message in await repository.listMessages(chat.id))
+          message.seq,
+      ].fold<int>(chat.curatedSeq, max),
+    );
 
 /// The companion's chat reads and writes, as the main instance serves them
 /// over the pipe (GAIA_HLD.md §3.2), on top of [GaiaRepository].
@@ -317,30 +383,24 @@ class GaiaChatStore {
   /// to [order] where the sidebar's worked that out already, so it stays
   /// where it showed.
   Future<void> setPinned(String chatId, bool pinned, {double? order}) =>
-      _serial(() async {
-        final chat = await _repository.getChat(chatId);
-        if (chat == null || chat.pinned == pinned) return;
-        await _repository.upsertChat(
-          pinned && order != null
-              ? chat.copyWith(
-                  pinned: true,
-                  clearArchivedAt: true,
-                  order: order,
-                  orderedAt: utcNow(),
-                )
-              : gaiaPinned(chat, pinned, await _repository.listChats()),
-        );
-      });
+      _serial(() => gaiaSetPinned(_repository, chatId, pinned, order: order));
 
   /// Archived or unarchived from Gaia's sidebar, as on the Gaia page.
-  Future<void> setArchived(String chatId, bool archived) => _serial(() async {
-    final chat = await _repository.getChat(chatId);
-    if (chat == null || chat.archived == archived) return;
-    final all = await _repository.listChats();
-    for (final changed in gaiaArchivedWithForks(chat, archived, all)) {
-      await _repository.upsertChat(changed);
-    }
-  });
+  Future<void> setArchived(String chatId, bool archived) =>
+      _serial(() => gaiaSetArchived(_repository, chatId, archived));
+
+  /// Made temporary by `/temp` (GAIA_TEMP_HLD.md §3.1), or an ordinary chat
+  /// again, read by the curator up to its last message (§3.3).
+  Future<void> setTemporary(String chatId, bool temporary) =>
+      _serial(() async {
+        final chat = await _repository.getChat(chatId);
+        if (chat == null || chat.temporary == temporary) return;
+        await _repository.upsertChat(
+          temporary
+              ? gaiaTemporary(chat)
+              : await _readSoFar(_repository, gaiaArchived(chat, false)),
+        );
+      });
 
   /// Dragged in Gaia's sidebar to [order] (`GaiaChat.order`).
   Future<void> reorderChat(String chatId, double order) => _serial(() async {

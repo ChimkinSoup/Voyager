@@ -990,6 +990,32 @@ void main() {
     expect((await repo.getSettings()).memoryAlertAt, 3);
   });
 
+  test('203→204 adds temporary chats, none at first', () async {
+    final seed = AppDatabase(NativeDatabase(file));
+    await DriftGaiaRepository(seed).upsertChat(
+      GaiaChat(
+        id: 'c1',
+        title: 'Plans',
+        createdAt: now,
+        updatedAt: now,
+        lastMessageAt: now,
+      ),
+    );
+    await seed.customStatement(
+      'ALTER TABLE gaia_chats_table DROP COLUMN temporary_at',
+    );
+    await seed.customStatement('PRAGMA user_version = 203');
+    await seed.close();
+
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+    final repo = DriftGaiaRepository(upgraded);
+    final chat = (await repo.getChat('c1'))!;
+    expect(chat.temporaryAt, isNull);
+    await repo.upsertChat(chat.copyWith(temporaryAt: now));
+    expect((await repo.getChat('c1'))!.temporaryAt, now);
+  });
+
   test('197→198 adds your name, none at first', () async {
     final seed = AppDatabase(NativeDatabase(file));
     await DriftGaiaRepository(seed).upsertSettings(GaiaSettings.initial());

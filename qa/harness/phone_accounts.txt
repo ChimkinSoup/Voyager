@@ -3,3 +3,4 @@
 # settings_table.local_owner_uid in <profile>\voyager.sqlite.
 iqdUEDgy1bOtlcW7wEFxpEfh6ih1  # voyager-qa-128@example.com (gaiaqa)
 fSiJzg0VfaXblFWl5CQgqIrRf7O2  # voyager-qa-129@example.com (M0)
+GNz1oPNeuCWFIfVmupXnIwm3tMO2  # voyager-qa-130@example.com (M1, 2026-11-24)

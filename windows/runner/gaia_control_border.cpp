@@ -5,8 +5,10 @@
 #include <shellscalingapi.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdint>
+#include <future>
 #include <utility>
 
 // gdiplus.h wants min and max, which NOMINMAX takes away.
@@ -33,6 +35,14 @@ constexpr int kNotchHeight = 42;
 constexpr int kNotchRim = 2;
 constexpr int kNotchRadius = 16;
 constexpr int kNotchPadding = 14;
+// The thin strip the notch shrinks to while the user's cursor is near it.
+constexpr int kStripHeight = 5;
+constexpr int kNotchReach = 32;
+// Once the notch is open from the strip, how far out the cursor can go and
+// keep it open; once shrunk, how far out it must go for the notch to come
+// back. Wider than kNotchReach, so the cursor near an edge doesn't flip it.
+constexpr int kKeepOpenReach = 40;
+constexpr int kKeepShrunkReach = 80;
 constexpr int kOrbSize = 14;
 constexpr int kGap = 10;
 constexpr int kFontSize = 14;
@@ -250,7 +260,7 @@ float RoundedBox(float x, float y, float left, float top, float right,
 // the pixels, and writes no alpha. Filled as outlines, since GDI+'s own text
 // drawing comes out thinner than Flutter's.
 void DrawLabel(Canvas& canvas, const std::wstring& text, RECT rect,
-               Gdiplus::REAL size, float lift) {
+               Gdiplus::REAL size, float lift, BYTE alpha = 255) {
   Gdiplus::Bitmap bitmap(canvas.width(), canvas.height(), canvas.width() * 4,
                          PixelFormat32bppPARGB,
                          reinterpret_cast<BYTE*>(canvas.pixels()));
@@ -262,7 +272,7 @@ void DrawLabel(Canvas& canvas, const std::wstring& text, RECT rect,
   format.SetLineAlignment(Gdiplus::StringAlignmentCenter);
   format.SetTrimming(Gdiplus::StringTrimmingEllipsisCharacter);
   format.SetFormatFlags(Gdiplus::StringFormatFlagsNoWrap);
-  const Gdiplus::SolidBrush brush(Gdiplus::Color(255, kTextLevel, kTextLevel, kTextLevel));
+  const Gdiplus::SolidBrush brush(Gdiplus::Color(alpha, kTextLevel, kTextLevel, kTextLevel));
   const Gdiplus::RectF box(static_cast<Gdiplus::REAL>(rect.left),
                            rect.top - lift * size,
                            static_cast<Gdiplus::REAL>(rect.right - rect.left),
@@ -1310,6 +1320,46 @@ void ShowOnTop(HWND window) {
 
 }  // namespace
 
+// The user's cursor, for the notch (GaiaControlBorder::FollowCursor).
+constexpr UINT kCursorMoved = WM_APP + 1;
+// The notch shrinking or opening, over kOpenTime ms.
+constexpr UINT_PTR kNotchTimer = 1;
+constexpr float kOpenTime = 160;
+std::atomic<HWND> g_notch{nullptr};
+std::atomic<LONG> g_cursor_x{0};
+std::atomic<LONG> g_cursor_y{0};
+// A kCursorMoved is on its way, so the hook needn't post another.
+std::atomic<bool> g_cursor_posted{false};
+
+// Only the user's moves: Gaia's are injected.
+LRESULT CALLBACK CursorProc(int code, WPARAM wparam, LPARAM lparam) {
+  const auto* mouse = reinterpret_cast<MSLLHOOKSTRUCT*>(lparam);
+  if (code == HC_ACTION && wparam == WM_MOUSEMOVE &&
+      !(mouse->flags & LLMHF_INJECTED)) {
+    g_cursor_x.store(mouse->pt.x);
+    g_cursor_y.store(mouse->pt.y);
+    HWND notch = g_notch.load();
+    if (notch && !g_cursor_posted.exchange(true)) {
+      ::PostMessage(notch, kCursorMoved, 0, 0);
+    }
+  }
+  return ::CallNextHookEx(nullptr, code, wparam, lparam);
+}
+
+// Low-level hooks run on the thread that set them, while it waits for
+// messages, so this one gets a thread that does nothing else.
+void WatchCursor(std::promise<void> ready) {
+  MSG msg;
+  // Makes this thread's queue, for the WM_QUIT that ends it.
+  ::PeekMessage(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+  HHOOK hook = ::SetWindowsHookEx(WH_MOUSE_LL, CursorProc,
+                                  ::GetModuleHandle(nullptr), 0);
+  ready.set_value();
+  while (::GetMessage(&msg, nullptr, 0, 0) > 0) {
+  }
+  if (hook) ::UnhookWindowsHookEx(hook);
+}
+
 GaiaControlBorder::GaiaControlBorder(std::function<void()> on_revoke)
     : on_revoke_(std::move(on_revoke)) {}
 
@@ -1335,6 +1385,7 @@ void GaiaControlBorder::Show(const std::wstring& label, unsigned int accent,
   }
   const RECT& bounds = info.rcMonitor;
   const POINT at = {LayoutNotch(notch_monitor_, bounds), bounds.top};
+  notch_at_ = at;
   // Resized, moved and repainted in one update, so it never shows torn.
   PaintNotch(&at);
   ::SetWindowPos(button_window_, nullptr, at.x + button_.left,
@@ -1343,6 +1394,15 @@ void GaiaControlBorder::Show(const std::wstring& label, unsigned int accent,
 }
 
 void GaiaControlBorder::Hide() {
+  g_notch.store(nullptr);
+  if (cursor_watch_.joinable()) {
+    ::PostThreadMessage(::GetThreadId(cursor_watch_.native_handle()), WM_QUIT,
+                        0, 0);
+    cursor_watch_.join();
+  }
+  collapsed_ = false;
+  revealed_ = false;
+  open_ = 1;
   notch_ = nullptr;
   button_window_ = nullptr;
   hover_ = false;
@@ -1365,6 +1425,13 @@ void GaiaControlBorder::Rebuild() {
   ::EnumDisplayMonitors(nullptr, nullptr, AddMonitor,
                         reinterpret_cast<LPARAM>(this));
   for (HWND window : windows_) ::ShowWindow(window, SW_SHOWNOACTIVATE);
+  if (!notch_) return;
+  g_cursor_posted.store(false);
+  g_notch.store(notch_);
+  std::promise<void> ready;
+  auto started = ready.get_future();
+  cursor_watch_ = std::thread(WatchCursor, std::move(ready));
+  started.wait();
 }
 
 BOOL CALLBACK GaiaControlBorder::AddMonitor(HMONITOR monitor, HDC, LPRECT,
@@ -1429,6 +1496,7 @@ void GaiaControlBorder::AddNotch(HMONITOR monitor, const RECT& bounds) {
   const int left = LayoutNotch(monitor, bounds);
   const int button_width = button_.right - button_.left;
   const int button_height = button_.bottom - button_.top;
+  notch_at_ = {left, bounds.top};
   notch_ = AddWindow(left, bounds.top, notch_size_.cx, notch_size_.cy, false);
   if (notch_) PaintNotch();
   // The notch's clicks pass through, so the button is a window of its own, over
@@ -1444,14 +1512,21 @@ void GaiaControlBorder::AddNotch(HMONITOR monitor, const RECT& bounds) {
 
 void GaiaControlBorder::PaintNotch(const POINT* at) {
   const int width = notch_size_.cx;
-  const int height = notch_size_.cy;
+  // From the strip, at |open_| 0, to the whole notch at 1.
+  const int strip = Scaled(kStripHeight, notch_monitor_);
+  const int height =
+      strip + static_cast<int>(std::lround((notch_size_.cy - strip) * open_));
   Canvas canvas(width, height);
   if (!canvas.ok()) return;
   const HMONITOR monitor = notch_monitor_;
   const Color accent = FromRgb(accent_);
   const float w = static_cast<float>(width);
   const float h = static_cast<float>(height);
-  const float radius = static_cast<float>(Scaled(kNotchRadius, monitor));
+  const float radius =
+      std::min(h, static_cast<float>(Scaled(kNotchRadius, monitor)));
+  // The contents fade out in the first half of shrinking, in where they are
+  // in the whole notch, which the bitmap's bottom cuts off.
+  const float contents = Clamp01(open_ * 2 - 1);
 
   const Color fill = GaiaFill(accent);
   // GaiaButton's ring with its light held still at the top; on hover, the whole
@@ -1471,7 +1546,7 @@ void GaiaControlBorder::PaintNotch(const POINT* at) {
   const Color light_color = hover_ ? Saturated(accent) : Mix(accent, kWhite, 0.5f);
   const float orb_size = static_cast<float>(Scaled(kOrbSize, monitor));
   const float orb_x = Scaled(kNotchPadding, monitor) + orb_size / 2;
-  const float orb_y = (h - kNotchRim) / 2;
+  const float orb_y = (notch_size_.cy - kNotchRim) / 2.0f;
 
   for (int y = 0; y < height; ++y) {
     for (int x = 0; x < width; ++x) {
@@ -1491,31 +1566,36 @@ void GaiaControlBorder::PaintNotch(const POINT* at) {
         FamilyContour(canvas, x, y, box + 1, px + py, w / width,
                       accent, style_, inside * 0.85f);
       }
+      if (contents <= 0) continue;
       // The orb: a white core in the accent's halo, ringed with gold.
       const float orb = std::hypot(px - orb_x, py - orb_y) / (orb_size / 2);
-      canvas.Blend(x, y, accent, Clamp01(1.6f - orb) * 0.28f);
+      canvas.Blend(x, y, accent, Clamp01(1.6f - orb) * 0.28f * contents);
       canvas.Blend(x, y, Mix(accent, kWhite, 0.72f),
-                   Clamp01((0.62f - orb) * orb_size / 2));
+                   Clamp01((0.62f - orb) * orb_size / 2) * contents);
       canvas.Blend(x, y, kGold,
-                   Clamp01(1 - std::abs(orb - 0.95f) * orb_size / 2) * 0.9f);
+                   Clamp01(1 - std::abs(orb - 0.95f) * orb_size / 2) * 0.9f *
+                       contents);
       // The button.
       const float button = RoundedBox(px, py, button_left, button_top,
                                       button_right, button_bottom, button_radius);
       if (button >= 0.5f) continue;
-      const float in_button = Clamp01(0.5f - button);
+      const float in_button = Clamp01(0.5f - button) * contents;
       canvas.Blend(x, y, kWhite, in_button * 0.1f);
       const float light = std::hypot((px - light_x) / light_rx,
                                      (py - button_top) / button_h);
       canvas.Blend(x, y, light_color,
                    in_button * (hover_ ? 1 : 0.6f * Clamp01(1 - light)));
       // Covers all but the ring.
-      canvas.Blend(x, y, fill, Clamp01(0.5f - button - ring_width));
+      canvas.Blend(x, y, fill, Clamp01(0.5f - button - ring_width) * contents);
     }
   }
 
-  DrawLabel(canvas, label_, label_rect_, TextSize(monitor), kTextLift);
-  DrawLabel(canvas, kButtonText, button_, TextSize(monitor),
-            kButtonTextLift);
+  if (contents > 0) {
+    const auto alpha = static_cast<BYTE>(contents * 255);
+    DrawLabel(canvas, label_, label_rect_, TextSize(monitor), kTextLift, alpha);
+    DrawLabel(canvas, kButtonText, button_, TextSize(monitor),
+              kButtonTextLift, alpha);
+  }
   if (at) {
     canvas.PresentAt(notch_, *at, 255);
   } else {
@@ -1528,6 +1608,59 @@ void GaiaControlBorder::SetButtonState(bool hover, bool pressed) {
   hover_ = hover;
   pressed_ = pressed;
   PaintNotch();
+}
+
+void GaiaControlBorder::FollowCursor(POINT cursor) {
+  // The hook sees a move before Windows holds it to the screen, so pushed
+  // past the top edge, the point is above it.
+  if (!::MonitorFromPoint(cursor, MONITOR_DEFAULTTONULL)) {
+    MONITORINFO info = {sizeof(info)};
+    if (::GetMonitorInfo(::MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST),
+                         &info)) {
+      cursor.x = std::clamp(cursor.x, info.rcMonitor.left,
+                            info.rcMonitor.right - 1);
+      cursor.y = std::clamp(cursor.y, info.rcMonitor.top,
+                            info.rcMonitor.bottom - 1);
+    }
+  }
+  const RECT notch = {notch_at_.x, notch_at_.y, notch_at_.x + notch_size_.cx,
+                      notch_at_.y + notch_size_.cy};
+  // Pushed into the strip at the top of the screen, as an auto-hidden
+  // taskbar is, it opens until the cursor goes kKeepOpenReach past it.
+  const bool at_strip =
+      ::PtInRect(&notch, cursor) &&
+      cursor.y < notch.top + Scaled(kStripHeight, notch_monitor_);
+  RECT keep_open = notch;
+  const int keep = Scaled(kKeepOpenReach, notch_monitor_);
+  ::InflateRect(&keep_open, keep, keep);
+  revealed_ = at_strip || (revealed_ && ::PtInRect(&keep_open, cursor));
+  RECT near_notch = notch;
+  const int reach = Scaled(collapsed_ ? kKeepShrunkReach : kNotchReach,
+                           notch_monitor_);
+  ::InflateRect(&near_notch, reach, reach);
+  const bool collapsed = ::PtInRect(&near_notch, cursor) && !revealed_;
+  if (collapsed == collapsed_) return;
+  collapsed_ = collapsed;
+  open_from_ = open_;
+  open_start_ = ::GetTickCount64();
+  if (collapsed_) {
+    hover_ = false;
+    pressed_ = false;
+    ::ShowWindow(button_window_, SW_HIDE);
+  }
+  ::SetTimer(notch_, kNotchTimer, 15, nullptr);
+  StepOpen();
+}
+
+void GaiaControlBorder::StepOpen() {
+  const float to = collapsed_ ? 0.0f : 1.0f;
+  const float t = (::GetTickCount64() - open_start_) / kOpenTime;
+  open_ = open_from_ + (to - open_from_) * Ease(t);
+  PaintNotch();
+  if (t < 1) return;
+  ::KillTimer(notch_, kNotchTimer);
+  // The button takes clicks only once the notch is whole again.
+  if (!collapsed_) ::ShowWindow(button_window_, SW_SHOWNOACTIVATE);
 }
 
 HWND GaiaControlBorder::AddWindow(int left, int top, int width, int height,
@@ -1594,6 +1727,17 @@ LRESULT CALLBACK GaiaControlBorder::WindowProc(HWND hwnd, UINT message,
       return 0;
     case WM_APP:
       if (self) self->Rebuild();
+      return 0;
+    case WM_TIMER:
+      if (self && hwnd == self->notch_ && wparam == kNotchTimer) {
+        self->StepOpen();
+      }
+      return 0;
+    case kCursorMoved:
+      g_cursor_posted.store(false);
+      if (self && hwnd == self->notch_) {
+        self->FollowCursor({g_cursor_x.load(), g_cursor_y.load()});
+      }
       return 0;
   }
   return ::DefWindowProc(hwnd, message, wparam, lparam);
