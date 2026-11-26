@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
+import 'package:voyager/features/gaia/companion/gaia_controls.dart';
 import 'package:voyager/features/gaia/companion/gaia_image_render.dart';
 import 'package:voyager/features/gaia/companion/gaia_spinner.dart';
 
@@ -19,10 +20,10 @@ Future<GaiaImageEdits?> showGaiaImageEditor(
   required GaiaImageEdits edits,
 }) => showDialog<GaiaImageEdits>(
   context: context,
-  builder: (context) => Dialog(
+  builder: (context) => GaiaDialog(
     insetPadding: const EdgeInsets.all(12),
-    clipBehavior: Clip.antiAlias,
-    child: _Editor(path: path, label: label, edits: edits),
+    maxWidth: double.infinity,
+    content: _Editor(path: path, label: label, edits: edits),
   ),
 );
 

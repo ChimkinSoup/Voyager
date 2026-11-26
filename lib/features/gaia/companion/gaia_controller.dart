@@ -1292,6 +1292,15 @@ class GaiaController extends ChangeNotifier {
   Stream<GaiaRunToast> get toasts => _toasts.stream;
   final _toasts = StreamController<GaiaRunToast>.broadcast();
 
+  /// A toast with an Undo button: `/remember`'s "Updated"
+  /// (GAIA_MEMORY_TOPICS_HLD.md §27.3).
+  Stream<({GaiaRunToast toast, Future<void> Function() undo})> get undoToasts =>
+      _undoToasts.stream;
+  final _undoToasts =
+      StreamController<
+        ({GaiaRunToast toast, Future<void> Function() undo})
+      >.broadcast();
+
   /// A side question's toast (§14), which opens it when clicked.
   Stream<({GaiaRunToast toast, String btwId})> get btwToasts =>
       _btwToasts.stream;
@@ -1543,6 +1552,10 @@ class GaiaController extends ChangeNotifier {
   final _cutOff = <String>{};
 
   bool cutOff(String messageId) => _cutOff.contains(messageId);
+
+  /// Each running turn's context so far ([GaiaContextUpdate]), by chat id:
+  /// shown until the turn's reply says its own. Not saved.
+  final _liveContext = <String, GaiaContextUpdate>{};
 
   /// Chats this device ran a turn in, each curated once it's been idle for
   /// [kGaiaCurateAfter] (§11).
@@ -1869,6 +1882,21 @@ class GaiaController extends ChangeNotifier {
         gaiaTopicLinesFromJson(await _pipe.request('memoryTopics')),
       );
       if (placement == null) return null;
+      return await _placed(memoryId, placement, proposal: proposal);
+    } on GaiaPipeException catch (error) {
+      debugPrint('[gaia] memory placement: $error');
+      return null;
+    }
+  }
+
+  /// [placement] applied to memory [memoryId], as [_place] does; the save
+  /// check's (GAIA_MEMORY_TOPICS_HLD.md §27.3) needs no call of its own.
+  Future<bool?> _placed(
+    String memoryId,
+    GaiaPlacement placement, {
+    bool proposal = false,
+  }) async {
+    try {
       final filing = await _pipe.request('placedMemory', {
         'memoryId': memoryId,
         'placement': gaiaPlacementToJson(placement),
@@ -1901,6 +1929,54 @@ class GaiaController extends ChangeNotifier {
       return null;
     }
   }
+
+  /// The save check for new memory [text] (GAIA_MEMORY_TOPICS_HLD.md
+  /// §27.3): the active memories nearest it, then one utility call saying
+  /// whether it's new, said already, or an update, and with [place], where
+  /// it's filed. Null with nothing near, or when the call failed: it's
+  /// saved as it would be with no check. [byUser] for `/remember`.
+  Future<GaiaSaveCheck?> _saveCheck(
+    String text, {
+    bool place = false,
+    bool byUser = false,
+  }) async {
+    final utility = _utility;
+    if (utility == null) return null;
+    try {
+      final near = [
+        for (final memory
+            in (await _pipe.request('memoryNear', {
+                      'text': text,
+                      if (byUser) 'byUser': true,
+                    }))
+                    as List? ??
+                const [])
+          if (memory case {'id': final String id, 'text': final String text})
+            (id: id, text: text),
+      ];
+      if (near.isEmpty) return null;
+      return await utility.check(
+        text,
+        near,
+        topics: place
+            ? gaiaTopicLinesFromJson(await _pipe.request('memoryTopics'))
+            : null,
+      );
+    } on GaiaPipeException catch (error) {
+      debugPrint('[gaia] memory save check: $error');
+      return null;
+    }
+  }
+
+  /// "Update this?" accepted from the inbox (GAIA_MEMORY_TOPICS_HLD.md
+  /// §27.3): proposal [id]'s text written into the memory it updates, and
+  /// the proposal gone. Both as they were, to put back on Undo. Throws a
+  /// [GaiaPipeException] saying why it couldn't.
+  Future<List<GaiaMemory>> updateMemory(String id) async => [
+    for (final memory
+        in await writeMemories('updateMemory', {'memoryId': id}) as List)
+      gaiaMemoryFromJson(memory! as Map),
+  ];
 
   /// The memory cards whose answer is on its way to the host, by memory id.
   final _decidingMemories = <String>{};
@@ -1967,6 +2043,54 @@ class GaiaController extends ChangeNotifier {
     return !accept && state == GaiaCardState.rejected;
   }
 
+  /// "Update this?" from memory card [memory] (GAIA_MEMORY_TOPICS_HLD.md
+  /// §27.3): its edit saved, then the memory it updates takes its text, and
+  /// the card says so. How to undo it; null when it was refused, which a
+  /// toast says (a pin over the budget, the memory gone).
+  Future<Future<void> Function()?> updateMemoryCard(
+    GaiaMessage message,
+    GaiaMemoryPart memory,
+  ) async {
+    if (!_decidingMemories.add(memory.memoryId)) return null;
+    final text = memoryText(memory).trim();
+    final List<GaiaMemory> was;
+    try {
+      if (text != memory.text) {
+        await _pipe.request('editMemory', {
+          'memoryId': memory.memoryId,
+          'text': text,
+        });
+      }
+      was = await updateMemory(memory.memoryId);
+    } on GaiaPipeException catch (error) {
+      _note("Couldn't update that memory", error.message, error: true);
+      return null;
+    } finally {
+      _decidingMemories.remove(memory.memoryId);
+    }
+    _memoryEdits.remove(memory.memoryId);
+    _topicEdits.remove(memory.memoryId);
+    _newTopicEdits.remove(memory.memoryId);
+    _filings.remove(memory.memoryId);
+    _filingAsked.remove(memory.memoryId);
+    _showMemoryCard(
+      message,
+      memory,
+      GaiaCardState.accepted,
+      text,
+      updated: true,
+    );
+    return () async {
+      try {
+        await revertMemories(memories: was);
+      } on GaiaPipeException catch (error) {
+        _note("Couldn't undo it", error.message, error: true);
+        return;
+      }
+      _showMemoryCard(message, memory, GaiaCardState.open, text);
+    };
+  }
+
   /// Memory [id] shown in the settings panel's Memories tab, from the recall
   /// chip (GAIA_SETTINGS_HLD.md §2.1): in the Gaia window, from a floater.
   Future<void> openMemory(String id) async {
@@ -1980,24 +2104,25 @@ class GaiaController extends ChangeNotifier {
     await openPanel(tab: GaiaPanelTab.memories);
   }
 
-  /// Revision card [revision] in [message] applied as [text] says, or
-  /// dismissed (GAIA_SETTINGS_HLD.md §7.4): the memory changed, and the card
+  /// Revision card [revision] in [message] applied as [text] says, with the
+  /// topic changes [topics] kept (all it offers when null), or dismissed
+  /// (GAIA_SETTINGS_HLD.md §7.4, §7.5): the memory changed, and the card
   /// saying so. False, with a toast saying why, for one refused.
   Future<bool> decideRevision(
     GaiaMessage message,
     GaiaRevisionPart revision, {
     required bool accept,
     String? text,
+    List<GaiaTopicChange>? topics,
   }) async {
-    final said = (text ?? revision.text).trim();
     try {
-      await _pipe.request('reviseMemory', {
-        'chatId': message.chatId,
-        'cardId': revision.id,
-        'memoryId': revision.memoryId,
-        'text': said,
-        'accept': accept,
-      });
+      await reviseMemory(
+        message,
+        revision,
+        accept: accept,
+        text: text,
+        topics: topics,
+      );
     } on GaiaPipeException catch (error) {
       _note(
         accept ? 'Not applied' : 'Not dismissed',
@@ -2006,27 +2131,106 @@ class GaiaController extends ChangeNotifier {
       );
       return false;
     }
-    final shown = _shown(message);
-    if (shown != null) {
-      final decided = revision.decided(
-        accept ? GaiaCardState.accepted : GaiaCardState.rejected,
-        text: said,
-      );
-      _replace(
-        shown,
-        shown.copyWith(
-          parts: [
-            for (final p in shown.parts)
-              p is GaiaRevisionPart && p.id == revision.id ? decided : p,
-          ],
-          bumpVersion: false,
-          touch: false,
-        ),
+    return true;
+  }
+
+  /// [decideRevision]'s write, throwing a [GaiaPipeException] for one
+  /// refused, for the review's R (§7.5). The topics it made, to delete on
+  /// undo.
+  Future<List<String>> reviseMemory(
+    GaiaMessage message,
+    GaiaRevisionPart revision, {
+    required bool accept,
+    String? text,
+    List<GaiaTopicChange>? topics,
+  }) async {
+    final said = (text ?? revision.text).trim();
+    final kept = topics ?? revision.topics;
+    final answer =
+        ((await _pipe.request('reviseMemory', {
+              'chatId': message.chatId,
+              'cardId': revision.id,
+              'memoryId': revision.memoryId,
+              'text': said,
+              'topics': [for (final change in kept) change.toJson()],
+              'accept': accept,
+            })
+            as Map?) ??
+        const {});
+    final skipped = (answer['skipped'] as List? ?? const []).cast<String>();
+    if (skipped.isNotEmpty) {
+      _note(
+        'Partly applied',
+        '${skipped.join(', ')} ${skipped.length == 1 ? 'is' : 'are'} gone '
+            'since Gaia offered it; the rest was applied.',
+        error: true,
       );
     }
+    _showRevision(
+      message,
+      revision.decided(
+        accept ? GaiaCardState.accepted : GaiaCardState.rejected,
+        text: said,
+        topics: accept
+            ? [
+                for (final change in kept)
+                  if (!skipped.contains(change.path)) change,
+              ]
+            : null,
+      ),
+    );
     // The card above an Ask Gaia chat says it at once.
     if (accept && memoryList != null) await _loadMemories();
-    return true;
+    return (answer['made'] as List? ?? const []).cast<String>();
+  }
+
+  /// Revision card [revision] in [message] open again as offered: the
+  /// review's undo of R (§7.5).
+  Future<void> reopenRevision(
+    GaiaMessage message,
+    GaiaRevisionPart revision,
+  ) async {
+    await _pipe.request('reopenRevision', {
+      'chatId': message.chatId,
+      'cardId': revision.id,
+      'text': revision.text,
+      'topics': [for (final change in revision.topics) change.toJson()],
+    });
+    _showRevision(message, revision);
+  }
+
+  /// [revision] in place of the card of its id in [message] as shown.
+  void _showRevision(GaiaMessage message, GaiaRevisionPart revision) {
+    final shown = _shown(message);
+    if (shown == null) return;
+    _replace(
+      shown,
+      shown.copyWith(
+        parts: [
+          for (final p in shown.parts)
+            p is GaiaRevisionPart && p.id == revision.id ? revision : p,
+        ],
+        bumpVersion: false,
+        touch: false,
+      ),
+    );
+  }
+
+  /// The latest open revision card for memory [memoryId] in its Ask Gaia
+  /// chat, with its message, for the review's R (§7.5); null for none.
+  (GaiaMessage, GaiaRevisionPart)? openRevision(String memoryId) {
+    final chatId = _askChats[memoryId];
+    for (final message
+        in (_messages[chatId] ?? const <GaiaMessage>[]).reversed) {
+      for (final part in message.parts.reversed) {
+        if (part is GaiaRevisionPart &&
+            part.isOpen &&
+            part.memoryId == memoryId) {
+          return (message, part);
+        }
+      }
+    }
+    return null;
   }
 
   /// The memory whose Ask Gaia chat the settings panel shows
@@ -2191,11 +2395,12 @@ class GaiaController extends ChangeNotifier {
     GaiaMessage message,
     GaiaMemoryPart memory,
     GaiaCardState state,
-    String text,
-  ) {
+    String text, {
+    bool updated = false,
+  }) {
     final shown = _shown(message);
     if (shown == null) return;
-    final part = memory.decided(state, text: text);
+    final part = memory.decided(state, text: text, updated: updated);
     _replace(
       shown,
       shown.copyWith(
@@ -2933,11 +3138,15 @@ class GaiaController extends ChangeNotifier {
       .where((message) => message.contextTokens != null)
       .firstOrNull;
 
-  /// The current chat's context at [_contextReply].
-  int? get contextTokens => _contextReply?.contextTokens;
+  /// The current chat's context: its running turn's so far, or else at
+  /// [_contextReply].
+  int? get contextTokens =>
+      _liveContext[currentChatId]?.tokens ?? _contextReply?.contextTokens;
 
-  /// The window [contextTokens] fills: its reply's model's.
-  int? get contextWindow => _contextReply?.contextWindow;
+  /// The window [contextTokens] fills: its reply's model's, or the last
+  /// reply's while a running turn's backend hasn't said.
+  int? get contextWindow =>
+      _liveContext[currentChatId]?.window ?? _contextReply?.contextWindow;
 
   /// Whether switching the current chat to [tier] needs the user's yes
   /// (§7.5): after the chat's first reply, a change to a tier or account
@@ -5365,8 +5574,17 @@ class GaiaController extends ChangeNotifier {
   /// with it.
   Future<void> runBuiltin(GaiaBuiltin builtin) async {
     switch (builtin) {
+      // An Ask Gaia chat is about the card in front, so it stays (§7.1).
       case GaiaBuiltin.newChat:
-        moveDraftToNewChat();
+        if (asking != null) {
+          _note(
+            'Not in an Ask Gaia chat',
+            "This chat is about the memory in front of you. Esc goes back to "
+                'the deck.',
+          );
+        } else {
+          moveDraftToNewChat();
+        }
       case GaiaBuiltin.stop:
         if (currentChatId case final chatId?) await stop(chatId);
       case GaiaBuiltin.remember:
@@ -6569,6 +6787,8 @@ class GaiaController extends ChangeNotifier {
       return toast('Nothing to remember', 'Type it after /remember.');
     }
     try {
+      // Said already, or a correction, which is applied at once (§27.3).
+      final check = await _saveCheck(body, place: true, byUser: true);
       final reply =
           (await _pipe.request('remember', {
                 'chatId': currentChatId,
@@ -6576,11 +6796,59 @@ class GaiaController extends ChangeNotifier {
                 'text': body,
                 'global': global,
                 if (pin) 'pin': true,
+                'same': ?check?.sameId,
+                'replaces': ?check?.replacesId,
               }))!
               as Map;
       // In Unsorted, or its project's topic, until this returns.
       if (reply['memoryId'] case final String memoryId) {
-        unawaited(_place(memoryId, body));
+        final placement = check?.placement;
+        unawaited(
+          placement != null
+              ? _placed(memoryId, placement)
+              : _place(memoryId, body),
+        );
+      }
+      if (reply['updated'] case final Map updated) {
+        final was = gaiaMemoryFromJson(updated);
+        _undoToasts.add((
+          toast: (
+            chatId: '',
+            title:
+                // "and pinned" only when the pin changed.
+                (pin && reply['pinFailed'] == null && !was.pinned
+                    ? 'Updated and pinned'
+                    : 'Updated') +
+                switch (reply['elsewhere']) {
+                  'global' => ' (global memory)',
+                  'project' => ' (project memory)',
+                  _ => '',
+                },
+            body: was.text,
+            error: false,
+            question: false,
+          ),
+          undo: () async {
+            try {
+              await revertMemories(memories: [was]);
+            } on GaiaPipeException catch (error) {
+              _note("Couldn't undo it", error.message, error: true);
+            }
+          },
+        ));
+        if (reply['pinFailed'] case final String why) {
+          toast('Updated, not pinned', why, error: true);
+        }
+        return;
+      }
+      if (reply['same'] case final String same) {
+        if (reply['pinFailed'] case final String why) {
+          return toast('Not pinned', why, error: true);
+        }
+        return toast(
+          pin ? 'Already remembered, now pinned' : 'Already remembered',
+          same,
+        );
       }
       if (reply['pinFailed'] case final String why) {
         toast(
@@ -7373,6 +7641,9 @@ class GaiaController extends ChangeNotifier {
     // messages attached to it (§9.3).
     // Its files' paths after it (§9.3).
     final askedText = [
+      // Never ahead of a command of the CLI's own, which it would read as text.
+      if (native == null)
+        ?gaiaAccessPreamble((_chat(chatId) ?? chat).grants[_deviceId]),
       ?context?.preamble,
       ?control?.preamble,
       for (final quote in quotes) quote.preamble,
@@ -7534,6 +7805,10 @@ class GaiaController extends ChangeNotifier {
         _usageCheckedAt[account.key] = DateTime.now();
         _usageChanged();
       }
+      if (event is GaiaContextUpdate) {
+        _liveContext[chatId] = event;
+        notifyListeners();
+      }
       if (event is GaiaRetrying) {
         _retrying[reply.id] = (
           retry: event,
@@ -7603,10 +7878,23 @@ class GaiaController extends ChangeNotifier {
           // Saved in the inbox, with a card in the reply that takes the
           // user's edit and answer without holding up the turn (§11).
           if (tool == 'memory_propose') {
+            // Said already, or an update to a kept one (§27.3); filed by the
+            // same call when the agent named no topics.
+            final check = await _saveCheck(
+              arguments['text'] as String? ?? '',
+              place: switch (arguments['topics']) {
+                final List topics => !topics.any(
+                  (topic) => topic is String && topic.trim().isNotEmpty,
+                ),
+                _ => true,
+              },
+            );
             final proposed =
                 ((await _pipe.request('proposeMemory', {
                           'arguments': arguments,
                           'chatId': chatId,
+                          'same': ?check?.sameId,
+                          'replaces': ?check?.replacesId,
                         }))!
                         as Map)
                     .cast<String, Object?>();
@@ -7617,6 +7905,7 @@ class GaiaController extends ChangeNotifier {
                     memoryId: memoryId,
                     text: proposed['memoryText']! as String,
                     project: proposed['project'] == true,
+                    was: proposed['was'] as String?,
                   ),
                 ),
               );
@@ -7628,13 +7917,16 @@ class GaiaController extends ChangeNotifier {
               }
               // The agent named no topics: the utility model files it, and
               // its card shows where (GAIA_MEMORY_TOPICS_HLD.md §5).
+              final placement = check?.placement;
               if (proposed['place'] == true) {
                 unawaited(
-                  _place(
-                    memoryId,
-                    proposed['memoryText']! as String,
-                    proposal: true,
-                  ),
+                  placement != null
+                      ? _placed(memoryId, placement, proposal: true)
+                      : _place(
+                          memoryId,
+                          proposed['memoryText']! as String,
+                          proposal: true,
+                        ),
                 );
               }
             }
@@ -7645,10 +7937,15 @@ class GaiaController extends ChangeNotifier {
           if (tool == 'memory_revise') {
             final offer =
                 ((await _pipe.request('offerRevision', {
+                          'chatId': chatId,
                           'arguments': arguments,
                         }))!
                         as Map)
                     .cast<String, Object?>();
+            final topics = [
+              for (final change in offer['topics'] as List? ?? const [])
+                GaiaTopicChange.fromJson((change! as Map).cast()),
+            ];
             onEvent(
               GaiaMemoryOffered(
                 GaiaRevisionPart(
@@ -7657,11 +7954,16 @@ class GaiaController extends ChangeNotifier {
                   was: offer['was']! as String,
                   text: offer['text']! as String,
                   why: offer['why'] as String?,
+                  topics: topics,
+                  had: offer['had'] as int?,
                 ),
               ),
             );
-            return 'Offered. A card in the chat shows the user the old text '
-                "and yours; the memory changes only if they apply it.";
+            return topics.isEmpty
+                ? 'Offered. A card in the chat shows the user the old text '
+                      "and yours; the memory changes only if they apply it."
+                : 'Offered. A card in the chat shows the user the change; '
+                      'the memory changes only if they apply it.';
           }
           return await _pipe.request(
                 isGaiaMemoryTool(tool)
@@ -8088,6 +8390,7 @@ class GaiaController extends ChangeNotifier {
       _lastPersist.remove(reply.id);
       _retrying.remove(reply.id);
       _cutOff.remove(reply.id);
+      _liveContext.remove(chatId);
       _reportRuns();
       notifyListeners();
     }
@@ -8475,6 +8778,7 @@ class GaiaController extends ChangeNotifier {
       transcript,
       context['kept'] as String? ?? '',
       gaiaTopicLinesFromJson(context['topics']),
+      [...?(context['ids'] as List?)?.cast<String>()],
     );
     // Sent again meanwhile: its next idle reads these turns too.
     if (found == null || _running.contains(chatId)) return;
@@ -8492,6 +8796,7 @@ class GaiaController extends ChangeNotifier {
               'topicIds': memory.topicIds,
               'suggested': gaiaSuggestedTopicToJson(memory.suggested),
               if (memory.pin) 'pin': true,
+              'replacesId': ?memory.replacesId,
             },
         ],
       });

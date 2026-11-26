@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -9,9 +8,6 @@ import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
 import 'package:voyager/features/gaia/companion/gaia_pinned_prompt.dart';
 import 'package:voyager/features/gaia/companion/gaia_style.dart';
-
-/// The light's pace around the ring, as [GaiaButton]'s: a turn every 16s.
-const _spin = math.pi / 8;
 
 const _radius = GaiaRadius.row;
 
@@ -40,16 +36,18 @@ enum GaiaToastMark {
   final String label;
 }
 
-/// Shows a toast over Gaia's content, below the header: [GaiaButton]'s
-/// ring and circling light around a [mark], a [title] and a [body]. One at
+/// Shows a toast over Gaia's content, below the header: Gaia's frosted
+/// shell, as its menus have, around a [mark], a [title] and a [body]. One at
 /// a time, so a new one replaces the last. It goes after a few seconds
-/// unless the cursor is on it; a click dismisses it, after [onTap].
+/// unless the cursor is on it; a click dismisses it, after [onTap]. With
+/// [onUndo], it has an Undo button, which dismisses it too.
 void showGaiaToast(
   BuildContext context, {
   required String title,
   required String body,
   required GaiaToastMark mark,
   VoidCallback? onTap,
+  VoidCallback? onUndo,
 }) {
   _current?.remove();
   late final OverlayEntry entry;
@@ -59,6 +57,7 @@ void showGaiaToast(
       body: body,
       mark: mark,
       onTap: onTap,
+      onUndo: onUndo,
       onGone: () {
         if (_current != entry) return;
         _current = null;
@@ -76,6 +75,7 @@ class _GaiaToast extends StatefulWidget {
     required this.body,
     required this.mark,
     required this.onTap,
+    required this.onUndo,
     required this.onGone,
   });
 
@@ -83,6 +83,7 @@ class _GaiaToast extends StatefulWidget {
   final String body;
   final GaiaToastMark mark;
   final VoidCallback? onTap;
+  final VoidCallback? onUndo;
   final VoidCallback onGone;
 
   @override
@@ -95,18 +96,8 @@ class _GaiaToastState extends State<_GaiaToast> with TickerProviderStateMixin {
     duration: const Duration(milliseconds: 220),
     reverseDuration: const Duration(milliseconds: 160),
   );
-  late final _hover = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 500),
-  );
-
-  /// As [GaiaButton]'s light: clockwise from the right, starting at the top.
-  final _angle = ValueNotifier(-math.pi / 2);
   late final Ticker _ticker;
-  var _lastTick = Duration.zero;
-
-  /// The cursor over the toast, in its coordinates.
-  Offset? _cursor;
+  var _hovered = false;
   Timer? _dwellTimer;
   var _leaving = false;
 
@@ -128,15 +119,10 @@ class _GaiaToastState extends State<_GaiaToast> with TickerProviderStateMixin {
     _dwellTimer?.cancel();
     _ticker.dispose();
     _shown.dispose();
-    _hover.dispose();
-    _angle.dispose();
     super.dispose();
   }
 
   void _tick(Duration elapsed) {
-    final dt = (elapsed - _lastTick).inMicroseconds / 1e6;
-    _lastTick = elapsed;
-    _angle.value += _spin * dt;
     final left = gaiaToastLeft.value;
     if (left != _left) setState(() => _left = left);
   }
@@ -151,8 +137,6 @@ class _GaiaToastState extends State<_GaiaToast> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
     final curve = CurvedAnimation(parent: _shown, curve: Curves.easeOutCubic);
     final toast = Padding(
       padding: EdgeInsets.only(left: _left),
@@ -168,12 +152,10 @@ class _GaiaToastState extends State<_GaiaToast> with TickerProviderStateMixin {
               cursor: SystemMouseCursors.click,
               onEnter: (_) {
                 _dwellTimer?.cancel();
-                _hover.forward();
+                setState(() => _hovered = true);
               },
-              onHover: (event) => _cursor = event.localPosition,
               onExit: (_) {
-                _cursor = null;
-                _hover.reverse();
+                setState(() => _hovered = false);
                 if (!_leaving) {
                   _dwellTimer = Timer(_dwellFor(widget.body), _dismiss);
                 }
@@ -187,7 +169,7 @@ class _GaiaToastState extends State<_GaiaToast> with TickerProviderStateMixin {
                   constraints: const BoxConstraints(maxWidth: 480),
                   child: Material(
                     type: MaterialType.transparency,
-                    child: _ring(colors),
+                    child: _ring(),
                   ),
                 ),
               ),
@@ -206,88 +188,72 @@ class _GaiaToastState extends State<_GaiaToast> with TickerProviderStateMixin {
     );
   }
 
-  /// [GaiaButton]'s ring, around the toast's content.
-  Widget _ring(ColorScheme colors) {
-    return Container(
-      decoration: BoxDecoration(
-        color: GaiaInk.hairline,
-        borderRadius: BorderRadius.circular(_radius),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.45),
-            blurRadius: 18,
-            offset: const Offset(0, 6),
-          ),
-        ],
+  /// Gaia's frosted shell, around the toast's content.
+  Widget _ring() {
+    return CustomPaint(
+      // The shell is see-through: its shadow skips what's under it.
+      painter: GaiaShadowAround(
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.45),
+          blurRadius: 18,
+          offset: const Offset(0, 6),
+        ),
+        radius: _radius,
       ),
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(_radius),
-              child: ImageFiltered(
-                imageFilter: ImageFilter.blur(sigmaX: 2, sigmaY: 2),
-                child: CustomPaint(
-                  painter: GaiaGlowPainter(
-                    angle: _angle,
-                    hover: _hover,
-                    cursor: () => _cursor,
-                    idle: Color.lerp(colors.primary, Colors.white, 0.5)!,
-                    lit: HSLColor.fromColor(
-                      colors.primary,
-                    ).withSaturation(1).toColor(),
-                  ),
+      child: GaiaGlowRing(
+        radius: _radius,
+        hovered: _hovered,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 18, 12),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              GaiaToastOrbIcon(mark: widget.mark),
+              const SizedBox(width: 12),
+              Flexible(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    if (widget.body.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        widget.body,
+                        maxLines: 8,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.7),
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-            ),
+              if (widget.onUndo case final undo?) ...[
+                const SizedBox(width: 12),
+                GaiaButton(
+                  label: 'Undo',
+                  icon: Icons.undo,
+                  size: 30,
+                  padding: 10,
+                  onPressed: () {
+                    undo();
+                    unawaited(_dismiss());
+                  },
+                ),
+              ],
+            ],
           ),
-          // Covers all but the ring of the light.
-          Padding(
-            padding: const EdgeInsets.all(1),
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(14, 12, 18, 12),
-              decoration: BoxDecoration(
-                color: Color.lerp(colors.surface, Colors.black, 0.5),
-                borderRadius: BorderRadius.circular(_radius - 1),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  GaiaToastOrbIcon(mark: widget.mark),
-                  const SizedBox(width: 12),
-                  Flexible(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.title,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        if (widget.body.isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            widget.body,
-                            maxLines: 8,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.7),
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

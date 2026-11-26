@@ -4077,6 +4077,7 @@ Entry format:
 - Expected: with the keyboard up, the focused body stays visible with the caret in view (`adjustResize`; MOBILE_TEST_PLAN.md D3 "soft keyboard open"), e.g. the header rows scroll away or the bottom nav hides while the keyboard is up.
 - Notes: not seen on the emulator (411×914 dp), which had ~120 dp more height. Text typed blind is saved: the entry reached the DB and the outbox drained. A release build would hide the band, not the missing room (not checked). Every short phone in portrait is affected; M3/M5 should re-check after a fix, and check Dreams' editor, which has the same compact layout. Not fixed (audit rule).
 - Notes (2026-11-24, M2): also without the keyboard in landscape (361 dp tall, expanded shell): the journal editor's body box disappears entirely and the run log shows `A RenderFlex overflowed by 2.9 pixels on the bottom` (`m2-land-journal.png`); the text is still there after rotating back.
+- Notes (2026-11-25, M3): in landscape with the keyboard up the body is gone and the editor shows "BOTTOM OVERFLOWED BY 140 PIXELS" (and 57 px in the entry list) (`m3b-rot.png`); text, caret and the word being composed survive the rotation. Gboard's emoji panel is taller than its keys, so even at `wm density 440` (where the body shows three lines with the keys up) the body collapses again under it (56 px overflow, `m3b-gboard-emoji2.png`).
 
 ### BUG-386 [M0] Opening the soft keyboard on any page makes the kept-alive Calendar page throw `Invalid argument(s): 0.0`
 - Severity: Minor
@@ -4201,3 +4202,83 @@ Entry format:
 - Notes: the More sheet does have a handle and drags closed. The LeetCode track form, Study card editor/import and workout target editor (the HLD's other editors) weren't reached in M2; their pages' phases (M13, M16, M17) should check them. Not fixed (audit rule).
 
 <!-- Last ID: BUG-400. -->
+
+### BUG-401 [M3] Manual (non-auto) snippets can't be expanded from the soft keyboard at all
+- Severity: Major
+- Found: 2026-11-24, MOBILE_TEST_PLAN.md M3 (OnePlus 12R, Android 16, 361×794 dp, Gboard; debug build of `49bcd26b` + uncommitted Gaia work; qa-130)
+- Steps: Settings → Editing → Text snippets: add `qqa` → "Quick answer" (Expand automatically off, the default, also for long-press Add snippet). In a journal body type `qqa` on Gboard. Expand key Tab: Gboard has no Tab key. Switch the expand key to Space and type `qqa `.
+- Actual: nothing expands with either key (`qqa ` stays). Gboard commits the space as text, not as a key event, so the snippet layer never sees an expand key. A hardware Tab (`input keyevent 61`) does expand it and advances tabstops, so the snippet itself works.
+- Expected: SNIPPET.md §7 / the plan: the Space expand key works by soft keyboard.
+- Notes: auto-expanding snippets do expand on Gboard input (caret on `$0` as §4 says); tabstops can't advance without Tab (documented v1 limit, SNIPPET.md §9). Not fixed (audit rule).
+
+### BUG-402 [M3] The Text snippets dialog is unusable at phone width: the new-snippet row is crushed and the dialog overflows with the keyboard up
+- Severity: Major
+- Found: 2026-11-24, MOBILE_TEST_PLAN.md M3 (OnePlus 12R, Android 16, 361×794 dp, Gboard; debug build of `49bcd26b` + uncommitted Gaia work; qa-130)
+- Steps: Settings → Editing → Text snippets → Add snippet.
+- Actual: at 361 dp the "Expand key" text wraps to a narrow column ("automati / cally"); the add row's checkbox labels render one letter per line ("E x p a n d a u t", "O n l y a t w o r d b"), the Replacement field is ~3 characters wide, Trigger/Replacement are cut at the top. With the keyboard up: "BOTTOM OVERFLOWED BY 118 PIXELS" and the fields are hidden (`m3-snip-add-std.png`, `m3-snip-add-std-nokbd.png`); at 360×640 dp 301 px (`m3-snip-add-360.png`). Saved rows truncate the replacement ("Quic…"). Typing blind and saving still stored the snippet.
+- Expected: the dialog lays out as a phone sheet/scrolling form; nothing the user needs is hidden under the keyboard.
+- Notes: the long-press Add snippet quick editor fits (its "Expand auto matically" label also breaks mid-word). (2026-11-25) At font scale 2.0 the dialog overflows by 1146 px and the Expand key label breaks one letter per line (`m3b-snip-f2.png`); at tablet size (800 dp) it lays out correctly. Not fixed (audit rule).
+
+### BUG-403 [M3] App autocorrect rewrites a word the user picked verbatim from Gboard's suggestion strip
+- Severity: Minor
+- Found: 2026-11-24, MOBILE_TEST_PLAN.md M3 (OnePlus 12R, Android 16, 361×794 dp, Gboard; debug build of `49bcd26b` + uncommitted Gaia work; qa-130)
+- Steps: journal body, fresh focus. Type `wtih` on Gboard, tap the literal "wtih" on the left of the suggestion strip. Same with `hangry`.
+- Actual: the app corrects the picked word: `with`, `angry`. With the app's Autocorrect off both stay as picked, so it is the app (`_wasTyped` waves IME commits through on Android).
+- Expected: a word the user explicitly chose from the IME is not "corrected" (MOBILE_TEST_PLAN.md M3).
+- Notes: a soft Backspace right after does revert and suppress (`angry ` → `hangry`). Gboard corrects typos it knows itself (`wtih ` → `with`), once, no double correction. Not fixed (audit rule).
+
+### BUG-404 [M3] Prose fields on Android have no Cut / Copy / Paste / Select all: long-press and double-tap show only the app's word menu
+- Severity: Minor
+- Found: 2026-11-24, MOBILE_TEST_PLAN.md M3 (OnePlus 12R, Android 16, 361×794 dp, Gboard; debug build of `49bcd26b` + uncommitted Gaia work; qa-130)
+- Steps: journal body with text: long-press a word, or double-tap one.
+- Actual: the word is selected and the app's menu shows (suggestions / Add to dictionary / Flag as misspelling… / Add snippet), never the selection toolbar. The only routes are Gboard's clipboard chip and its Text editing panel (Cut, Copy, Paste, Select all all work there). After Gboard's Copy the app's menu stays open as a stale one-item "Flag as misspelling…" card over the text.
+- Expected: the standard selection toolbar (MOBILE_TEST_PLAN.md M3 "Selection"), with the word actions added to it. Same root as BUG-389 (login fields).
+- Notes: Not fixed (audit rule).
+
+### BUG-405 [M3] Ctrl+Z doesn't undo an auto-expanded snippet typed through Gboard
+- Severity: Minor
+- Found: 2026-11-24, MOBILE_TEST_PLAN.md M3 (OnePlus 12R, Android 16, 361×794 dp, Gboard; debug build of `49bcd26b` + uncommitted Gaia work; qa-130)
+- Steps: auto snippet `zzt` → `auto $1 and $2 end$0`; type `zzt` on Gboard (expands), then hardware Ctrl+Z (`input keycombination 113 54`).
+- Actual: nothing changes, twice; Ctrl+Z right after typing words does undo (one character per step, since taps are >500 ms apart) and Ctrl+Shift+Z redoes. With the caret moved Home, Ctrl+Z neither undid nor moved the caret (inconclusive; recheck against `99bd8d07`).
+- Expected: one Undo restores the trigger (SNIPPET.md §5). The soft keyboard has no undo route at all apart from Gboard's undo chip after its own autocorrect.
+- Notes: Not fixed (audit rule).
+
+### BUG-406 [M3] The Dictionary dialog doesn't fit a phone with the keyboard up, and flagged words are cut to a few letters
+- Severity: Minor
+- Found: 2026-11-25, MOBILE_TEST_PLAN.md M3 (OnePlus 12R, Android 16, 361×794 dp unless noted, Gboard; debug build of `49bcd26b` + uncommitted Gaia work; qa-130)
+- Steps: Settings → Editing → Dictionary. Read the list; tap the search field; tap a flagged word's pencil. Repeat at 360×640 dp (`wm size 720x1280`, `wm density 320`).
+- Actual: flagged rows show "selfi…" and "the…" (the `word → replacement` text gets ~70 dp beside the "Flagged" chip), so neither the word nor its replacement can be read at any phone size (`m3b-dict.png`, `m3b-dict-360.png`). With the keyboard up at 361 dp the list shows two rows, and the focused "Replace … with" field is cut in half at the list's bottom edge and not scrolled into view (`m3b-dict-flagedit2.png`). At 360×640 dp with the keyboard up: "BOTTOM OVERFLOWED BY 84 PIXELS" across the description, Done drawn over the + button, no list at all (`m3b-dict-360k.png`; error log: RenderFlex overflowed by 14 px). At font scale 2.0 one row shows, and it scrolls.
+- Expected: the full flagged word and replacement are visible (wrap or a second line), the focused field scrolls into view, and nothing overflows with the keyboard up.
+- Notes: add (search field + ✓ IME action or +), rename (pencil → ✓) and remove (trash, no confirm, as DICTIONARY.md says) all work by touch. Tablet size (800 dp) is fine. Same family as BUG-402. Not fixed (audit rule).
+
+### BUG-407 [M3] Journal and Dream journal have no way to add an image on Android
+- Severity: Major
+- Found: 2026-11-25, MOBILE_TEST_PLAN.md M3 (OnePlus 12R, Android 16, 361×794 dp unless noted, Gboard; debug build of `49bcd26b` + uncommitted Gaia work; qa-130)
+- Steps: open a journal entry on the phone and look for any way to attach a picture: the editor, long-press, Gboard's clipboard, and Gboard's emoji panel (GIF / sticker tabs).
+- Actual: the journal body (and the Dreams editor) take images only by Ctrl+V or drag-and-drop (`_withImages` → `MediaPasteScope` + `MediaDropTarget`, `journal_page.dart:4029`); there is no picker button. On the soft keyboard there is no Ctrl+V, Gboard's clipboard chip pastes text only, and Gboard greys out its GIF and sticker tabs because no field declares `contentInsertionConfiguration` (`m3b-gboard-emoji2.png`). Even hardware Ctrl+V doesn't paste on this phone (see M3 notes).
+- Expected: MEDIA.md: every surface takes images on Android: the file picker, or rich-content insertion from the keyboard. To-Do, Study and Rankings have the "Add images" picker strip, which works (below).
+- Notes: by contrast To-Do's "Add images" opened the system picker, two images attached, both reached `media_assets_table` as `uploaded`, and a 34.4 MB PNG was refused with "Image is too large (34.4 MB). The limit is 20 MB." Not fixed (audit rule).
+
+### BUG-408 [M3] An attached image can't be removed by touch: "Remove image" shows on mouse hover only
+- Severity: Major
+- Found: 2026-11-25, MOBILE_TEST_PLAN.md M3 (OnePlus 12R, Android 16, 361×794 dp unless noted, Gboard; debug build of `49bcd26b` + uncommitted Gaia work; qa-130)
+- Steps: To-Do → open a task → Add images → pick one. Try to remove it: tap, long-press, then the lightbox.
+- Actual: tap and long-press both open the lightbox; the lightbox offers Zoom out / Zoom in / Copy image / Save as… / Close, but no Remove. The thumbnail's ✕ is built only `if (_hovered)` (`_ThumbnailState`, `media_gallery_strip.dart`), and a finger never hovers. The picture stays on the task.
+- Expected: MOBILE_TEST_PLAN.md D4: no hover-only action without a touch route; M3 "Remove asks first".
+- Notes: affects every `MediaGalleryStrip` (To-Do, Study cards, Rankings). Same pattern as BUG-395 (right-click only). Not fixed (audit rule).
+
+### BUG-409 [M3] The image lightbox's toolbar sits under the status bar, so its buttons barely respond to taps
+- Severity: Minor
+- Found: 2026-11-25, MOBILE_TEST_PLAN.md M3 (OnePlus 12R at `wm density 440`, 459×1011 dp; status bar 0–140 px; qa-130)
+- Steps: open a To-Do image in the lightbox; tap Close or Zoom in at the centre of the icon.
+- Actual: the buttons are centred at y≈110 px, inside the status bar (the zoom/copy/save/close icons draw over the system icons, `m3b-lightbox.png`). Taps there do nothing (Close and Zoom in both ignored); a tap at y=158, the strip of the button below the status bar, closes it. Back and a horizontal swipe (1 / 2 → 2 / 2) work.
+- Expected: the toolbar is laid out inside `MediaQuery.padding.top`.
+- Notes: not rechecked at the default 560 dpi. Pinch and double-tap zoom couldn't be tested (adb input is one pointer, and the guarded taps are too slow for a double tap): §6b. Not fixed (audit rule).
+
+### BUG-410 [M3] With Vim on, Normal mode doesn't stop the soft keyboard from typing, and Backspace there moves instead of deleting
+- Severity: Minor
+- Found: 2026-11-25, MOBILE_TEST_PLAN.md M3 (OnePlus 12R, Android 16, 361×794 dp unless noted, Gboard; debug build of `49bcd26b` + uncommitted Gaia work; qa-130)
+- Steps: Settings → Editing → Vim keybindings on. Journal body, type a line, press Esc (`input keyevent 111`): NORMAL badge and block caret. Then tap Gboard keys: x, Enter, Backspace. Also send `d d u o` as key events.
+- Actual: in Normal mode Gboard's x is inserted as text and Enter adds a newline, while the badge still reads NORMAL; Backspace moves the caret two places left and deletes nothing. Letter key events from adb are inserted too (`dd` → "dd", `o` → "o"); only Esc and Enter reach Vim. Leaving the field and tapping back in returns to Insert.
+- Expected: VIM.md: Normal mode doesn't insert, or a soft-keyboard user never ends up in Normal mode with no way to see why typing behaves oddly.
+- Notes: a soft-keyboard-only user can't enter Normal mode (Gboard has no Esc), so this needs a hardware Esc first. `input keyevent` goes through Gboard's composer, so whether a real Bluetooth keyboard's letters reach Vim is in §6b (Juno). Not fixed (audit rule).

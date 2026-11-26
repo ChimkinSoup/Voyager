@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_app.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
+import 'package:voyager/features/gaia/companion/gaia_controls.dart';
 import 'package:voyager/features/gaia/companion/gaia_pinned_prompt.dart';
 import 'package:voyager/features/gaia/companion/gaia_steady_list.dart';
 import 'package:voyager/features/gaia/usage/gaia_usage.dart';
@@ -355,14 +356,14 @@ void main() {
 
       await tester.enterText(find.byType(EditableText), '$text now');
       await settle(tester);
-      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.byType(GaiaDialog), findsNothing);
 
       // Gone from the draft, it's a new question next time.
       await tester.enterText(find.byType(EditableText), 'other');
       await settle(tester);
       await tester.enterText(find.byType(EditableText), '/second ');
       await settle(tester);
-      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(find.byType(GaiaDialog), findsOneWidget);
       await tester.tap(find.text('Cancel'));
       await settle(tester);
       await finish(tester);
@@ -383,7 +384,7 @@ void main() {
       );
       await tester.enterText(find.byType(EditableText), 'look in /here now');
       await settle(tester);
-      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.byType(GaiaDialog), findsNothing);
       expect(draft(tester), 'look in /here now');
       await finish(tester);
     });
@@ -441,15 +442,15 @@ void main() {
       );
       await tester.enterText(find.byType(EditableText), '/deep /second ');
       await settle(tester);
-      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(find.byType(GaiaDialog), findsOneWidget);
       expect(find.textContaining('to Deep'), findsOneWidget);
       await tester.tap(find.text('Switch'));
       await settle(tester);
-      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(find.byType(GaiaDialog), findsOneWidget);
       expect(find.text('Switch from Alpha to Beta?'), findsOneWidget);
       await tester.tap(find.text('Switch'));
       await settle(tester);
-      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.byType(GaiaDialog), findsNothing);
       expect(controller.nextTier, GaiaTier.deep);
       expect(controller.currentAccount(kGaiaClaudeCodeAdapter), aliased);
       expect(draft(tester), isEmpty);
@@ -505,7 +506,7 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
       await settle(tester);
-      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.byType(GaiaDialog), findsNothing);
       expect(runner.stopped, isNotEmpty);
       expect(controller.currentAccount(kGaiaClaudeCodeAdapter), a);
       expect(controller.draft.text, text);

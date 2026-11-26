@@ -513,6 +513,21 @@ class GaiaGrant {
   };
 }
 
+/// What the agent gets ahead of each message while *can see screen* or *can
+/// control* is on (GAIA_HLD.md §15.6), so it reads the screen without being
+/// told it may; null while both are off.
+String? gaiaAccessPreamble(GaiaGrant? grant) {
+  if (grant == null || !(grant.seeScreen || grant.canControl)) return null;
+  return [
+    '<screen_access>',
+    'Can see screen: ${grant.seeScreen ? 'on' : 'off'}',
+    'Can control: ${grant.isAuto ? 'Auto' : grant.canControl ? 'Ask' : 'off'}',
+    "When the request is about what's on the user's screen, read it with the "
+        'os_ tools rather than asking them to describe it.',
+    '</screen_access>',
+  ].join('\n');
+}
+
 Map<String, GaiaGrant> gaiaGrantsFromJson(Object? json) => {
   if (json is Map)
     for (final MapEntry(:key, :value) in json.entries)
@@ -1359,6 +1374,8 @@ sealed class GaiaPart {
           memoryId: json['memoryId']! as String,
           text: json['text']! as String,
           project: json['project'] == true,
+          was: json['was'] as String?,
+          updated: json['updated'] == true,
           state:
               GaiaCardState.values
                   .where((state) => state.name == json['state'])
@@ -1387,6 +1404,11 @@ sealed class GaiaPart {
                   .where((state) => state.name == json['state'])
                   .firstOrNull ??
               GaiaCardState.open,
+          topics: [
+            for (final change in json['topics'] as List? ?? const [])
+              GaiaTopicChange.fromJson((change! as Map).cast()),
+          ],
+          had: json['had'] as int?,
         ),
         'recall' => GaiaRecallPart([
           for (final memory in json['memories']! as List)
@@ -2104,27 +2126,40 @@ class GaiaCardPart extends GaiaPart {
 /// user edits its [text] and remembers it, or dismisses it, there or in the
 /// memory inbox. [GaiaCardState.open] until then, [GaiaCardState.accepted]
 /// once remembered, as [text] says, or [GaiaCardState.rejected] once
-/// dismissed. [project] when it's for the chat's project.
+/// dismissed. [project] when it's for the chat's project. With [was], it's
+/// an update to the memory that said that when it was offered
+/// (GAIA_MEMORY_TOPICS_HLD.md §27.3): "Update this?", [updated] once it
+/// was applied, rather than kept as a memory of its own.
 class GaiaMemoryPart extends GaiaPart {
   const GaiaMemoryPart({
     required this.memoryId,
     required this.text,
     this.project = false,
     this.state = GaiaCardState.open,
+    this.was,
+    this.updated = false,
   });
 
   final String memoryId;
   final String text;
   final bool project;
   final GaiaCardState state;
+  final String? was;
+  final bool updated;
 
   bool get isOpen => state == GaiaCardState.open;
 
-  GaiaMemoryPart decided(GaiaCardState state, {String? text}) => GaiaMemoryPart(
+  GaiaMemoryPart decided(
+    GaiaCardState state, {
+    String? text,
+    bool updated = false,
+  }) => GaiaMemoryPart(
     memoryId: memoryId,
     text: text ?? this.text,
     project: project,
     state: state,
+    was: was,
+    updated: updated,
   );
 
   @override
@@ -2134,16 +2169,59 @@ class GaiaMemoryPart extends GaiaPart {
     'text': text,
     if (project) 'project': true,
     'state': state.name,
+    'was': ?was,
+    if (updated) 'updated': true,
+  };
+}
+
+/// One topic change a revision card offers (GAIA_SETTINGS_HLD.md §7.5): an
+/// [add] or a remove of topic [topicId], or for a new topic, one made named
+/// [name] under [parentId] (null for the root). [path] is what it read as
+/// when offered, so a decided card still reads right after a rename.
+class GaiaTopicChange {
+  const GaiaTopicChange({
+    required this.add,
+    required this.path,
+    this.topicId,
+    this.name,
+    this.parentId,
+  });
+
+  factory GaiaTopicChange.fromJson(Map<String, Object?> json) =>
+      GaiaTopicChange(
+        add: json['add'] == true,
+        path: json['path']! as String,
+        topicId: json['topicId'] as String?,
+        name: json['name'] as String?,
+        parentId: json['parentId'] as String?,
+      );
+
+  final bool add;
+  final String path;
+  final String? topicId;
+  final String? name;
+  final String? parentId;
+
+  bool get isNew => topicId == null;
+
+  Map<String, Object?> toJson() => {
+    'add': add,
+    'path': path,
+    'topicId': ?topicId,
+    'name': ?name,
+    'parentId': ?parentId,
   };
 }
 
 /// A rewrite of memory [memoryId] the agent offered through `memory_revise`
 /// (GAIA_SETTINGS_HLD.md §7.4), shown in its reply: [was], what the memory
-/// said then, struck through over [text], the rewrite, with [why]. No tool
-/// call waits on it. [GaiaCardState.open] until the user applies it
-/// ([GaiaCardState.accepted], [text] as applied) or dismisses it
-/// ([GaiaCardState.rejected]). [id] tells it from another of the same
-/// memory's.
+/// said then, struck through over [text], the rewrite, with [why], and the
+/// [topics] it changes (§7.5); [text] is [was] when only topics change, and
+/// [had] is how many topics the memory was in then, for a card that would
+/// leave it in none. No tool call waits on it. [GaiaCardState.open] until the
+/// user applies it ([GaiaCardState.accepted], [text] and [topics] as
+/// applied) or dismisses it ([GaiaCardState.rejected]). [id] tells it from
+/// another of the same memory's.
 class GaiaRevisionPart extends GaiaPart {
   const GaiaRevisionPart({
     required this.id,
@@ -2152,6 +2230,8 @@ class GaiaRevisionPart extends GaiaPart {
     required this.text,
     this.why,
     this.state = GaiaCardState.open,
+    this.topics = const [],
+    this.had,
   });
 
   final String id;
@@ -2160,18 +2240,25 @@ class GaiaRevisionPart extends GaiaPart {
   final String text;
   final String? why;
   final GaiaCardState state;
+  final List<GaiaTopicChange> topics;
+  final int? had;
 
   bool get isOpen => state == GaiaCardState.open;
 
-  GaiaRevisionPart decided(GaiaCardState state, {String? text}) =>
-      GaiaRevisionPart(
-        id: id,
-        memoryId: memoryId,
-        was: was,
-        text: text ?? this.text,
-        why: why,
-        state: state,
-      );
+  GaiaRevisionPart decided(
+    GaiaCardState state, {
+    String? text,
+    List<GaiaTopicChange>? topics,
+  }) => GaiaRevisionPart(
+    id: id,
+    memoryId: memoryId,
+    was: was,
+    text: text ?? this.text,
+    why: why,
+    state: state,
+    topics: topics ?? this.topics,
+    had: had,
+  );
 
   @override
   Map<String, Object?> toJson() => {
@@ -2182,6 +2269,9 @@ class GaiaRevisionPart extends GaiaPart {
     'text': text,
     'why': ?why,
     'state': state.name,
+    if (topics.isNotEmpty)
+      'topics': [for (final change in topics) change.toJson()],
+    'had': ?had,
   };
 }
 
@@ -3060,6 +3150,7 @@ class GaiaMemory extends SoftDeletable {
     this.topicIds = const [],
     this.pinned = false,
     this.suggestedTopic,
+    this.replacesId,
   });
 
   final String text;
@@ -3075,6 +3166,11 @@ class GaiaMemory extends SoftDeletable {
   /// A new topic offered for it, not made until accepted
   /// (GAIA_MEMORY_TOPICS_HLD.md §5).
   final GaiaSuggestedTopic? suggestedTopic;
+
+  /// For a proposal, the memory it corrects or updates: "Update this?" in
+  /// the inbox (GAIA_MEMORY_TOPICS_HLD.md §27.3). One that points at no
+  /// active memory any more shows as a plain proposal.
+  final String? replacesId;
 
   /// The chat it was learnt in; null for one written on the Gaia page.
   final String? sourceChatId;
@@ -3094,6 +3190,8 @@ class GaiaMemory extends SoftDeletable {
     bool? pinned,
     GaiaSuggestedTopic? suggestedTopic,
     bool clearSuggestedTopic = false,
+    String? replacesId,
+    bool clearReplacesId = false,
     DateTime? deletedAt,
     bool clearDeletedAt = false,
   }) => GaiaMemory(
@@ -3112,7 +3210,27 @@ class GaiaMemory extends SoftDeletable {
     suggestedTopic: clearSuggestedTopic
         ? null
         : (suggestedTopic ?? this.suggestedTopic),
+    replacesId: clearReplacesId ? null : (replacesId ?? this.replacesId),
   );
+}
+
+/// The active memory proposal [memory] would update, among [memories]
+/// (GAIA_MEMORY_TOPICS_HLD.md §27.3); null for a plain proposal, or one
+/// whose memory has been deleted or archived since.
+GaiaMemory? gaiaReplacedMemory(
+  GaiaMemory memory,
+  Iterable<GaiaMemory> memories,
+) {
+  final id = memory.replacesId;
+  if (id == null || memory.status != GaiaMemoryStatus.proposed) return null;
+  return memories
+      .where(
+        (other) =>
+            other.id == id &&
+            !other.isDeleted &&
+            other.status == GaiaMemoryStatus.active,
+      )
+      .firstOrNull;
 }
 
 /// A new topic offered for a memory: [name], under [parentId] or at the
@@ -3161,6 +3279,8 @@ typedef GaiaFoundMemory = ({
   GaiaSuggestedTopic? suggested,
   // About the user in general, not a subject: a pin candidate (§3.3).
   bool pin,
+  // The kept memory it corrects or updates (§27.3); null for none.
+  String? replacesId,
 });
 
 /// One memory recalled in one chat, on this device

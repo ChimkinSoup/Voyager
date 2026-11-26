@@ -189,6 +189,7 @@ void main() {
           topicIds: const [],
           suggested: null,
           pin: false,
+          replacesId: null,
         ),
       ]);
       expect(await repository.listMemories(), isEmpty);

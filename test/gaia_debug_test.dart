@@ -92,6 +92,17 @@ void main() {
     expect(timeDilation, 10);
   });
 
+  test("the debug menu's closed sections survive a restart", () async {
+    final before = GaiaDebug(file: file);
+    await before.toggleSection('Toasts');
+    await before.toggleSection('Display');
+    await before.toggleSection('Display');
+
+    final after = GaiaDebug(file: file);
+    await after.load();
+    expect(after.closedSections, {'Toasts'});
+  });
+
   test('the FPS alert and its threshold survive a restart', () async {
     final before = GaiaDebug(file: file);
     await before.setFpsAlert(true);

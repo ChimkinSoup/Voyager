@@ -13,6 +13,7 @@ import 'package:voyager/features/gaia/companion/gaia_memory_card.dart';
 import 'package:voyager/features/gaia/companion/gaia_memory_review.dart';
 import 'package:voyager/features/gaia/companion/gaia_settings_panel.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
+import 'package:voyager/features/gaia/gaia_text_settings.dart';
 import 'package:voyager/features/gaia/host/gaia_memories.dart';
 import 'package:voyager/features/gaia/utility/gaia_utility.dart';
 
@@ -205,15 +206,60 @@ void main() {
           case 'offerRevision':
             final arguments = params['arguments']! as Map;
             final was = stored(arguments['id']! as String)!;
+            GaiaMemoryTopic? named(String name) =>
+                topics.where((topic) => topic.name == name).firstOrNull;
+            final changes = [
+              for (final name in (arguments['removeTopics'] as List? ?? []))
+                GaiaTopicChange(
+                  add: false,
+                  topicId: named(name as String)!.id,
+                  path: name,
+                ),
+              for (final name in (arguments['addTopics'] as List? ?? []))
+                GaiaTopicChange(
+                  add: true,
+                  topicId: named(name as String)?.id,
+                  name: named(name) == null ? name : null,
+                  path: name,
+                ),
+            ];
             return {
               'memoryId': was.id,
               'was': was.text,
-              'text': arguments['text'],
+              'text': arguments['text'] ?? was.text,
+              if (changes.isNotEmpty) ...{
+                'topics': [for (final change in changes) change.toJson()],
+                'had': was.topicIds.length,
+              },
             };
           case 'reviseMemory':
+            final made = <String>[];
             if (params['accept'] == true) {
               change(id!, (m) => m.copyWith(text: params['text']! as String));
+              for (final json in params['topics'] as List? ?? []) {
+                final topicChange = GaiaTopicChange.fromJson(
+                  (json as Map).cast(),
+                );
+                var topicId = topicChange.topicId;
+                if (topicId == null) {
+                  final topicMade = topic(
+                    'n${topics.length}',
+                    topicChange.name!,
+                  );
+                  topics = [...topics, topicMade];
+                  made.add(topicId = topicMade.id);
+                }
+                change(
+                  id,
+                  (m) => m.copyWith(
+                    topicIds: topicChange.add
+                        ? [...m.topicIds, topicId!]
+                        : ([...m.topicIds]..remove(topicId)),
+                  ),
+                );
+              }
             }
+            return {'made': made, 'skipped': <String>[]};
           case 'revertMemories':
             for (final json in params['memories']! as List) {
               final was = gaiaMemoryFromJson(json! as Map);
@@ -231,6 +277,13 @@ void main() {
                 was,
               ];
             }
+          case 'updateMemory':
+            final proposal = stored(id!)!;
+            final old = stored(proposal.replacesId!)!;
+            change(old.id, (m) => m.copyWith(text: proposal.text));
+            trash[id] = proposal;
+            change(id, (_) => null);
+            return [gaiaMemoryToJson(old), gaiaMemoryToJson(proposal)];
           case 'placedMemory':
             final placement = gaiaPlacementFromJson(params['placement']);
             change(id!, (m) => m.copyWith(topicIds: placement.topicIds));
@@ -285,6 +338,78 @@ void main() {
     if (shift) await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
     await settle(tester);
   }
+
+  testWidgets('"Update this?" strikes the old text through; Enter updates '
+      'it, A keeps both, and Ctrl+Z puts each back', (tester) async {
+    memories = [
+      memory('toronto', 'I live in Toronto', pinned: true),
+      memory(
+        'u1',
+        'I moved to Vancouver',
+        status: GaiaMemoryStatus.proposed,
+      ).copyWith(replacesId: 'toronto'),
+      memory(
+        'u2',
+        'I work at Shopify now',
+        status: GaiaMemoryStatus.proposed,
+      ).copyWith(replacesId: 'toronto'),
+    ];
+    await pump(tester);
+    await tester.tap(find.text('Review'));
+    await settle(tester);
+    expect(inReview(find.text('Update this?')), findsOneWidget);
+    final old = tester.widget<Text>(inReview(find.text('I live in Toronto')));
+    expect(old.style?.decoration, TextDecoration.lineThrough);
+    for (final label in ['Update', 'Keep both', 'Dismiss']) {
+      expect(inReview(find.text(label)), findsOneWidget, reason: label);
+    }
+    expect(inReview(find.text('Remember and pin')), findsNothing);
+
+    await key(tester, LogicalKeyboardKey.enter);
+    expect(sent('updateMemory').single['memoryId'], 'u1');
+    expect(stored('toronto')!.text, 'I moved to Vancouver');
+    expect(stored('toronto')!.pinned, isTrue);
+    expect(stored('u1'), isNull);
+    // The next one updates what the first wrote, struck through.
+    expect(
+      tester
+          .widgetList<Text>(inReview(find.text('I moved to Vancouver')))
+          .any((text) => text.style?.decoration == TextDecoration.lineThrough),
+      isTrue,
+    );
+    await key(tester, LogicalKeyboardKey.keyA);
+    expect(stored('u2')!.status, GaiaMemoryStatus.active);
+    expect(stored('toronto')!.text, 'I moved to Vancouver');
+    expect(inReview(find.text('1 updated · 1 remembered')), findsOneWidget);
+
+    await key(tester, LogicalKeyboardKey.keyZ, control: true);
+    expect(stored('u2')!.status, GaiaMemoryStatus.proposed);
+    await key(tester, LogicalKeyboardKey.keyZ, control: true);
+    expect(stored('toronto')!.text, 'I live in Toronto');
+    expect(stored('u1')!.status, GaiaMemoryStatus.proposed);
+    // The controller's drafts timer.
+    await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets('a proposal whose memory is archived since is a plain one', (
+    tester,
+  ) async {
+    memories = [
+      memory('toronto', 'I live in Toronto', status: GaiaMemoryStatus.archived),
+      memory(
+        'u1',
+        'I moved to Vancouver',
+        status: GaiaMemoryStatus.proposed,
+      ).copyWith(replacesId: 'toronto'),
+    ];
+    await pump(tester);
+    await tester.tap(find.text('Review'));
+    await settle(tester);
+    expect(inReview(find.text('In the inbox')), findsOneWidget);
+    expect(inReview(find.text('Remember')), findsOneWidget);
+    expect(inReview(find.text('Update')), findsNothing);
+    await tester.pump(const Duration(seconds: 2));
+  });
 
   testWidgets('a 30-memory inbox is cleared from the keyboard alone, and '
       'each decision undone with Ctrl+Z', (tester) async {
@@ -655,6 +780,16 @@ void main() {
     expect(stored('u0')!.topicIds, isEmpty);
     expect(controller.memorySorted['u0']?.topicIds, ['t1']);
     expect(inReview(find.text('Exam on Monday')), findsOneWidget);
+
+    // Leave unsorted drops the suggestion and files nothing; undo gives it
+    // back.
+    await key(tester, LogicalKeyboardKey.backspace);
+    expect(stored('u0')!.topicIds, isEmpty);
+    expect(controller.memorySorted.containsKey('u0'), isFalse);
+    expect(inReview(find.text('Buy rice')), findsOneWidget);
+    await key(tester, LogicalKeyboardKey.keyZ, control: true);
+    expect(controller.memorySorted['u0']?.topicIds, ['t1']);
+    expect(inReview(find.text('Exam on Monday')), findsOneWidget);
     // The controller's drafts timer.
     await tester.pump(const Duration(seconds: 2));
   });
@@ -700,8 +835,25 @@ void main() {
     expect(controller.asking, 'p0');
     expect(askChat(), findsOneWidget);
 
+    Finder hint(String text) =>
+        inReview(find.textContaining(text, findRichText: true));
     controller.focusComposer();
     await settle(tester);
+    expect(hint('Esc back to the deck'), findsOneWidget);
+    // Esc in the composer: the keys back to the deck, the chat still there.
+    await key(tester, LogicalKeyboardKey.escape);
+    expect(controller.asking, 'p0');
+    expect(askChat(), findsOneWidget);
+    expect(hint('/ back to the chat'), findsOneWidget);
+    expect(hint('Esc close the chat'), findsOneWidget);
+    // / goes back into it, and Esc out again.
+    await key(tester, LogicalKeyboardKey.slash);
+    // The composer takes the focus a frame later.
+    await settle(tester);
+    expect(hint('Esc back to the deck'), findsOneWidget);
+    await key(tester, LogicalKeyboardKey.escape);
+    expect(controller.asking, 'p0');
+    // Esc on the deck closes the chat, and only that.
     await key(tester, LogicalKeyboardKey.escape);
     expect(controller.asking, isNull);
     expect(askChat(), findsNothing);
@@ -709,7 +861,7 @@ void main() {
     expect(
       find.byType(GaiaMemoryReviewView),
       findsOneWidget,
-      reason: 'one Esc',
+      reason: 'the chat first, then the review',
     );
     // The keys are the deck's again, and the chat doesn't come back with
     // its card.
@@ -784,6 +936,74 @@ void main() {
     expect(stored('a1')!.text, 'I like tea');
     expect(inReview(find.text('I like tea')), findsWidgets);
     expect(find.text('Applied'), findsOneWidget);
+    runner.finish(controller.currentChatId!);
+    await settle(tester);
+    await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets("R applies Gaia's latest open change for the card in front, "
+      'leaving the deck where it is; U puts the memory, its topics and the '
+      'card back; with no open card R does nothing, and the hint offers R '
+      'only when there is one (GAIA_SETTINGS_HLD.md §7.5)', (tester) async {
+    memories = [
+      memory('a1', 'I really do like to drink tea a lot', topicIds: ['t1']),
+    ];
+    final controller = await pump(tester);
+    controller.startReview(GaiaMemoryReview.memory(controller, stored('a1')!));
+    await settle(tester);
+    expect(controller.asking, 'a1');
+    Finder hint(String text) =>
+        inReview(find.textContaining(text, findRichText: true));
+    Future<void> toDeck() async {
+      controller.review!.backToDeck();
+      await settle(tester);
+    }
+
+    await toDeck();
+    await key(tester, LogicalKeyboardKey.keyR);
+    expect(sent('reviseMemory'), isEmpty, reason: 'no card to apply');
+    expect(hint("R apply Gaia's change"), findsNothing);
+
+    runner.turns.add([const ClaudeTextStart(), const ClaudeTextDelta('Sure')]);
+    await tester.runAsync(() async {
+      unawaited(controller.send('Shorter, and file it under Drinks'));
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    });
+    await settle(tester);
+    await tester.runAsync(
+      () => runner.sent.last.tools!.call('memory_revise', {
+        'id': 'a1',
+        'text': 'I like tea',
+        'addTopics': ['Drinks'],
+        'removeTopics': ['School'],
+      }),
+    );
+    await settle(tester);
+    expect(find.text('Change this memory?'), findsOneWidget);
+    await toDeck();
+    expect(hint("R apply Gaia's change"), findsOneWidget);
+    // Beside the chat, the hint wraps rather than shrinking out of reading.
+    expect(
+      tester.getRect(hint("R apply Gaia's change")).height,
+      greaterThanOrEqualTo(10),
+    );
+
+    await key(tester, LogicalKeyboardKey.keyR);
+    expect(stored('a1')!.text, 'I like tea');
+    final drinks = topics.singleWhere((topic) => topic.name == 'Drinks');
+    expect(stored('a1')!.topicIds, [drinks.id]);
+    expect(controller.review!.index, 0, reason: 'the deck stays');
+    expect(inReview(find.text('I like tea')), findsWidgets);
+    expect(find.text('Applied'), findsOneWidget);
+    expect(hint("R apply Gaia's change"), findsNothing);
+
+    await key(tester, LogicalKeyboardKey.keyU);
+    expect(stored('a1')!.text, 'I really do like to drink tea a lot');
+    expect(stored('a1')!.topicIds, ['t1']);
+    expect(topics.where((topic) => topic.name == 'Drinks'), isEmpty);
+    expect(sent('reopenRevision'), hasLength(1));
+    expect(find.text('Apply'), findsOneWidget, reason: 'the card open again');
+    expect(hint("R apply Gaia's change"), findsOneWidget);
     runner.finish(controller.currentChatId!);
     await settle(tester);
     await tester.pump(const Duration(seconds: 2));
@@ -920,5 +1140,122 @@ void main() {
     expect(controller.currentChatId, before);
     expect(find.byType(GaiaChatBody), findsOneWidget);
     await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets('T adds a topic to an inbox card and a remembered one, and '
+      'the card stays in front', (tester) async {
+    memories = [
+      memory('p0', 'Exam on Monday', status: GaiaMemoryStatus.proposed),
+      memory('p1', 'Buy rice', status: GaiaMemoryStatus.proposed),
+      memory('a0', 'Fact 0', topicIds: ['t1']),
+      memory('a1', 'Fact 1', topicIds: ['t1']),
+    ];
+    final controller = await pump(tester);
+    await tester.tap(find.text('Review'));
+    await settle(tester);
+
+    await key(tester, LogicalKeyboardKey.keyT);
+    await tester.enterText(find.byType(EditableText).last, 'Exams');
+    await tester.pump();
+    await tester.tap(find.text('New topic: Exams'));
+    await settle(tester);
+    final exams = topics.singleWhere((topic) => topic.name == 'Exams');
+    expect(stored('p0')!.topicIds, [exams.id]);
+    expect(stored('p0')!.status, GaiaMemoryStatus.proposed);
+    expect(inReview(find.text('Exam on Monday')), findsOneWidget);
+    expect(controller.review!.index, 0, reason: 'T stays');
+
+    controller.endReview();
+    await settle(tester);
+    await tester.tap(find.text('School').first);
+    await settle(tester);
+    await tester.tap(find.text('Review these (2)'));
+    await settle(tester);
+    await key(tester, LogicalKeyboardKey.keyT);
+    await tester.enterText(find.byType(EditableText).last, 'Maths');
+    await tester.pump();
+    await tester.tap(find.text('New topic: Maths'));
+    await settle(tester);
+    final maths = topics.singleWhere((topic) => topic.name == 'Maths');
+    expect(stored('a0')!.topicIds, ['t1', maths.id]);
+    expect(controller.review!.index, 0, reason: 'T stays');
+    // The controller's drafts timer.
+    await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets('with Vim, Esc in the topic picker goes to Normal; the next '
+      'closes it with no topic added', (tester) async {
+    memories = [
+      memory('p0', 'Exam on Monday', status: GaiaMemoryStatus.proposed),
+    ];
+    final controller = await pump(tester);
+    controller.textSettings.value = const GaiaTextSettings(vim: true);
+    await settle(tester);
+    await tester.tap(find.text('Review'));
+    await settle(tester);
+
+    await key(tester, LogicalKeyboardKey.keyT);
+    expect(find.text('Add to topic'), findsOneWidget);
+    await key(tester, LogicalKeyboardKey.escape);
+    expect(find.text('NORMAL'), findsOneWidget);
+    expect(find.text('Add to topic'), findsOneWidget);
+
+    await key(tester, LogicalKeyboardKey.escape);
+    // The dialog's closing transition.
+    await settle(tester);
+    expect(find.text('Add to topic'), findsNothing);
+    expect(stored('p0')!.topicIds, isEmpty);
+    expect(controller.review, isNotNull, reason: 'the review stays open');
+    // The review's keys are back: Enter remembers the card.
+    await key(tester, LogicalKeyboardKey.enter);
+    expect(stored('p0')!.status, GaiaMemoryStatus.active);
+    // The controller's drafts timer.
+    await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets('U undoes the last decision, as Ctrl+Z does', (tester) async {
+    memories = [
+      memory('p0', 'Exam on Monday', status: GaiaMemoryStatus.proposed),
+      memory('p1', 'Buy rice', status: GaiaMemoryStatus.proposed),
+    ];
+    final controller = await pump(tester);
+    await tester.tap(find.text('Review'));
+    await settle(tester);
+
+    await key(tester, LogicalKeyboardKey.enter);
+    expect(stored('p0')!.status, GaiaMemoryStatus.active);
+    await key(tester, LogicalKeyboardKey.keyU);
+    expect(stored('p0')!.status, GaiaMemoryStatus.proposed);
+    expect(controller.review!.index, 0);
+    // The controller's drafts timer.
+    await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets('with the Ask Gaia chat open, the deck decides with it in view, '
+      'and /new leaves it be', (tester) async {
+    memories = [
+      memory('p0', 'I prefer metric units', status: GaiaMemoryStatus.proposed),
+      memory('p1', 'Fact 1', status: GaiaMemoryStatus.proposed),
+    ];
+    final controller = await pump(tester);
+    await tester.tap(find.text('Review'));
+    await settle(tester);
+    await key(tester, LogicalKeyboardKey.slash);
+    final chatId = controller.currentChatId;
+
+    await controller.send('/new');
+    await settle(tester);
+    expect(controller.asking, 'p0');
+    expect(controller.currentChatId, chatId);
+    expect(find.text('Not in an Ask Gaia chat'), findsOneWidget);
+
+    await key(tester, LogicalKeyboardKey.escape);
+    await key(tester, LogicalKeyboardKey.keyA);
+    expect(stored('p0')!.status, GaiaMemoryStatus.active);
+    // The next card, with no chat of its own.
+    expect(controller.asking, isNull);
+    expect(inReview(find.text('Fact 1')), findsOneWidget);
+    // The controller's drafts timer.
+    await tester.pump(const Duration(seconds: 5));
   });
 }

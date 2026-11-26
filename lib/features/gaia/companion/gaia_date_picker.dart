@@ -24,17 +24,16 @@ Future<DateTimePick?> showGaiaDatePicker(
     insetPadding: const EdgeInsets.all(12),
     child: SizedBox.fromSize(
       size: timed ? kDateTimeSelectorPopoverSize : kDateSelectorPopoverSize,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(_radius),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.55),
-              offset: const Offset(0, 12),
-              blurRadius: 40,
-              spreadRadius: -8,
-            ),
-          ],
+      child: CustomPaint(
+        // The shell is see-through: its shadow skips what's under it.
+        painter: GaiaShadowAround(
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.55),
+            offset: const Offset(0, 12),
+            blurRadius: 40,
+            spreadRadius: -8,
+          ),
+          radius: _radius,
         ),
         child: GaiaGlowRing(
           radius: _radius,

@@ -25,7 +25,13 @@ as a harness problem, not the app's. **Still open:** §11's week of real chats, 
 stage 2's later-message trigger rather than deciding whether it's on. §11's clean bursts were
 skipped. **A second later-message trigger, rare words in the user's message, and a
 `memory_search` nudge in the system prompt were added 2026-11-17 (§26)** after a real chat
-missed a memory. Drafted 2026-11-15. This replaces the memory index in GAIA_HLD.md §11 and
+missed a memory. **Phases 7-8 (memory upkeep: a check as memories are saved, and a weekly
+sweep whose findings go to the inbox) drafted 2026-11-24 (§27); its open
+decisions settled the same day (§27.7).** **Phase 7 built 2026-11-25 (§28) and passed its
+live pass the same day (§29)**, except Codex's `memory_propose` call, unchecked while
+gaiaqa's Codex login is dead. One bug found there (a doubled full stop) was fixed. Corrections
+worded unlike the old fact are missed by the save check; the sweep is meant to catch them.
+**Phase 8 (the sweep) not built.** Drafted 2026-11-15. This replaces the memory index in GAIA_HLD.md §11 and
 the project memories in GAIA_PROJECTS_HLD.md §6, and it changes one decision in §3.3 of that doc
 (§7 here).
 
@@ -372,6 +378,8 @@ is tested in the live pass but isn't a gate for any phase.
 | 4 | The Memories tab tree: new, rename, move, add, re-parent, delete, search. Android menus. A project's filter includes its subtopics, labelled by topic, not "Global" (§18.4). |
 | 5 | Placement on capture, suggested topics on cards and in the inbox, the curator's smaller input. Then check stage 2's word-mismatch misses again (§18.4). |
 | 6 | Topic merge, **Sort these**, and pin and merge suggestions from the recall history. |
+| 7 | Memory upkeep, part 1 (§27.3): the curator's `replaces`, the save check for `memory_propose` and `/remember`, and "Update this?" in the inbox. |
+| 8 | Memory upkeep, part 2 (§27.4): the weekly sweep and its cards (same thing, these disagree, out of date, topic merge and rename). |
 
 - **The index stays until recall replaces it.** The system prompt switches in the same phase
   that recall arrives (Phase 2). Switching earlier would leave memories reachable only
@@ -382,6 +390,8 @@ is tested in the live pass but isn't a gate for any phase.
   current 10 memories.
 - **Merge, Sort these and the suggestions come last.** They pay off once there are enough
   memories and topics to tidy.
+- **Upkeep comes after them** (§27). Phase 7 stops new duplicates and corrections at the
+  source. Phase 8 cleans up what's left, and its cost is measured before it's on by default.
 
 ## 11. Test: what recall costs on the plan
 
@@ -452,6 +462,7 @@ memories across 20 topics, debug build of the working tree; details in §18):
 - Embeddings, or any model other than the utility model.
 - A graph view of the tree. The two-pane tab is the browser for now.
 - Syncing the recall history.
+- Deleting or archiving a memory because it hasn't been recalled lately (§27.2).
 - Memories shared between Gaia users.
 
 ## 13. How it's checked
@@ -1890,3 +1901,453 @@ reply before it. The memory had no topic, so the system prompt's topic list didn
     `memory_search` first, right path). Sonnet wasn't rerun: it passed before the change.
   - **Left on qa-128:** the MT8 memory, and the seven chats from this pass. Stage 2 was turned
     back on, and Codex's model set back to `gpt-6.1-sol`.
+
+## 27. Memory upkeep: checks as memories are saved, and a weekly sweep (drafted 2026-11-24)
+
+Drafted 2026-11-24, after Juno asked whether a utility model should tidy the memories now and
+then. Phases 7 and 8 (§10). Phase 7 is built (§28); Phase 8 isn't.
+
+### 27.1 Why
+
+- **Rewordings and corrections still pile up.** `save` only drops a memory whose wording
+  matches another's (`gaiaMemoryKey`). The curator is shown its 40 nearest kept memories and
+  20 set-aside ones, and told to leave out anything already there (§25.4, §25.5). So it doesn't
+  offer a fact again in other words. But it can't say that a new fact *replaces* an old one.
+  For example, the chat says "I moved back to Vancouver" while "I live in Toronto" is kept. The
+  curator offers the new fact, both end up kept, and recall can give the agent either one.
+  `memory_propose` and `/remember` have only the exact-wording check.
+- **Nothing ever looks back over what's been kept.** Two memories saved months apart can say
+  the same thing. A time-bound fact ("My Japan trip is next week") outlives its date. And
+  topics written at different times don't name things the same way ("cs246" next to "CS245
+  Course").
+- **Clutter costs recall, not prompt size.** Only pins (2,000 characters) and the topic list go
+  in every prompt. The rest arrive through recall (§4). So duplicates take recall slots from
+  other memories, and contradictions give the agent two answers. Prompt length isn't the
+  problem.
+
+### 27.2 What it is, and what it isn't
+
+1. **A check as each memory is saved (Phase 7).** A new memory is compared with its nearest
+   kept memories. The utility model says whether it's new, the same as one, or a correction
+   of one.
+2. **A weekly sweep (Phase 8).** The utility model reads the memories, and the topics, that
+   changed since the last sweep, next to their nearest neighbours. It suggests merges, flags
+   facts that disagree and ones that have expired, and suggests topic merges and renames. Then
+   it runs Sort these (§6) on the Unsorted memories it hasn't asked about yet.
+3. **Everything it finds is a suggestion in the inbox**, alongside "Pin this?" and "Merge X
+   into Y?" (§23). Nothing is changed or deleted without you, except what `/remember` asks
+   for by name (§27.3).
+
+**Not part of this:**
+- **Deleting a memory because it hasn't been used lately.** A memory not recalled for a long
+  time is often still true ("I'm allergic to peanuts"). Or recall missed it, and deleting it
+  would hide that miss. The recall history couldn't tell anyway: it's on each device, not
+  synced, and only covers 20 chats (§3.3). Expiry comes from what a memory *says*, read by
+  the model (§27.4), never from when it was last used.
+- **Embeddings** (§12). Nearness is stage 1's, as for the curator's list.
+
+### 27.3 Phase 7: the check as a memory is saved
+
+**The curator can replace a memory.** Its list of kept memories gets numbers (`1. I live in
+Toronto.`). An item it returns can carry `"replaces": <number>` when the new fact corrects
+or updates that memory. The prompt asks for this only when both can't be true at once, not
+when the new fact just adds detail.
+- The item is saved as a proposal with a new synced field, `replacesId`, on `GaiaMemory`.
+  The inbox shows it as **"Update this?"**, with the old text struck through above the new,
+  and **Update** / **Keep both** / **Dismiss**.
+- **Update** writes the new text into the *old* memory. Its id, topics, pin and recall history
+  stay. The proposal goes away. A pinned memory whose new text would go over the pin budget
+  gets the usual toast (§3.3), and nothing changes.
+- **Keep both** remembers the proposal as a memory of its own, and clears `replacesId`.
+- A proposal whose old memory has been deleted or archived since shows as a plain proposal.
+- **Auto-accept** (`autoAcceptCurator`) does **not** apply an update. It changes a memory
+  you kept, so it always waits in the inbox (decided, §27.7).
+
+**`memory_propose` and `/remember` get the same check.** After the exact-wording check,
+stage 1 ranks the active memories against the new text. When any of the top 10 is at least a
+low strength (to be tuned; to start, 0.2), one utility call gets the new text and those 10,
+numbered. It returns `new`, `same: <n>` or `replaces: <n>`. When the memory also needs
+placing (`/remember`, or `memory_propose` with no topics), that same call places it, so
+there's no second call.
+- **`memory_propose`:** `same` isn't saved. The agent is told "Already remembered: …", as
+  for an exact duplicate today. `replaces` is saved as an "Update this?" proposal.
+- **`/remember`:** `same` isn't saved. It shows the "Already remembered" toast, with the
+  old text. `replaces` writes the new text into the old memory straight away, because you
+  asked for it by name. The toast reads "Updated: <old text>", with **Undo**.
+- **If the call fails or times out** (the router's 5 seconds), the memory is saved as it is
+  today. The check is a best effort, and it never blocks a save.
+- **When nothing comes near**, there's no call. Most new memories cost nothing extra.
+
+**Why the model, at save time:** §25.4 left out fuzzy matching on wording, because it either
+misses a rewording or merges two different facts. Here the model decides, and only between a
+new fact and its nearest few. Wording only picks which memories it's shown.
+
+### 27.4 Phase 8: the weekly sweep
+
+**When it runs:** on a desktop's main instance, at the first idle stretch at least 7 days
+after the last sweep. "Idle" uses the same wait as the curator (`gaia_controller.dart:69`).
+It runs only if a memory or topic changed since the last sweep. The first sweep covers
+everything. The time of the last sweep is local, like the recall history. A setting,
+**Tidy memories weekly**, turns it on. It's off until §27.6's cost is measured, then decided
+(§27.7). The debug menu gets **Sweep now** for checks.
+
+**What it reads:** one group per topic that holds a memory changed since the last sweep
+(Unsorted counts as one topic). A group is:
+- the topic's active memories,
+- and, for each changed one, its 5 nearest active memories elsewhere by stage 1. That's how a
+  fact in Unsorted meets the same fact in Profile.
+
+At most 80 lines go in a call. A bigger group is split by stage 1 nearness, so near ones
+share a call. Each line gives a number, the text, the topics, and the date it was saved. The
+prompt gives today's date, so "next week" can be read against the date it was written.
+Archived and proposed memories aren't read. A pinned one is read, but marked as pinned.
+
+**What it returns**, as numbered items, each with a one-line `why`:
+
+| Kind | What it says | Card in the inbox | Buttons |
+|---|---|---|---|
+| `same` | Memories that say one thing, and one text for them all | **"Same thing?"**: the texts, then the merged text, which you can edit | **Merge** / **Keep apart** |
+| `conflict` | Two memories that can't both be true | **"These disagree"**: both texts, and the `why` | **Keep** under each / **Keep both** |
+| `expired` | A time-bound fact whose time has passed | **"Out of date?"**: the text, saved date, `why` | **Archive** / **Keep** |
+| `topicMerge` | Two topics that mean the same thing | **"Merge X into Y?"** (§23), with the model's `why` | **Merge** / **Keep both** (as now) |
+| `topicRename` | A topic named unlike its siblings | **"Rename X to Y?"** | **Rename** / **Keep** |
+
+- **Merge** keeps the oldest memory, so its id and recall history stay. It gets the merged
+  text, every topic and tag of the merged ones, and the pin if any of them was pinned. A pin
+  over the budget gets the toast and nothing changes. The others go to the trash. **Undo**
+  uses the review's put-back (`gaia_memories.dart:1040`), as the other cards' Undo does.
+- **Keep** in "These disagree" sends the other memory to the trash. It isn't archived: a fact
+  you said is wrong shouldn't come back through `memory_search`.
+- **Archive** uses `archive` (§3.1). It's undone by unarchiving, as now.
+- **Keep apart, Keep both and Keep** are stored as `keptApart` hints, keyed by the memory or
+  topic ids in order. A sweep doesn't suggest them again, unless one of those memories'
+  text changes.
+- **A suggestion goes stale** and is dropped when any memory or topic it names has changed
+  since it was made, or has been deleted.
+- The sweep's own call never suggests a new topic, never moves a memory between topics, and
+  never touches a linked project's topic name. Placing an Unsorted memory isn't a move, and
+  goes through Sort these (below).
+
+**Placing Unsorted memories:** after the groups above, the sweep runs Sort these (§6) on its
+own. It's the same call (`placeMany`, batches of 30), not part of the sweep's prompt, so it
+keeps Sort these' parser and tests, and neither job crowds the other in one prompt.
+- **Which ones:** active Unsorted memories with no placement waiting and no `leftUnsorted`
+  hint (§27.5). The first sweep asks about all of them. Later sweeps only reach ones that are
+  new to Unsorted or were edited since, since the rest were already asked about.
+- **After the groups,** so the sweep doesn't offer a topic for a memory it's also suggesting
+  you merge into another. A memory named in one of this sweep's `same` or `conflict`
+  suggestions is left for the next sweep.
+- **Offered, never applied,** as §6 says. A placement shows where Sort these' do now: as
+  "Suggested:" chips on its Unsorted row, and as a review card with **File there**. A
+  suggested new topic is only made when you accept it (§5).
+- **Stored, unlike Sort these' today** (§23.2 item 11). The sweep runs while you're away, so
+  its placements go in `gaia_memory_suggestions_table` as kind `place` and are loaded into
+  Sort these' list when the companion starts. One is dropped when it's accepted, when you
+  leave the memory unsorted, or when the memory is filed some other way, edited or deleted.
+
+**Where the suggestions live:** a new local table, `gaia_memory_suggestions_table` (kind,
+memory ids, topic ids, merged text or new name, `why`, made at). It isn't synced or backed
+up, the same as the hints table (§23.2 item 1). So the sweep's cards show only on the desktop
+that ran it, as pin suggestions do. A decision made there reaches every device through the
+memories it changes.
+
+**Cost:** one Haiku call per group, through the utility runner, with the curator's 60-second
+timeout, labelled `memory sweep` so its tokens are logged and counted. Placing Unsorted
+memories adds one call per 30, labelled `memory sweep sort`. Most weeks that's no call, or one. A week of normal use
+changes a handful of topics, which should be a few calls, but that's a guess. The first sweep
+over gaiaqa's ~325 memories is the costly one. §27.6 measures both before the default is
+decided.
+
+### 27.5 Inbox and settings
+
+- The inbox's section count includes the new cards, as it does pin and merge suggestions
+  (§23.2 item 13). The tab's badge still counts proposals only.
+- On the phone, "Update this?" shows, because it's a proposal and syncs. The sweep's cards
+  don't (§27.4).
+- The Memories settings tab gets **Tidy memories weekly**, under auto-accept.
+- **Skip means the same thing everywhere: "not now".** In the review deck, Skip already only
+  moves on and remembers nothing. Each card has its own button for "no" (Decline, Not now,
+  Keep apart, Leave unsorted). The Memories tab's Sort these row was the odd one out: its
+  **Skip** drops the suggestion, which is what Leave unsorted does. So:
+  - The tab's **Skip** is renamed **Leave unsorted**, and does what the review's does.
+  - **Leave unsorted is remembered**, in both places, as a `leftUnsorted` hint in
+    `gaia_memory_hints_table`, keyed by the memory id. Sort these and the sweep don't ask
+    about that memory again. Undo removes the hint. The hint is dropped when the memory's text
+    changes, or when it's filed in a topic, so if it comes back to Unsorted later it's asked
+    about again.
+  - **Suggest topics** on the row still works on a left-unsorted memory, and so do Choose…
+    and dragging. The hint only stops it being asked about without you.
+  - **Skip** in the review deck stays as it is: the card comes back on the next review.
+  - Like the other hints, `leftUnsorted` is local (§23.2 item 1). Another desktop's Sort
+    these may still ask about it.
+
+### 27.6 How it's checked
+
+**Unit tests:**
+- The curator's `replaces` and the save check's `new` / `same` / `replaces` parsers: an
+  out-of-range number, a missing number, bad JSON (saved as today).
+- Update keeps the old memory's id, topics and pin, and refuses past the pin budget.
+- The sweep's groups: a changed memory's neighbours outside its topic, the 80-line split, and
+  only changed topics after the first sweep.
+- Merge's union of topics, tags and pin. A stale suggestion dropped. A kept-apart set not
+  suggested again until a text changes.
+- The schema bump, with `gaia_memory_suggestions_table` listed as local-only.
+- The sweep's placing: only Unsorted memories with no placement and no `leftUnsorted` hint;
+  none named in that sweep's `same` or `conflict`; a stored `place` loaded into Sort these'
+  list, and dropped when its memory is filed, edited or deleted.
+- `leftUnsorted`: set by Leave unsorted on the tab and in the review, skipped by Sort these and
+  the sweep, removed by Undo, and dropped on an edit or once the memory is filed.
+
+**Controller tests:** `/remember`'s "Updated" toast and Undo. `memory_propose` saving an
+"Update this?" proposal. No utility call when nothing is near. A failed call saving as today.
+
+**Widget tests** (Windows variant, under the memory watchdog): each new card's buttons and
+Undo. The tab's Sort these row shows **Leave unsorted**, not Skip.
+
+**Live, in `gaiaqa`, real Haiku:** on top of the ~325 memories, seed 10 rewordings, 5
+contradictions, 5 expired facts, 3 topic pairs that mean the same thing, 10 lookalikes
+that are different facts, and 10 Unsorted memories that fit a topic, 2 of them left unsorted
+first. Count what the first sweep finds, what it suggests wrongly (a
+lookalike merged is the failure that matters), how many calls and how long it takes, and its
+plan usage, read as in §11. Count the placements offered, and how many fit; the 2 left
+unsorted should get none, on this sweep or the next. Then a curated chat that moves a seeded fact, and `/remember` and
+a Codex `memory_propose` that restate and correct seeded facts.
+
+**The cost measurement, right after the build (§27.7 item 3):**
+- **A full sweep:** **Sweep now** on the seeded profile. For each call, log the input,
+  cache-read, cache-write and output tokens, and the time. Then log the totals and the number
+  of calls.
+- **A typical weekly sweep:** edit or add about 10 memories across 3-4 topics, and run
+  **Sweep now** again.
+- **Read against a turn:** compare both totals with §11's Standard-tier turn (21,145 tokens).
+  Read the 5-hour window before and after too, but §11 showed it's noisy while anything else
+  runs on the account, so the tokens are what decide.
+- **The save check:** its tokens per call, and how often it runs, over the live check's
+  `/remember` and `memory_propose` calls.
+
+Write the numbers into this section, then decide the setting's default.
+
+### 27.7 Decisions (Juno, 2026-11-24)
+
+1. **An update always waits in the inbox**, even with auto-accept on. Auto-accept only applies
+   to new memories.
+2. **`/remember` applies an update straight away**, with the "Updated: <old text>" toast and
+   Undo, because you asked for it by name.
+3. **The sweep's default waits on its cost.** Phase 8 is built with **Tidy memories weekly**
+   off. §27.6's measurement is run first, and whether it ships on is decided from those
+   numbers. The measurement doesn't need a week of use. **Sweep now** on the seeded `gaiaqa`
+   profile runs a first, full sweep (the most a sweep costs) right after the build. Editing a
+   few memories and running it again gives a typical weekly sweep. Utility calls already log
+   their tokens when given a `usage` label (`claude_utility_runner.dart:172`), and the Stats
+   tab counts them by job.
+4. **Two desktops both sweeping is accepted.** Each keeps its own last-sweep time, so both may
+   suggest the same merge, and Keep apart on one doesn't reach the other, as for merge
+   suggestions (§23.2 item 1).
+5. **The sweep places Unsorted memories (Juno, 2026-11-25),** through Sort these, offered
+   and never applied, and only those it hasn't asked about (§27.4).
+6. **Skip means "not now" everywhere (Juno, 2026-11-25).** The tab's Sort these Skip becomes
+   Leave unsorted, and Leave unsorted is remembered in both places (§27.5). This changes
+   Phase 6's behaviour (§23.2 item 11), where a dropped suggestion was asked about again by
+   the next Sort these.
+
+### 27.8 Files likely touched
+
+- `lib/domain/models/gaia_models.dart`: `replacesId`, the suggestion type, new hint use.
+- `lib/data/database/app_database.dart`, `drift_repositories.dart`,
+  `lib/core/sync/firestore_document_mapper.dart`: `replacesId`, the suggestions table.
+- `lib/features/gaia/host/gaia_memories.dart`, `gaia_host.dart`: the save check, update,
+  merge, the sweep's groups.
+- `lib/features/gaia/utility/gaia_utility.dart`: `replaces` in `curate`, the save check,
+  the sweep call.
+- `lib/features/gaia/companion/gaia_controller.dart`: `/remember`'s toast, the sweep's
+  idle timing, Sort these' stored placements and the `leftUnsorted` hint.
+- `lib/features/gaia/companion/gaia_memory_review.dart`, `settings/gaia_memories_tab.dart`,
+  `gaia_debug_menu.dart`, `lib/features/gaia/page/gaia_page.dart`: the cards and the
+  setting. Leave unsorted in place of Skip on the tab's Sort these row, and remembered in
+  the review's.
+
+## 28. Phase 7 build notes (2026-11-25)
+
+### 28.1 What was built
+
+- **`replacesId` on `GaiaMemory`** (schema 204 → 205, synced as `replacesId`): the memory a
+  proposal corrects. `gaiaReplacedMemory` gives that memory only while it's active, so a
+  proposal whose memory was deleted or archived since shows as a plain one.
+- **The curator's `replaces` (§27.3):** `curatorContext` numbers its kept memories (`1. I live
+  in Toronto`) and gives their ids in order; the set-aside ones keep their `-`. The prompt asks
+  for `"replaces": <n>` only when both can't be true at once. `curated` saves such an item as a
+  proposal with `replacesId`, auto-accept or not.
+- **The save check for `/remember` and `memory_propose`:** the companion asks the main
+  instance for `memoryNear {text, byUser}`: stage 1's 10 nearest active memories, when any is
+  at strength 0.2 or more (`kGaiaSaveCheckStrength`), and none when nothing is near or the
+  exact-wording check would skip it anyway. Then one `GaiaUtility.check` call (the router's 5
+  seconds, labelled `memory save check`) answers `new`, `same` or `replaces` with a number,
+  and files the memory in the same call when it needs placing. Its answer goes to the main
+  instance as `same` / `replaces` on the `remember` and `proposeMemory` requests.
+  - `/remember`: `same` saves nothing and shows "Already remembered" with the old text.
+    `replaces` writes the text into the old memory at once (`GaiaMemories.rewrite`), and a
+    toast "Updated", with the old text and **Undo**.
+  - `memory_propose`: `same` saves nothing; the agent is told "Already remembered: …".
+    `replaces` saves an "Update this?" proposal; the agent is told it's an update to the old
+    text.
+  - A failed or unreadable answer, or no utility model, saves as before.
+- **"Update this?" in the inbox:** the review deck, the Memories tab's rows and the Gaia page
+  (the phone) show the old text struck through above the new, with **Update**, **Keep both**
+  and **Dismiss**. Update is the `updateMemory` request (`GaiaMemories.update`): the old memory
+  takes the text, keeping its id, topics, pin and recall history, and the proposal goes to the
+  trash. Keep both is Remember, which now clears `replacesId`.
+- **Gaia's toasts can carry an Undo button** (`showGaiaToast(onUndo:)`, fed by the
+  controller's `undoToasts`), for `/remember`'s "Updated" and the Memories tab's Update.
+
+### 28.2 Decisions made while building
+
+1. **The check runs in the companion**, where the utility model is, between two requests to the
+   main instance. The main instance only acts on an id that is an active memory when the save
+   happens, so a memory deleted in between makes it a plain save.
+2. **"Near" is stage 1's strength:** the share of a memory's own term weight that the new text
+   matches. It means a correction that shares no words with the old fact isn't shown to the
+   model: "I moved to Vancouver" doesn't reach "I live in Toronto". The curator's path is wider
+   (40 nearest the whole transcript). The live check should say whether that matters.
+3. **`replacesId` is only kept on proposals.** `save` drops it on an active save, and accepting a
+   proposal (Keep both, on any device's inbox or a chat card) clears it.
+4. **Update sends the proposal to the trash, like a dismissal**, so Undo is the review's
+   put-back (`revertMemories`), which now restores `replacesId` too. A pinned memory whose new
+   text goes past the pin budget is refused with the usual toast, and nothing changes.
+5. **`/remember`'s update isn't filed again:** the old memory keeps its topics. `--pin` with
+   `same` or `replaces` pins the memory that stands.
+6. **The card in the chat offers Update too** (Juno, 2026-11-25). A `memory_propose`
+   correction's card in the reply carries the old text (`GaiaMemoryPart.was`), struck
+   through, and reads "Update this?", with **Dismiss**, **Keep both** and **Update**, and no
+   pin. Update saves the card's edit first, then applies it as the inbox does; the card then
+   reads "Updated" (`GaiaMemoryPart.updated`), and a toast offers Undo, which opens the card
+   again. The old text is the one when it was offered: Update still refuses if that memory
+   was deleted or archived since.
+7. **The deck's keys for "Update this?":** Enter updates, A keeps both, Backspace or D
+   dismisses. There's no "remember and pin" on it: Update keeps the old memory's pin.
+8. **`edit` still doesn't check the pin budget** for a pinned memory's new text. Only `rewrite`
+   does. That's unchanged from before, and left alone.
+
+### 28.3 How it was checked
+
+- **Unit:** `parseCuratorAnswer`'s `replaces` (by number, as a string, out of range, with no
+  kept list); `parseSaveCheck` (same, replaces, new, a number missing or out of range read as
+  new, bad JSON throws, placement only when asked); the check's input and usage label.
+  `curatorContext` numbers the kept memories. `curated` keeps an update in the inbox with
+  auto-accept on. `update` keeps the id, topics and pin, trashes the proposal, and both come
+  back on revert; past the pin budget it changes nothing. Keep both clears `replacesId`; an
+  archived memory makes it a plain proposal. `near` is empty with nothing near and for a
+  wording already saved. `propose` with `same` and `replaces`. `replacesId` survives the
+  Firestore mapper and the pipe's JSON.
+- **Controller:** `/remember` of a correction rewrites the old memory with one utility call
+  and no placement call, and Undo puts it back; `same` saves nothing, with its toast;
+  `memory_propose` of a correction saves an "Update this?" proposal; nothing near makes no
+  call; a failed call saves as before.
+- **Card in the chat:** the part's `was` and `updated` survive JSON; the card shows the
+  struck-through text, Update and Keep both with no pin, and "Updated" once applied; the
+  controller's `updateMemoryCard` saves the card's edit, rewrites the old memory, marks the
+  card, and its undo puts both back and opens the card.
+- **Widget:** the deck's card (struck-through text, Update / Keep both / Dismiss, Enter and A,
+  both undone with Ctrl+Z; a plain card once the old memory is archived), and the Memories
+  tab's row (Update's toast and its Undo, Keep both).
+- `dart analyze` is clean. The Gaia test files (109) pass, except `gaia_archive_test` (the
+  sidebar's `expand_more` found twice) and `gaia_status_tab_test` (Pair's code check), which
+  fail the same way on their own and touch nothing here.
+
+### 28.4 Live checks still to do for Phase 7
+
+From §27.6, in `gaiaqa` with real Haiku:
+- A curated chat that moves a seeded fact: an "Update this?" proposal for the right memory, and
+  none for the lookalikes.
+- `/remember` and a Codex `memory_propose` that restate a seeded fact (same) and correct one
+  (replaces), and the "Updated" toast's Undo.
+- How often the save check runs over those calls, and its tokens per call (Stats → by job,
+  `memory save check`).
+- Whether a correction that shares no words with the old fact (§28.2 item 2) is missed, and
+  whether 0.2 needs tuning.
+
+## 29. Live pass, 2026-11-25 (Phase 7)
+
+Run in `gaiaqa` (qa-128) from the `vwt-run` build copy (the 2026-11-24 Debug exe, plus a
+fresh `flutter build bundle` of the working tree), with real Haiku, mostly in background mode.
+Dummy mode was turned off for the run and back on after.
+
+**Passed:**
+- **`/remember`, same:** "I'm allergic to cashews." → "Already remembered" with the old text
+  ("The user is allergic to cashews"). Nothing saved.
+- **`/remember`, replaces:** "My bench press working weight is now 85 kg for 5 reps." and
+  "Biscuit now weighs 13 kg." each rewrote the right memory in place (same id, same topic). The
+  toast reads "Updated" with the old text. Typed through the real composer, Undo on the toast
+  put "My climbing shoes are La Sportiva Solutions, size 41." back.
+- **`/remember`, lookalikes saved as new:** "My overhead press working weight is 45 kg for 5
+  reps." (near the bench and the overhead PR) and "Pepper's vet is Dr. Amin too." (near
+  Biscuit's vet). The model said `new` for both.
+- **`memory_propose` (Claude, Haiku):** "I am allergic to cashews." and "I climb at Grand River
+  Rocks two times a week." got "Already remembered: …". "My betta fish Neptune now lives in a
+  30 litre tank." and "My Spanish tutor is now called Marta." each became an "Update this?"
+  proposal with the right `replacesId`, and the reply's card showed the old text struck
+  through. The card's **Update** wrote the text into the old memory (id kept), trashed the
+  proposal, marked the card "Updated", and showed a toast with Undo.
+- **Curator:** a chat saying "I sold the Civic last week and now drive a 2021 Mazda 3, and my
+  Spanish lessons moved to Tuesday evenings" gave two "Update this?" proposals, for "The user
+  drives a 2014 Honda Civic…" and "I take Spanish lessons on Thursday evenings." None for the
+  lookalikes (Civic maintenance log, insurance, winter tyres, the Spanish tutor, the B2 goal).
+- **Inbox:** the Memories tab row shows the old text struck through above the new. In the
+  review deck, Enter updated (id kept, proposal trashed), A kept both (`replacesId` cleared),
+  D dismissed. Ctrl+Z undid each one exactly. With the old memory archived, the same proposal
+  showed as a plain "In the inbox" card. It went back to "Update this?" once unarchived.
+
+**Not run:** Codex. gaiaqa's Codex login is dead ("refresh token was already used"), and a
+fix needs `codex login` by hand. `memory_propose` goes through the same host path for both
+agents, so the Claude runs above cover the save check. The Codex tool call itself is unchecked.
+
+**The save check's cost:** 12 saves made 11 calls. The one with nothing near (Koodo, below)
+made none. Every verdict was right: 3 `same`, 6 `replaces`, 2 `new`. Per call: 2 input,
+0 cache read, 2,160-2,388 cache write (about 2,330 on average), 241-474 output, and
+2.1-2.9 s. Each call was a cold start of the utility process. That's about 2,650 tokens a
+call, about 12% of §11's Standard-tier turn (21,145). The 5 s router timeout was never hit,
+but a cold start leaves about 2 s to spare. Each call wrote the cache and none read it, even
+with calls 2-4 s apart, so the prompt's prefix doesn't seem to repeat between calls. Worth a
+look if the check runs often.
+**Looked at 2026-11-25, left as it is.** No read can happen: the message is the job's
+instructions (about 300 tokens, the same each time), then `<input>` opening with the new
+fact, so two checks share only those first few hundred tokens and differ from the fact on.
+Putting the topic list before the fact would make a longer shared prefix, but a read also
+needs a second save within the cache's 5 minutes, which in real use (a few saves a day)
+is rare. The most it could save is the write's premium over plain input on about 2,300
+tokens, a few hundred token-equivalents a check, small next to a 21,145-token turn. Turning
+caching off for the utility process (`DISABLE_PROMPT_CACHING`) would drop that premium but
+also any reads the router gets from its fixed prompt, so it isn't worth the risk either.
+Look again only if the sweep (§27.4) or something else makes the check run often.
+
+**§28.2 item 2 is real: corrections in other words are missed.** Stage 1's strength of the
+true old memory, by eval in the main instance:
+
+| New text | Old memory it corrects | Strength |
+|---|---|---|
+| I switched my phone carrier to Koodo. | The user's phone plan is 34 CAD a month with Fizz | 0.09 |
+| I quit coffee completely. | I limit myself to one coffee a day, before noon. | 0.13 |
+| I sold my car. | The user drives a 2014 Honda Civic, … | not in the top 4 (best 0.10) |
+| I'm reading Babel by R. F. Kuang now. | The user reads before bed: currently Piranesi | not in the top 4 |
+
+All four are under 0.2, so no call was made, and "I switched my phone carrier to Koodo" was
+saved beside the Fizz memory. Lowering the bar to about 0.1 would catch the coffee case, but
+nearly every save has something at 0.1, so the check would run on almost every save. Noise
+reaches 0.16 too ("now" matched "Biscuit now weighs 13 kg"). The curator, with its 40
+nearest the whole chat, did catch the Civic case. So 0.2 stays for now: the misses are
+corrections that share no words, which a strength bar can't fix. That needs Juno's call.
+
+**Bug (small):** `memory_propose`'s reply doubles the full stop when the old text ends in one:
+"Proposed as an update to: My Spanish tutor is called Lucia.. A card in the chat…"
+(`gaia_memories.dart:413`). **Fixed 2026-11-25:** the reply adds its full stop only when the
+old text doesn't already end in `.`, `!` or `?` (test in `gaia_memories_test.dart`).
+
+**Seen, not a bug:** an update replaces the whole text. "My betta fish Neptune now lives in a
+30 litre tank." replaced "Neptune's tank is 20 litres, heated to 26 degrees", so the heater
+detail went away. The agent wrote that text. The card's editor is where to keep it.
+
+**Test data left on qa-128:** three open "Update this?" proposals (Marta, the Mazda, Tuesday
+Spanish lessons) and four chats ("Memory Proposals: Cashew Allergy, Betta Tank", "Saving
+Climbing and Tutor Facts" (the failed Codex run), its Haiku rerun, "Hiking Near Waterloo for
+Saturday"). The seed memories the run rewrote were put back, and the three new test memories
+were trashed. The first stray dummy chat was deleted. gaiaqa's dummy mode, its `sol` model and
+the profile are back as they were. The last tier now reads quick, not deep.

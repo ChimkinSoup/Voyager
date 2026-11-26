@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show OverflowBoxFit;
 import 'package:flutter/services.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
@@ -54,6 +55,7 @@ enum GaiaReviewExit { up, down, aside }
 /// What a card was decided as, as the summary counts it.
 enum GaiaReviewOutcome {
   remembered('remembered', GaiaReviewExit.up),
+  updated('updated', GaiaReviewExit.up),
   declined('declined', GaiaReviewExit.down),
   skipped('skipped', GaiaReviewExit.aside),
   kept('kept', GaiaReviewExit.up),
@@ -63,7 +65,8 @@ enum GaiaReviewOutcome {
   putOff('put off', GaiaReviewExit.down),
   merged('merged', GaiaReviewExit.up),
   keptApart('kept apart', GaiaReviewExit.down),
-  filed('filed', GaiaReviewExit.up);
+  filed('filed', GaiaReviewExit.up),
+  leftUnsorted('left unsorted', GaiaReviewExit.down);
 
   const GaiaReviewOutcome(this.word, this.exit);
 
@@ -190,7 +193,16 @@ class GaiaMemoryReview extends ChangeNotifier {
   /// its Ask Gaia chat.
   String? sourceOf;
 
-  /// Esc in an Ask Gaia chat's composer: it stays closed.
+  /// Esc in an Ask Gaia chat's composer (§7.1): the keys back to the deck,
+  /// the chat left showing. The view takes it and sets it back.
+  var wantsKeys = false;
+
+  void backToDeck() {
+    wantsKeys = true;
+    notifyListeners();
+  }
+
+  /// Esc on the deck with the Ask Gaia chat showing: it stays closed.
   void dismissAsk(String memoryId) {
     if (!asked.remove(memoryId)) return;
     notifyListeners();
@@ -361,9 +373,9 @@ class GaiaMemoryReview extends ChangeNotifier {
     final decision = _Decision(at, outcome);
     _decisions.add(decision);
     if (outcome != null) {
-      outcomes[at] = outcome;
-      // It goes off saying what was done.
+      // It goes off just as it stood, so it keeps its size.
       leaving = (card: card(at), exit: outcome.exit);
+      outcomes[at] = outcome;
       leavingSerial++;
       _next(at + 1);
     }
@@ -480,6 +492,10 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
 
   /// The last edit saved, which a decision waits for.
   Future<void>? _saving;
+
+  /// The card going off, built once as it starts, and its serial: it keeps
+  /// its look and size while the write it set off changes what it shows.
+  (int, Widget)? _leavingCard;
   late final _editFocus = FocusNode(
     debugLabel: 'gaia review edit',
     onKeyEvent: (node, event) {
@@ -502,6 +518,8 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
   void initState() {
     super.initState();
     _review.addListener(_onReview);
+    // The hint says what Esc does in the Ask Gaia composer.
+    _keys.addListener(_onKeysFocus);
     // Started from a button, which kept the focus somewhere in the list.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -519,16 +537,30 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _syncAsk());
   }
 
+  void _onKeysFocus() {
+    if (mounted) setState(() {});
+  }
+
   /// Whether this review last showed an Ask Gaia chat.
   var _wasAsking = false;
 
   void _onReview() {
+    // Built here, as it's decided, before the write it sets off goes on.
+    final review = _review;
+    if (review.leaving case final leaving?
+        when _leavingCard?.$1 != review.leavingSerial) {
+      _leavingCard = (review.leavingSerial, _card(leaving.card, still: true));
+    }
     final was = _wasAsking;
     _syncAsk();
     // Back from an Ask Gaia chat, the keys are the deck's again; not taken
     // from anything else that has them.
     if (was && _controller.asking == null && _editing == null) {
       _keys.requestFocus();
+    }
+    if (review.wantsKeys) {
+      review.wantsKeys = false;
+      if (_editing == null) _keys.requestFocus();
     }
   }
 
@@ -661,6 +693,25 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
     });
   }
 
+  /// The memory proposal [memory] would update, while it's still kept
+  /// (GAIA_MEMORY_TOPICS_HLD.md §27.3); null for a plain proposal.
+  GaiaMemory? _replaced(GaiaMemory? memory) => memory == null
+      ? null
+      : gaiaReplacedMemory(memory, _controller.memoryList!.memories);
+
+  bool _updates(GaiaMemory? memory) => _replaced(memory) != null;
+
+  /// "Update this?" accepted: the proposal's text written into the memory
+  /// it updates, both put back on undo. One refused (a pin over the budget)
+  /// puts the card back, saying why.
+  void _update(GaiaMemory memory) {
+    _review.decide(GaiaReviewOutcome.updated, () async {
+      // With its edit, if one is saving.
+      await _saving;
+      return _reverting(await _controller.updateMemory(memory.id));
+    });
+  }
+
   void _skip(GaiaReviewOutcome outcome) =>
       _review.decide(outcome, () async => null);
 
@@ -717,6 +768,17 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
     });
   }
 
+  /// Leave unsorted: its suggestion dropped, as the tab's Skip does, and
+  /// put back on undo.
+  void _leaveUnsorted(GaiaMemory memory) {
+    final placement = _controller.memorySorted[memory.id];
+    _review.decide(GaiaReviewOutcome.leftUnsorted, () async {
+      _controller.changeSorted(memory.id);
+      if (placement == null) return null;
+      return () async => _controller.changeSorted(memory.id, placement);
+    });
+  }
+
   /// Choose…: the topic picker, then filed in what's picked, a new topic
   /// made at the root first.
   Future<void> _choose(GaiaMemory memory) async {
@@ -769,11 +831,17 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
     final right =
         key == LogicalKeyboardKey.arrowRight || letter(LogicalKeyboardKey.keyS);
 
+    // The Ask Gaia chat first, then the review (§8).
     if (key == LogicalKeyboardKey.escape) {
-      _controller.endReview();
+      if (_controller.asking != null) {
+        _controller.closeAsk(dismiss: true);
+      } else {
+        _controller.endReview();
+      }
       return KeyEventResult.handled;
     }
-    if (control && key == LogicalKeyboardKey.keyZ) {
+    if ((control && key == LogicalKeyboardKey.keyZ) ||
+        letter(LogicalKeyboardKey.keyU)) {
       unawaited(review.undo());
       return KeyEventResult.handled;
     }
@@ -798,10 +866,25 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
       _ask(memory);
       return KeyEventResult.handled;
     }
+    // R: Gaia's latest open change for this card applied (§7.5).
+    if (memory != null &&
+        card.kind != GaiaReviewKind.done &&
+        letter(LogicalKeyboardKey.keyR)) {
+      if (_controller.asking == memory.id &&
+          _controller.openRevision(memory.id) != null) {
+        _applyRevision(memory);
+      }
+      return KeyEventResult.handled;
+    }
     VoidCallback? action;
     switch (card.kind) {
       case GaiaReviewKind.proposed:
-        if (enter() && shift) {
+        // "Update this?" (GAIA_MEMORY_TOPICS_HLD.md §27.3): Enter updates,
+        // A keeps both.
+        final updates = _updates(memory);
+        if (updates && enter() && !shift) {
+          action = () => _update(memory!);
+        } else if (enter() && shift && !updates) {
           action = () => _remember(memory!, pin: true);
         } else if ((enter() && !shift) || letter(LogicalKeyboardKey.keyA)) {
           action = () => _remember(memory!);
@@ -816,6 +899,8 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
           );
         } else if (letter(LogicalKeyboardKey.keyE)) {
           action = () => _startEdit(memory!);
+        } else if (letter(LogicalKeyboardKey.keyT)) {
+          action = () => unawaited(_addTopic(memory!));
         } else if (right) {
           action = () => _skip(GaiaReviewOutcome.skipped);
         }
@@ -842,6 +927,8 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
           action = () => _startEdit(memory!);
         } else if (letter(LogicalKeyboardKey.keyP)) {
           action = () => _togglePin(memory!);
+        } else if (letter(LogicalKeyboardKey.keyT)) {
+          action = () => unawaited(_addTopic(memory!));
         }
       case GaiaReviewKind.pin:
         if (enter()) {
@@ -864,6 +951,8 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
           action = () => _fileThere(memory!);
         } else if (letter(LogicalKeyboardKey.keyT)) {
           action = () => unawaited(_choose(memory!));
+        } else if (backspace || letter(LogicalKeyboardKey.keyD)) {
+          action = () => _leaveUnsorted(memory!);
         } else if (letter(LogicalKeyboardKey.keyE)) {
           action = () => _startEdit(memory!);
         } else if (right) {
@@ -875,6 +964,30 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
     if (action == null) return KeyEventResult.ignored;
     action();
     return KeyEventResult.handled;
+  }
+
+  /// R: the latest open revision card in [memory]'s Ask Gaia chat applied
+  /// with every change it offers, as its Apply would; the deck stays on the
+  /// card. Undone, the memory and its topics are back, any topic it made is
+  /// deleted, and the card is open again.
+  void _applyRevision(GaiaMemory memory) {
+    final (message, revision) = _controller.openRevision(memory.id)!;
+    _review.decide(null, () async {
+      await _saving;
+      final was = _now([memory.id]);
+      final made = await _controller.reviseMemory(
+        message,
+        revision,
+        accept: true,
+      );
+      return () async {
+        await _controller.revertMemories(memories: was);
+        for (final id in made) {
+          await _controller.writeMemories('deleteTopic', {'topicId': id});
+        }
+        await _controller.reopenRevision(message, revision);
+      };
+    });
   }
 
   void _togglePin(GaiaMemory memory) => _decideMemory(
@@ -916,34 +1029,54 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
         onTap: () {
           if (_editing == null) _keys.requestFocus();
         },
-        child: GaiaPanelScroll(
-          key: const PageStorageKey('gaia panel review'),
-          slivers: [
-            SliverToBoxAdapter(child: _header(review)),
-            SliverToBoxAdapter(
-              child: review.finished
-                  ? _end(review)
-                  : Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        _card(review.card(review.index)),
-                        if (leaving != null)
-                          Positioned(
-                            left: 0,
-                            right: 0,
-                            top: 0,
-                            child: _Leaving(
+        child: LayoutBuilder(
+          builder: (context, constraints) => GaiaPanelScroll(
+            key: const PageStorageKey('gaia panel review'),
+            slivers: [
+              SliverToBoxAdapter(child: _header(review)),
+              SliverToBoxAdapter(
+                child: review.finished
+                    ? _end(review)
+                    : AnimatedSize(
+                        // Eases to the next card's height as one goes off;
+                        // any other change of size, an edit's, is at once
+                        // (a zero duration would end inside layout, which
+                        // asserts).
+                        duration: leaving != null
+                            ? _deckTime
+                            : const Duration(microseconds: 1),
+                        curve: GaiaMotion.curve,
+                        alignment: Alignment.topCenter,
+                        clipBehavior: Clip.none,
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            _Entering(
                               key: ValueKey(review.leavingSerial),
-                              exit: leaving.exit,
-                              onEnd: review.leftOff,
-                              child: _card(leaving.card, still: true),
+                              play: leaving != null,
+                              child: _card(review.card(review.index)),
                             ),
-                          ),
-                      ],
-                    ),
-            ),
-            SliverToBoxAdapter(child: _keysHint(review)),
-          ],
+                            if (leaving != null)
+                              Positioned(
+                                left: 0,
+                                right: 0,
+                                top: 0,
+                                child: _Leaving(
+                                  key: ValueKey(review.leavingSerial),
+                                  exit: leaving.exit,
+                                  onEnd: review.leftOff,
+                                  child: _leavingCard!.$2,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+              ),
+              SliverToBoxAdapter(
+                child: _keysHint(review, constraints.maxWidth),
+              ),
+            ],
+          ),
         ),
       );
       return Focus(
@@ -1049,32 +1182,115 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
     ),
   );
 
-  Widget _keysHint(GaiaMemoryReview review) {
+  /// The keys for the card in front, under the column, free to run past it
+  /// into the panel's sides ([panelWidth] wide in all).
+  Widget _keysHint(GaiaMemoryReview review, double panelWidth) {
     final card = review.finished ? null : review.card(review.index);
     final kind = card?.kind;
-    final hint = switch (kind) {
-      null => 'Enter back to the list · ← back · Ctrl+Z undo',
-      GaiaReviewKind.proposed =>
-        'Enter or A remember · Shift+Enter remember and pin · Backspace or D '
-            'decline · E edit · → or S skip',
-      GaiaReviewKind.remembered =>
-        'Enter or → keep · Backspace or D archive · Ctrl+Backspace delete · '
-            'E edit · P pin',
-      GaiaReviewKind.pin => 'Enter pin · Backspace not now · → skip',
-      GaiaReviewKind.merge => 'Enter merge · Backspace keep apart · → skip',
-      GaiaReviewKind.unsorted =>
-        'Enter file there · T choose · E edit · → or S skip',
-      GaiaReviewKind.done => 'Enter or → next',
+    // Each pair is the keys (any one of them) and what they do.
+    final List<(List<String>, String)> hint = switch (kind) {
+      null => [
+        (['Enter'], 'back to the list'),
+        (['←'], 'back'),
+        (['Ctrl+Z', 'U'], 'undo'),
+      ],
+      GaiaReviewKind.proposed when _updates(card?.memory) => [
+        (['Enter'], 'update'),
+        (['A'], 'keep both'),
+        (['Backspace', 'D'], 'dismiss'),
+        (['E'], 'edit'),
+        (['T'], 'topic'),
+        (['→', 'S'], 'skip'),
+      ],
+      GaiaReviewKind.proposed => [
+        (['Enter', 'A'], 'remember'),
+        (['Shift+Enter'], 'remember and pin'),
+        (['Backspace', 'D'], 'decline'),
+        (['E'], 'edit'),
+        (['T'], 'topic'),
+        (['→', 'S'], 'skip'),
+      ],
+      GaiaReviewKind.remembered => [
+        (['Enter', '→'], 'keep'),
+        (['Backspace', 'D'], 'archive'),
+        (['Ctrl+Backspace'], 'delete'),
+        (['E'], 'edit'),
+        (['P'], 'pin'),
+        (['T'], 'topic'),
+      ],
+      GaiaReviewKind.pin => [
+        (['Enter'], 'pin'),
+        (['Backspace'], 'not now'),
+        (['→'], 'skip'),
+      ],
+      GaiaReviewKind.merge => [
+        (['Enter'], 'merge'),
+        (['Backspace'], 'keep apart'),
+        (['→'], 'skip'),
+      ],
+      GaiaReviewKind.unsorted => [
+        (['Enter'], 'file there'),
+        (['T'], 'choose'),
+        (['Backspace', 'D'], 'leave unsorted'),
+        (['E'], 'edit'),
+        (['→', 'S'], 'skip'),
+      ],
+      GaiaReviewKind.done => [
+        (['Enter', '→'], 'next'),
+      ],
     };
+    final chatOpen = _controller.asking != null;
+    // The chat is inside the deck's Focus, so the deck has focus while the
+    // composer does; only not the primary one.
+    if (chatOpen && !_keys.hasPrimaryFocus && _editing == null) {
+      // Typing in the Ask Gaia composer: the deck's keys are off.
+      hint
+        ..clear()
+        ..add((['Esc'], 'back to the deck'));
+    } else if (kind != null) {
+      hint.addAll([
+        if (chatOpen &&
+            kind != GaiaReviewKind.done &&
+            card?.memory != null &&
+            _controller.asking == card!.memory!.id &&
+            _controller.openRevision(card.memory!.id) != null)
+          (['R'], "apply Gaia's change"),
+        if (card?.memory != null &&
+            card!.memory!.status != GaiaMemoryStatus.archived)
+          (['/'], chatOpen ? 'back to the chat' : 'ask Gaia'),
+        (['←'], 'back'),
+        (['Ctrl+Z', 'U'], 'undo'),
+        (['Esc'], chatOpen ? 'close the chat' : 'stop'),
+      ]);
+    }
+    final keyStyle = TextStyle(color: Theme.of(context).colorScheme.primary);
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, 14, 4, 0),
-      child: Text(
-        kind == null
-            ? hint
-            : '$hint${card?.memory == null || card!.memory!.status == GaiaMemoryStatus.archived ? '' : ' · / ask Gaia'} · ← back · '
-                  'Ctrl+Z undo · Esc stop',
-        textAlign: TextAlign.center,
-        style: GaiaType.label.copyWith(color: GaiaInk.faint),
+      // Centred on the column but as wide as the panel less its least
+      // margin; wrapped between items where that's too narrow (beside the
+      // Ask Gaia chat), never shrunk.
+      child: OverflowBox(
+        maxWidth: panelWidth - 2 * gaiaPanelSide(0),
+        fit: OverflowBoxFit.deferToChild,
+        child: Wrap(
+          alignment: WrapAlignment.center,
+          children: [
+            for (final (i, (keys, does)) in hint.indexed)
+              Text.rich(
+                TextSpan(
+                  children: [
+                    for (final (j, key) in keys.indexed) ...[
+                      if (j > 0) const TextSpan(text: ' or '),
+                      TextSpan(text: key, style: keyStyle),
+                    ],
+                    TextSpan(text: ' $does'),
+                    if (i < hint.length - 1) const TextSpan(text: ' · '),
+                  ],
+                ),
+                style: GaiaType.label.copyWith(color: GaiaInk.faint),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -1085,7 +1301,14 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
     final theme = Theme.of(context);
     final memory = card.memory;
     final tree = GaiaTopicTree(_controller.memoryList!.topics);
+    final replaced = card.kind == GaiaReviewKind.proposed
+        ? _replaced(memory)
+        : null;
     final (IconData icon, String kindLabel) = switch (card.kind) {
+      GaiaReviewKind.proposed when replaced != null => (
+        Icons.update,
+        'Update this?',
+      ),
       GaiaReviewKind.proposed => (Icons.bookmark_add_outlined, 'In the inbox'),
       GaiaReviewKind.remembered => (Icons.bookmark_outline, 'Remembered'),
       GaiaReviewKind.pin => (Icons.push_pin_outlined, 'Pin this?'),
@@ -1123,6 +1346,18 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
         ],
       ),
       const SizedBox(height: 12),
+      // What it updates, struck through above the new text (§27.3).
+      if (replaced != null) ...[
+        Text(
+          replaced.text,
+          style: GaiaType.row.copyWith(
+            color: GaiaInk.muted,
+            fontSize: 16,
+            decoration: TextDecoration.lineThrough,
+          ),
+        ),
+        const SizedBox(height: 6),
+      ],
       if (card.from != null)
         Text(
           'Merge "${_path(tree, card.from)}" into "${_path(tree, card.into)}"',
@@ -1276,6 +1511,7 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
               label: path.join(' › '),
               style: label,
               background: background,
+              tint: gaiaTopicTint(id, theme.brightness),
               tooltip: 'Remove from topic',
               removes: true,
               onTap: () => write('removeMemoryTopic', {'topicId': id}),
@@ -1302,34 +1538,37 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
           label: '+ Topic',
           style: label,
           background: background,
-          onTap: () async {
-            final pick = await showGaiaTopicPicker(
-              context,
-              title: 'Add to topic',
-              topics: [
-                for (final line in gaiaTopicLines(tree))
-                  if (!memory.topicIds.contains(line.id)) line,
-              ],
-              newUnder: '',
-            );
-            if (mounted) _keys.requestFocus();
-            if (pick == null) return;
-            await _run(() async {
-              final topicId =
-                  pick.topicId ??
-                  await _controller.writeMemories('newTopic', {
-                        'name': pick.newName,
-                      })
-                      as String;
-              await _controller.writeMemories('addMemoryTopic', {
-                'memoryId': memory.id,
-                'topicId': topicId,
-              });
-            }, "Couldn't save that");
-          },
+          onTap: () => _addTopic(memory),
         ),
       ],
     );
+  }
+
+  /// + Topic (or T): the topic picker, then added to what's picked, a new
+  /// topic made at the root first. The card stays in front.
+  Future<void> _addTopic(GaiaMemory memory) async {
+    final tree = GaiaTopicTree(_controller.memoryList!.topics);
+    final pick = await showGaiaTopicPicker(
+      context,
+      title: 'Add to topic',
+      topics: [
+        for (final line in gaiaTopicLines(tree))
+          if (!memory.topicIds.contains(line.id)) line,
+      ],
+      newUnder: '',
+    );
+    if (mounted) _keys.requestFocus();
+    if (pick == null) return;
+    await _run(() async {
+      final topicId =
+          pick.topicId ??
+          await _controller.writeMemories('newTopic', {'name': pick.newName})
+              as String;
+      await _controller.writeMemories('addMemoryTopic', {
+        'memoryId': memory.id,
+        'topicId': topicId,
+      });
+    }, "Couldn't save that");
   }
 
   /// Unsorted: where the utility model would file it, a click leaving a
@@ -1366,6 +1605,7 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
               label: path.join(' › '),
               style: label,
               background: background,
+              tint: gaiaTopicTint(id, theme.brightness),
               tooltip: 'Leave this topic out',
               removes: true,
               onTap: () => _controller.changeSorted(memory.id, (
@@ -1418,6 +1658,24 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
     );
     return [
       ...switch (card.kind) {
+        GaiaReviewKind.proposed when _updates(memory) => [
+          button('Update', 'Enter', () => _update(memory!), main: true),
+          button('Keep both', 'A', () => _remember(memory!)),
+          button(
+            'Dismiss',
+            'Backspace or D',
+            () => _decideMemory(
+              GaiaReviewOutcome.declined,
+              memory!,
+              () => _controller.writeMemories('decideMemory', {
+                'memoryId': memory.id,
+                'accept': false,
+              }),
+            ),
+          ),
+          button('Edit', 'E', () => _startEdit(memory!)),
+          button('Skip', '→ or S', () => _skip(GaiaReviewOutcome.skipped)),
+        ],
         GaiaReviewKind.proposed => [
           button(
             'Remember',
@@ -1510,6 +1768,11 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
             main: true,
           ),
           button('Choose…', 'T', () => unawaited(_choose(memory))),
+          button(
+            'Leave unsorted',
+            'Backspace or D',
+            () => _leaveUnsorted(memory),
+          ),
           button('Edit', 'E', () => _startEdit(memory)),
           button('Skip', '→ or S', () => _skip(GaiaReviewOutcome.skipped)),
         ],
@@ -1525,7 +1788,10 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
 /// rather than under it (§7.1).
 const kGaiaAskBesideWidth = 1000.0;
 
-/// A decided card going off: up, down or aside, fading.
+/// How long a decided card takes to go off, and the next to come up.
+const _deckTime = Duration(milliseconds: 320);
+
+/// A decided card going off whole: up, down or aside, fading out at the end.
 class _Leaving extends StatelessWidget {
   const _Leaving({
     super.key,
@@ -1541,19 +1807,46 @@ class _Leaving extends StatelessWidget {
   @override
   Widget build(BuildContext context) => TweenAnimationBuilder<double>(
     tween: Tween(begin: 0, end: 1),
-    duration: GaiaMotion.move,
-    curve: GaiaMotion.curve,
+    duration: _deckTime,
+    curve: GaiaMotion.travel,
     onEnd: onEnd,
     child: child,
     builder: (context, t, child) => Opacity(
-      opacity: 1 - t,
-      child: Transform.translate(
-        offset: switch (exit) {
-          GaiaReviewExit.up => Offset(0, -80 * t),
-          GaiaReviewExit.down => Offset(0, 80 * t),
-          GaiaReviewExit.aside => Offset(160 * t, 0),
-        },
+      opacity: (1 - (t - 0.5) / 0.5).clamp(0.0, 1.0),
+      child: FractionalTranslation(
+        translation:
+            switch (exit) {
+              GaiaReviewExit.up => const Offset(0, -1.3),
+              GaiaReviewExit.down => const Offset(0, 1.3),
+              GaiaReviewExit.aside => const Offset(1.2, 0),
+            } *
+            t,
         child: child,
+      ),
+    ),
+  );
+}
+
+/// The card in front, rising from under the one going off when [play] is
+/// set on its first build; a new key plays it again. It takes no pointer
+/// till it's up, so a tooltip under the mouse waits for it to settle.
+class _Entering extends StatelessWidget {
+  const _Entering({super.key, required this.play, required this.child});
+
+  final bool play;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => TweenAnimationBuilder<double>(
+    tween: Tween(begin: play ? 0 : 1, end: 1),
+    duration: _deckTime,
+    curve: GaiaMotion.curve,
+    child: child,
+    builder: (context, t, child) => IgnorePointer(
+      ignoring: t < 1,
+      child: Transform.translate(
+        offset: Offset(0, 14 * (1 - t)),
+        child: Transform.scale(scale: 0.92 + 0.08 * t, child: child),
       ),
     ),
   );

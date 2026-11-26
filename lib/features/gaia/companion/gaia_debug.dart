@@ -173,6 +173,9 @@ class GaiaDebug extends ChangeNotifier {
   /// Where the debug menu was scrolled to when it last closed.
   var menuScroll = 0.0;
 
+  /// The debug menu's sections closed by their heading, by title.
+  var closedSections = <String>{};
+
   /// Bumped by the sky panel's Play exit, which plays the exit in place.
   /// Not kept.
   var skyExitTest = 0;
@@ -278,6 +281,7 @@ class GaiaDebug extends ChangeNotifier {
       skyPlainBlink = json['skyPlainBlink'] != false;
       skyExitTime = number('skyExitTime', skyExitTime, 0.3, 4);
       menuScroll = number('menuScroll', menuScroll, 0, double.infinity);
+      closedSections = {...?(json['closedSections'] as List?)?.cast<String>()};
     } catch (error) {
       debugPrint('[gaia] debug settings unreadable, using defaults: $error');
     }
@@ -410,6 +414,11 @@ class GaiaDebug extends ChangeNotifier {
 
   Future<void> setSkyExitTime(double value, {bool save = true}) =>
       _set(() => skyExitTime = value, save: save);
+
+  /// Opens the debug menu's [title] section if closed, else closes it.
+  Future<void> toggleSection(String title) => _set(() {
+    if (!closedSections.remove(title)) closedSections.add(title);
+  });
 
   /// Saves [menuScroll], which the open menu keeps up to date unannounced.
   Future<void> saveMenuScroll() => _saved = _saved.then((_) => _save());
@@ -547,6 +556,7 @@ class GaiaDebug extends ChangeNotifier {
           'skyPlainBlink': skyPlainBlink,
           'skyExitTime': skyExitTime,
           'menuScroll': menuScroll,
+          'closedSections': closedSections.toList(),
         }),
       );
     } catch (error) {

@@ -10357,6 +10357,7 @@ class DriftGaiaRepository implements GaiaRepository {
                   ? null
                   : jsonEncode(gaiaSuggestedTopicToJson(memory.suggestedTopic)),
             ),
+            replacesId: Value(memory.replacesId),
             createdAt: Value(memory.createdAt),
             updatedAt: Value(memory.updatedAt),
             version: Value(memory.version),
@@ -10767,6 +10768,7 @@ GaiaMemory _mapGaiaMemory(GaiaMemoriesTableData row) => GaiaMemory(
   suggestedTopic: row.suggestedTopicJson == null
       ? null
       : gaiaSuggestedTopicFromJson(jsonDecode(row.suggestedTopicJson!)),
+  replacesId: row.replacesId,
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
   version: row.version,

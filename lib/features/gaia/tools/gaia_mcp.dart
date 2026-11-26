@@ -477,11 +477,11 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
   {
     'name': 'memory_revise',
     'description':
-        'Offer a rewrite of a memory the user already has: shorter, '
-        'clearer, corrected or brought up to date. Its id is in '
+        'Offer a change to a memory the user already has: a rewrite '
+        '(shorter, clearer, corrected or brought up to date), topics to file '
+        'it in or take it out of, or both, in one call. Its id is in '
         '<memory_under_review> or a memory_search result. A card shows the '
-        'user the old text and yours; the memory changes only if they apply '
-        'it.',
+        'user the change; the memory changes only if they apply it.',
     'inputSchema': {
       'type': 'object',
       'properties': {
@@ -491,14 +491,30 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
           'description':
               'The whole new text, replacing the old: complete on its own, '
               'in the first person as the user would put it, and at most 500 '
-              'characters.',
+              'characters. Leave out to change only its topics.',
+        },
+        'addTopics': {
+          'type': 'array',
+          'items': {'type': 'string'},
+          'description':
+              'Topics to add it to, by name or path ("CS246 › Assignments"), '
+              'as memory_propose takes them. A name no topic has is offered '
+              'as a new topic, under the deepest part of its path that '
+              'exists. Its other topics stay.',
+        },
+        'removeTopics': {
+          'type': 'array',
+          'items': {'type': 'string'},
+          'description':
+              'Topics it is in now to take it out of, by name or path. With '
+              'none left it is Unsorted.',
         },
         'why': {
           'type': 'string',
           'description': 'What changed, in a few words, for the card.',
         },
       },
-      'required': ['id', 'text'],
+      'required': ['id'],
     },
   },
   {
@@ -569,7 +585,10 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
         'and position. Exact, cheap, and it shows what can be clicked, so try '
         'this before os_screenshot. Password, card and one-time code fields '
         'are never read. Refused for apps and sites the user has excluded, '
-        'and unless "can see screen" is on for this chat.',
+        'and unless "can see screen" is on for this chat. Asked about a list '
+        'or a long page, read all of it: pass offscreen, and if rows are '
+        'still missing, os_scroll and read again (needs "can control"), or '
+        'ask the user to scroll.',
     'inputSchema': {
       'type': 'object',
       'properties': {

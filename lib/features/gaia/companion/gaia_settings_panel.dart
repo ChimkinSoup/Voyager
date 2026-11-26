@@ -81,8 +81,7 @@ class GaiaSettingsPanel extends ChangeNotifier {
   }
 }
 
-/// The panel's body under the Gaia window's header: the tab strip with ×,
-/// then the tab. Its keys: Esc closes it (a text box or menu with the focus
+/// The panel's body under its tab strip: the tab. Its keys: Esc closes it (a text box or menu with the focus
 /// keeps its own), Ctrl+1 to Ctrl+6 pick a tab.
 class GaiaSettingsPanelView extends StatefulWidget {
   const GaiaSettingsPanelView({
@@ -133,12 +132,8 @@ class _GaiaSettingsPanelViewState extends State<GaiaSettingsPanelView> {
       },
       child: FocusScope(
         autofocus: true,
-        // The sky shows through, dimmed, so the panel is still in Gaia's
-        // window rather than over it.
         child: Material(
-          color: Theme.of(
-            context,
-          ).scaffoldBackgroundColor.withValues(alpha: 0.82),
+          color: Theme.of(context).scaffoldBackgroundColor,
           child: AnimatedSwitcher(
             key: ValueKey(_cuts),
             duration: GaiaMotion.quick,
@@ -179,23 +174,24 @@ class _GaiaSettingsPanelViewState extends State<GaiaSettingsPanelView> {
   }
 }
 
-/// The panel's tabs, in the Gaia window's header in place of a chat's
-/// title. They start where a tab's content does, at [kGaiaPanelContentWidth]
-/// centred, once the window is wide enough; [start] is where they'd be
-/// otherwise, from the window's left edge.
+/// The panel's tabs, along its top. They start where a tab's content does,
+/// at [kGaiaPanelContentWidth] centred, once the panel's [width] is enough;
+/// [start] is where they'd be otherwise, from the panel's left edge.
 class GaiaPanelTabs extends StatelessWidget {
   const GaiaPanelTabs({
     super.key,
     required this.controller,
+    required this.width,
     required this.start,
   });
 
   final GaiaController controller;
+  final double width;
   final double start;
 
   @override
   Widget build(BuildContext context) {
-    final side = gaiaPanelSide(MediaQuery.sizeOf(context).width);
+    final side = gaiaPanelSide(width);
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: EdgeInsets.only(left: max(0, side - start)),
@@ -299,6 +295,10 @@ class GaiaPanelScroll extends StatelessWidget {
     builder: (context, constraints) {
       final side = gaiaPanelSide(constraints.maxWidth);
       return CustomScrollView(
+        // Scrolled without a bar, as the card's edges already frame it.
+        scrollBehavior: ScrollConfiguration.of(
+          context,
+        ).copyWith(scrollbars: false),
         slivers: [
           SliverPadding(
             padding: EdgeInsets.fromLTRB(side, 20, side, 32),

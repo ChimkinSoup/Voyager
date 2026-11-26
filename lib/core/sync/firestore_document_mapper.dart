@@ -5009,6 +5009,7 @@ Map<String, dynamic> gaiaMemoryToFirestore(GaiaMemory memory) => {
   'topicIds': memory.topicIds,
   'pinned': memory.pinned,
   'suggestedTopic': gaiaSuggestedTopicToJson(memory.suggestedTopic),
+  'replacesId': memory.replacesId,
   'createdAt': _dateToFirestoreRequired(memory.createdAt),
   'updatedAt': _dateToFirestoreRequired(memory.updatedAt),
   'version': memory.version,
@@ -5052,6 +5053,9 @@ GaiaMemory mergeGaiaMemoryFromRemote(
     suggestedTopic: data.containsKey('suggestedTopic')
         ? gaiaSuggestedTopicFromJson(data['suggestedTopic'])
         : local?.suggestedTopic,
+    replacesId: data.containsKey('replacesId')
+        ? data['replacesId'] as String?
+        : local?.replacesId,
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??

@@ -32,6 +32,94 @@ void main() {
     expect(() => parseCuratorAnswer('Nothing.'), throwsFormatException);
   });
 
+  group('memory upkeep (GAIA_MEMORY_TOPICS_HLD.md §27.3)', () {
+    const near = [
+      (id: 'toronto', text: 'I live in Toronto'),
+      (id: 'dog', text: 'Has a dog called Biscuit'),
+    ];
+    const topics = [(id: 't1', path: 'Places')];
+
+    test("the curator's replaces names a kept memory by its number; one out "
+        'of range or missing replaces nothing', () {
+      final found = parseCuratorAnswer(
+        '[{"text": "I moved to Vancouver", "replaces": 1},'
+        ' {"text": "Biscuit is four", "replaces": "2"},'
+        ' {"text": "Likes jazz", "replaces": 9}]',
+        const [],
+        ['toronto', 'dog'],
+      );
+      expect(found.map((memory) => memory.replacesId), [
+        'toronto',
+        'dog',
+        null,
+      ]);
+      expect(
+        parseCuratorAnswer('[{"text": "x", "replaces": 1}]').single.replacesId,
+        isNull,
+      );
+    });
+
+    test("the save check's answer: same, replaces or new; a number missing "
+        'or out of range reads as new; bad JSON throws', () {
+      expect(parseSaveCheck('{"check": "same", "n": 2}', near).sameId, 'dog');
+      final update = parseSaveCheck(
+        'Sure: {"check": "replaces", "n": "1"}',
+        near,
+      );
+      expect(update.replacesId, 'toronto');
+      expect(update.sameId, isNull);
+      expect(update.placement, isNull);
+      for (final answer in [
+        '{"check": "new", "n": null}',
+        '{"check": "replaces", "n": 3}',
+        '{"check": "same"}',
+      ]) {
+        final check = parseSaveCheck(answer, near);
+        expect((check.sameId, check.replacesId), (null, null), reason: answer);
+      }
+      expect(() => parseSaveCheck('replaces 1', near), throwsFormatException);
+      final placed = parseSaveCheck(
+        '{"check": "new", "n": null, "topics": ["t1", "nope"], "new": null, '
+        '"tags": ["home"]}',
+        near,
+        topics,
+      );
+      expect(placed.placement!.topicIds, ['t1']);
+      expect(placed.placement!.tags, ['home']);
+    });
+
+    test('the save check sends the new fact and the memories numbered, the '
+        'topics only when it files too, and logs its usage; a failure is '
+        'null', () async {
+      final runner = FakeUtilityRunner((_) => '{"check": "new", "n": null}');
+      final utility = GaiaUtility(runner);
+      await utility.check('I moved to Vancouver', near);
+      expect(runner.inputs.single, contains('New fact: I moved to Vancouver'));
+      expect(runner.inputs.single, contains('1. I live in Toronto'));
+      expect(runner.inputs.single, contains('2. Has a dog called Biscuit'));
+      expect(runner.inputs.single, isNot(contains('Topics')));
+      expect(runner.jobs.single, isNot(contains('"topics"')));
+      expect(runner.usages.single, 'memory save check');
+      final check = await utility.check('x', near, topics: topics);
+      expect(check!.placement, isNotNull);
+      expect(runner.inputs.last, contains('t1 · Places'));
+      expect(runner.jobs.last, contains('"topics"'));
+
+      final bad = FakeUtilityRunner((_) => 'replaces the first');
+      expect(await GaiaUtility(bad).check('x', near), isNull);
+    });
+
+    test("the curator's kept list is numbered in its input", () async {
+      final runner = FakeUtilityRunner((_) => '[{"text": "x", "replaces": 1}]');
+      final found = await GaiaUtility(
+        runner,
+      ).curate('User: I moved', '1. I live in Toronto', const [], ['toronto']);
+      expect(found!.single.replacesId, 'toronto');
+      expect(runner.jobs.single, contains('"replaces"'));
+      expect(runner.inputs.single, contains('1. I live in Toronto'));
+    });
+  });
+
   group('memory recall (GAIA_MEMORY_TOPICS_HLD.md §4.3)', () {
     GaiaRecalledMemory memory(String id, [int length = 10]) =>
         (id: id, text: 'x' * length, topic: id == 'a' ? 'CS246' : null);

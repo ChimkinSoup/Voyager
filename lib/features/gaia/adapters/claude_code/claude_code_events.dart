@@ -42,7 +42,11 @@ class ClaudeTextStart extends ClaudeEvent {
 
 /// A message of the agent's own has started streaming.
 class ClaudeMessageStart extends ClaudeEvent {
-  const ClaudeMessageStart();
+  const ClaudeMessageStart({this.contextTokens});
+
+  /// The context its model call was sent, from `message.usage`, read as
+  /// [claudeContextTokens]; null when it isn't there.
+  final int? contextTokens;
 }
 
 /// `system`/`api_retry`: a model call failed, and the CLI tries again
@@ -279,7 +283,12 @@ ClaudeEvent parseClaudeLine(String line) {
       final event = field<Map<String, Object?>>(decoded, 'event');
       switch (field<String>(event, 'type')) {
         case 'message_start':
-          return const ClaudeMessageStart();
+          return ClaudeMessageStart(
+            contextTokens: switch (event['message']) {
+              final Map message => claudeContextTokens(message['usage']),
+              _ => null,
+            },
+          );
         case 'message_stop':
           if (decoded['abandoned_blocks'] case {
             'from_block_index': final int from,

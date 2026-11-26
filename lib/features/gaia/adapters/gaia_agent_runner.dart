@@ -184,6 +184,16 @@ class GaiaUsageUpdate extends GaiaAgentEvent {
   final GaiaUsage usage;
 }
 
+/// The session's context at the start of a model call mid-turn, as
+/// [GaiaTurnResult.contextTokens] has it at the end; [window] as
+/// [GaiaTurnResult.contextWindow], null when the backend doesn't say yet.
+class GaiaContextUpdate extends GaiaAgentEvent {
+  const GaiaContextUpdate(this.tokens, {this.window});
+
+  final int tokens;
+  final int? window;
+}
+
 /// The end of a turn. [isError] covers failures the backend reports as a
 /// reply, such as an unknown model, with [text] saying what went wrong.
 class GaiaTurnResult {
@@ -497,7 +507,7 @@ class GaiaTurnBuilder {
         }
       case GaiaMemoryOffered(:final memory):
         _parts.add(memory);
-      case GaiaUsageUpdate() || GaiaRetrying():
+      case GaiaUsageUpdate() || GaiaRetrying() || GaiaContextUpdate():
         return false;
     }
     return true;

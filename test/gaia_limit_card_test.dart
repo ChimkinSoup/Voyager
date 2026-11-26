@@ -1,7 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/gestures.dart' show PointerDeviceKind, kDoubleTapTimeout;
+import 'package:flutter/gestures.dart'
+    show PointerDeviceKind, kDoubleTapTimeout;
 import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,6 +11,7 @@ import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/claude_code/claude_code_events.dart';
 import 'package:voyager/features/gaia/companion/gaia_app.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
+import 'package:voyager/features/gaia/companion/gaia_controls.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug_menu.dart';
 import 'package:voyager/features/gaia/companion/gaia_markdown.dart';
@@ -391,7 +393,7 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     expect(controller.currentAccount(kGaiaClaudeCodeAdapter), _b);
     expect(composer(), findsOneWidget);
-    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.byType(GaiaDialog), findsNothing);
     await finish(tester);
   });
 
@@ -1034,11 +1036,11 @@ void main() {
     final label = find.text('Resend my last message');
     final row = find.ancestor(of: label, matching: find.byType(InkWell)).first;
     expect(tester.widget<InkWell>(row).borderRadius, BorderRadius.circular(6));
-    // The same gap either side: a checkbox draws 18 px in the middle of its box.
-    final box = find.descendant(of: row, matching: find.byType(Checkbox));
+    // The same gap either side of the checkbox and its text.
+    final box = find.descendant(of: row, matching: find.byType(GaiaCheckbox));
     expect(
       tester.getTopRight(row).dx - tester.getTopRight(label).dx,
-      (tester.getSize(box).width - 18) / 2,
+      tester.getTopLeft(box).dx - tester.getTopLeft(row).dx,
     );
     await finish(tester);
   });

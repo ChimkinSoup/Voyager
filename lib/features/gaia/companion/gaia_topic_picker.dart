@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:voyager/core/vim/vim_text_scope.dart';
 import 'package:voyager/features/gaia/companion/gaia_style.dart';
 import 'package:voyager/features/gaia/companion/gaia_text_field.dart';
 
@@ -11,7 +12,8 @@ typedef GaiaTopicPick = ({String? topicId, String? newName});
 /// §5.4): a search box over [topics] by path ("CS246 › Assignments"), Enter
 /// taking the first match. With [topLevel], "Top level" is offered first;
 /// with [newUnder], a name that matches no topic offers "New topic: …",
-/// under that path ('' for the root). Null when it's closed.
+/// under that path ('' for the root). Null when it's closed: Esc, once Vim
+/// has no use for it (from Insert, it goes to Normal first).
 Future<GaiaTopicPick?> showGaiaTopicPicker(
   BuildContext context, {
   required String title,
@@ -53,6 +55,12 @@ class _TopicPickerState extends State<_TopicPicker> {
   late final _focus = FocusNode(
     debugLabel: 'gaia topic picker',
     onKeyEvent: (node, event) {
+      if (event is KeyDownEvent &&
+          event.logicalKey == LogicalKeyboardKey.escape &&
+          VimTextScope.escapeIsSpare(node.context)) {
+        Navigator.of(context).pop();
+        return KeyEventResult.handled;
+      }
       if (event is! KeyDownEvent ||
           (event.logicalKey != LogicalKeyboardKey.enter &&
               event.logicalKey != LogicalKeyboardKey.numpadEnter)) {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_card_text_field.dart';
+import 'package:voyager/features/gaia/companion/gaia_controls.dart';
 import 'package:voyager/features/gaia/companion/gaia_date_picker.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
 import 'package:voyager/features/gaia/companion/gaia_settings_panel.dart';
@@ -312,19 +313,19 @@ class _GaiaProposalCardState extends State<GaiaProposalCard> {
       );
 
   Widget _choice(String key, String label, Map<String, Object?> fields) =>
-      DropdownButtonFormField<String>(
-        initialValue: _proposal.choices.any((c) => c.id == fields[key])
+      GaiaDropdownField<String>(
+        label: label,
+        value: _proposal.choices.any((c) => c.id == fields[key])
             ? fields[key]! as String
             : null,
-        isDense: true,
-        decoration: InputDecoration(
-          labelText: label,
-          isDense: true,
-          border: const OutlineInputBorder(),
-        ),
-        items: [
+        icon: switch (key) {
+          'calendar' => Icons.calendar_today_outlined,
+          'journal' => Icons.book_outlined,
+          _ => Icons.checklist,
+        },
+        options: [
           for (final choice in _proposal.choices)
-            DropdownMenuItem(value: choice.id, child: Text(choice.name)),
+            (value: choice.id, label: choice.name),
         ],
         onChanged: (id) => widget.onEdit?.call(key, id),
       );
@@ -371,11 +372,10 @@ class _GaiaProposalCardState extends State<GaiaProposalCard> {
       children: [
         SizedBox(width: 60, child: Text(label)),
         Expanded(
-          child: Slider(
+          child: GaiaSlider(
             value: mood.toDouble(),
             max: 10,
             divisions: 10,
-            label: '$mood',
             onChanged: (value) => widget.onEdit?.call('mood', value.round()),
           ),
         ),

@@ -471,4 +471,16 @@ void main() {
       expect(claudeBlockedCommandIn('please /clear'), isNull);
     });
   });
+
+  test("each model call's start says its context, the last as the result", () {
+    for (final turn in _turns(_events('tool_call_two_turns.jsonl'))) {
+      final starts = [
+        for (final event in turn)
+          if (event case ClaudeMessageStart(:final contextTokens?))
+            contextTokens,
+      ];
+      expect(starts, isNotEmpty);
+      expect(starts.last, turn.whereType<ClaudeResult>().single.contextTokens);
+    }
+  });
 }

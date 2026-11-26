@@ -16,6 +16,10 @@ import 'package:voyager/features/gaia/companion/gaia_style.dart';
 /// can be changed before Remember (§3.2): a topic taken out, one of
 /// [topicChoices] added ([onTopics]), and the new topic taken or not
 /// ([onNewTopic]).
+///
+/// One that updates a kept memory ([GaiaMemoryPart.was]) shows that
+/// memory's text struck through above its own, and offers [onUpdate] beside
+/// Keep both, which is [onRemember] (GAIA_MEMORY_TOPICS_HLD.md §27.3).
 class GaiaMemoryCard extends StatefulWidget {
   const GaiaMemoryCard({
     super.key,
@@ -23,6 +27,7 @@ class GaiaMemoryCard extends StatefulWidget {
     this.text,
     this.onEdit,
     this.onRemember,
+    this.onUpdate,
     this.onDismiss,
     this.filing,
     this.onTopics,
@@ -38,6 +43,7 @@ class GaiaMemoryCard extends StatefulWidget {
 
   /// Called with whether to pin it too.
   final ValueChanged<bool>? onRemember;
+  final VoidCallback? onUpdate;
   final VoidCallback? onDismiss;
 
   /// Its topics, the new topic offered, and whether that's taken (true),
@@ -84,6 +90,9 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
   }
 
   bool get _answerable => widget.memory.isOpen && widget.onRemember != null;
+
+  /// "Update this?", with Update offered.
+  bool get _updates => widget.memory.was != null && widget.onUpdate != null;
 
   /// Pinned as it's remembered.
   var _pin = false;
@@ -151,6 +160,7 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
             label: topic.path,
             style: label,
             background: background,
+            tint: gaiaTopicTint(topic.id, theme.brightness),
             tooltip: 'Remove',
             removes: true,
             onTap: () => widget.onTopics?.call([
@@ -235,7 +245,9 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  memory.project
+                  memory.was != null
+                      ? 'Update this?'
+                      : memory.project
                       ? 'Remember this for the project?'
                       : 'Remember this?',
                   style: theme.textTheme.bodyMedium?.copyWith(
@@ -246,6 +258,16 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
             ],
           ),
           const SizedBox(height: 8),
+          if (memory.was case final was?) ...[
+            Text(
+              was,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                decoration: TextDecoration.lineThrough,
+              ),
+            ),
+            const SizedBox(height: 4),
+          ],
           if (_answerable)
             GaiaCardTextField(
               controller: _text,
@@ -273,15 +295,18 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
                     ),
                   ),
                 ),
-                GaiaButton(
-                  tooltip: _pin ? "Don't pin it" : 'Pin it to every chat',
-                  icon: _pin ? Icons.push_pin : Icons.push_pin_outlined,
-                  size: 28,
-                  iconSize: 16,
-                  color: _pin ? accent : null,
-                  onPressed: () => setState(() => _pin = !_pin),
-                ),
-                const SizedBox(width: 4),
+                // An update keeps the old memory's pin.
+                if (!_updates) ...[
+                  GaiaButton(
+                    tooltip: _pin ? "Don't pin it" : 'Pin it to every chat',
+                    icon: _pin ? Icons.push_pin : Icons.push_pin_outlined,
+                    size: 28,
+                    iconSize: 16,
+                    color: _pin ? accent : null,
+                    onPressed: () => setState(() => _pin = !_pin),
+                  ),
+                  const SizedBox(width: 4),
+                ],
                 if (widget.onDismiss != null)
                   GaiaButton(
                     label: 'Dismiss',
@@ -291,19 +316,30 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
                   ),
                 const SizedBox(width: 8),
                 GaiaButton(
-                  label: 'Remember',
+                  label: _updates ? 'Keep both' : 'Remember',
                   onPressed: _text.text.trim().isEmpty
                       ? null
                       : () => widget.onRemember!(_pin),
                   size: 28,
                 ),
+                if (_updates) ...[
+                  const SizedBox(width: 8),
+                  GaiaButton(
+                    label: 'Update',
+                    onPressed: _text.text.trim().isEmpty
+                        ? null
+                        : widget.onUpdate,
+                    size: 28,
+                  ),
+                ],
               ],
             )
           else
             Text(
               switch (memory.state) {
                 GaiaCardState.open => 'Waiting in the memory inbox',
-                GaiaCardState.accepted => 'Remembered',
+                GaiaCardState.accepted =>
+                  memory.updated ? 'Updated' : 'Remembered',
                 _ => 'Dismissed',
               },
               style: theme.textTheme.bodySmall?.copyWith(
@@ -318,12 +354,13 @@ class _GaiaMemoryCardState extends State<GaiaMemoryCard> {
   }
 }
 
-/// A rewrite of a memory the agent offered through `memory_revise`
-/// (GAIA_SETTINGS_HLD.md §7.4), in its reply, in [GaiaMemoryCard]'s look:
-/// what the memory said, struck through, over the rewrite. Open, with
-/// [onApply], the rewrite is an editor, and Apply saves what it says while
-/// [onDismiss] drops it; nothing waits on it. Otherwise it's a record of what
-/// came of it.
+/// A change to a memory the agent offered through `memory_revise`
+/// (GAIA_SETTINGS_HLD.md §7.4, §7.5), in its reply, in [GaiaMemoryCard]'s
+/// look: when its text changes, what the memory said, struck through, over
+/// the rewrite, and a chip per topic change. Open, with [onApply], the
+/// rewrite is an editor, a click on a chip leaves that change out, and
+/// Apply saves the text and the changes kept while [onDismiss] drops it;
+/// nothing waits on it. Otherwise it's a record of what came of it.
 class GaiaRevisionCard extends StatefulWidget {
   const GaiaRevisionCard({
     super.key,
@@ -333,7 +370,7 @@ class GaiaRevisionCard extends StatefulWidget {
   });
 
   final GaiaRevisionPart revision;
-  final ValueChanged<String>? onApply;
+  final void Function(String text, List<GaiaTopicChange> topics)? onApply;
   final VoidCallback? onDismiss;
 
   @override
@@ -353,12 +390,69 @@ class _GaiaRevisionCardState extends State<GaiaRevisionCard> {
 
   bool get _answerable => widget.revision.isOpen && widget.onApply != null;
 
+  /// The topic changes left out, by index.
+  final _left = <int>{};
+
+  List<GaiaTopicChange> get _kept => [
+    for (final (i, change) in widget.revision.topics.indexed)
+      if (!_left.contains(i)) change,
+  ];
+
+  Widget _topics(ThemeData theme, Color background) {
+    final revision = widget.revision;
+    final kept = _kept;
+    // With the changes kept, it'd be in no topic (§7.5): its last − chip
+    // says so.
+    final removes = kept.where((change) => !change.add).length;
+    final unsorted =
+        revision.had != null &&
+        removes > 0 &&
+        revision.had! - removes + (kept.length - removes) <= 0;
+    final lastRemove = kept.where((change) => !change.add).lastOrNull;
+    final label = theme.textTheme.labelSmall?.copyWith(
+      color: theme.colorScheme.primary,
+      fontWeight: FontWeight.bold,
+    );
+    return Wrap(
+      spacing: 4,
+      runSpacing: 4,
+      children: [
+        for (final (i, change) in revision.topics.indexed)
+          GaiaTopicChip(
+            label: change.add
+                ? '+ ${change.isNew ? 'New topic: ' : ''}${change.path}'
+                : '− ${change.path}'
+                      '${unsorted && change == lastRemove ? ' · leaves it Unsorted' : ''}',
+            style: label,
+            background: background,
+            removes: !change.add,
+            declined: _left.contains(i),
+            tooltip: !_answerable
+                ? null
+                : _left.contains(i)
+                ? 'Keep this change'
+                : 'Leave this change out',
+            onTap: _answerable
+                ? () => setState(() {
+                    if (!_left.remove(i)) _left.add(i);
+                  })
+                : null,
+          ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final accent = theme.colorScheme.primary;
     final revision = widget.revision;
     final muted = theme.colorScheme.onSurfaceVariant;
+    final rewrites = revision.text != revision.was;
+    final background = Color.alphaBlend(
+      accent.withValues(alpha: _answerable ? 0.08 : 0.03),
+      theme.scaffoldBackgroundColor,
+    );
     return Container(
       constraints: const BoxConstraints(maxWidth: 520),
       margin: const EdgeInsets.symmetric(vertical: 6),
@@ -384,7 +478,9 @@ class _GaiaRevisionCardState extends State<GaiaRevisionCard> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Rewrite this memory?',
+                  revision.topics.isEmpty
+                      ? 'Rewrite this memory?'
+                      : 'Change this memory?',
                   style: theme.textTheme.bodyMedium?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
@@ -401,24 +497,33 @@ class _GaiaRevisionCardState extends State<GaiaRevisionCard> {
               ),
             ),
           ],
-          const SizedBox(height: 8),
-          Text(
-            revision.was,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: muted,
-              decoration: TextDecoration.lineThrough,
-              decorationColor: muted,
+          if (rewrites) ...[
+            const SizedBox(height: 8),
+            Text(
+              revision.was,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: muted,
+                decoration: TextDecoration.lineThrough,
+                decorationColor: muted,
+              ),
             ),
-          ),
-          const SizedBox(height: 6),
-          if (_answerable)
-            GaiaCardTextField(
-              controller: _text,
-              maxLines: 4,
-              style: theme.textTheme.bodyMedium,
-            )
-          else
-            Text(revision.text, style: theme.textTheme.bodyMedium),
+            const SizedBox(height: 6),
+            if (_answerable)
+              GaiaCardTextField(
+                controller: _text,
+                maxLines: 4,
+                style: theme.textTheme.bodyMedium,
+              )
+            else
+              Text(revision.text, style: theme.textTheme.bodyMedium),
+          ] else ...[
+            const SizedBox(height: 8),
+            Text(revision.was, style: theme.textTheme.bodyMedium),
+          ],
+          if (revision.topics.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _topics(theme, background),
+          ],
           const SizedBox(height: 8),
           if (_answerable)
             Row(
@@ -434,9 +539,15 @@ class _GaiaRevisionCardState extends State<GaiaRevisionCard> {
                 const SizedBox(width: 8),
                 GaiaButton(
                   label: 'Apply',
-                  onPressed: _text.text.trim().isEmpty
+                  // A topics-only card with every chip left out changes
+                  // nothing.
+                  onPressed:
+                      _text.text.trim().isEmpty ||
+                          (!rewrites &&
+                              revision.topics.isNotEmpty &&
+                              _kept.isEmpty)
                       ? null
-                      : () => widget.onApply!(_text.text.trim()),
+                      : () => widget.onApply!(_text.text.trim(), _kept),
                   size: 28,
                 ),
               ],
@@ -460,6 +571,22 @@ class _GaiaRevisionCardState extends State<GaiaRevisionCard> {
   }
 }
 
+/// Topic [id]'s own colour on its chips, the same every time, so a topic
+/// the memory is in reads apart from + Topic and the new topic offered.
+Color gaiaTopicTint(String id, Brightness brightness) {
+  var hash = 0;
+  for (final unit in id.codeUnits) {
+    hash = (hash * 31 + unit) & 0x7fffffff;
+  }
+  return HSLColor.fromAHSL(
+    1,
+    // Clear of red, which reads as the rose a removing chip lights in.
+    40 + (hash % 10) * 28.0,
+    0.55,
+    brightness == Brightness.dark ? 0.68 : 0.42,
+  ).toColor();
+}
+
 /// A topic on the card: squared off with the composer's corners, its edge
 /// lit while hovered, as a still [GaiaButton]'s is: in the accent, or in
 /// rose when a click [removes] it.
@@ -475,6 +602,7 @@ class GaiaTopicChip extends StatefulWidget {
     this.filled = false,
     this.declined = false,
     this.checked,
+    this.tint,
   });
 
   final String label;
@@ -493,6 +621,10 @@ class GaiaTopicChip extends StatefulWidget {
   /// A ✓ before the label when true, a + when false; neither when null.
   final bool? checked;
 
+  /// The topic's colour ([gaiaTopicTint]), for its label, edge and fill;
+  /// null for a plain chip.
+  final Color? tint;
+
   @override
   State<GaiaTopicChip> createState() => _GaiaTopicChipState();
 }
@@ -508,8 +640,11 @@ class _GaiaTopicChipState extends State<GaiaTopicChip> {
         ? kGaiaStatusRose
         : HSLColor.fromColor(colors.primary).withSaturation(1).toColor();
     final highlighted = _hovered || _focused;
+    final tint = widget.tint;
     final style = highlighted && widget.removes
         ? widget.style?.copyWith(color: kGaiaStatusRose)
+        : tint != null
+        ? widget.style?.copyWith(color: tint)
         : widget.declined
         ? widget.style?.copyWith(
             color: colors.onSurfaceVariant.withValues(alpha: 0.6),
@@ -563,7 +698,9 @@ class _GaiaTopicChipState extends State<GaiaTopicChip> {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(GaiaRadius.chip),
             border: Border.all(
-              color: highlighted ? lit : colors.outlineVariant,
+              color: highlighted
+                  ? lit
+                  : tint?.withValues(alpha: 0.5) ?? colors.outlineVariant,
             ),
             // Solid, under its shadow.
             color: Color.alphaBlend(
@@ -571,7 +708,7 @@ class _GaiaTopicChipState extends State<GaiaTopicChip> {
                   ? colors.primary.withValues(alpha: 0.12)
                   : highlighted
                   ? lit.withValues(alpha: 0.08)
-                  : Colors.transparent,
+                  : tint?.withValues(alpha: 0.14) ?? Colors.transparent,
               widget.background,
             ),
             boxShadow: const [kGaiaChipShadow],

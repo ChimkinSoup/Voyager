@@ -33,6 +33,7 @@ import 'package:voyager/features/gaia/adapters/gaia_clis.dart';
 import 'package:voyager/features/gaia/companion/gaia_aurora_edge.dart';
 import 'package:voyager/features/gaia/companion/gaia_btw.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
+import 'package:voyager/features/gaia/companion/gaia_controls.dart';
 import 'package:voyager/features/gaia/companion/gaia_card_view.dart';
 import 'package:voyager/features/gaia/companion/gaia_chat_body.dart';
 import 'package:voyager/features/gaia/companion/gaia_commands.dart';
@@ -319,6 +320,10 @@ class _RunToastsState extends State<_RunToasts> {
   late final StreamSubscription<GaiaRunToast> _toasts;
   late final StreamSubscription<({GaiaRunToast toast, String btwId})>
   _btwToasts;
+  late final StreamSubscription<
+    ({GaiaRunToast toast, Future<void> Function() undo})
+  >
+  _undoToasts;
 
   @override
   void initState() {
@@ -327,17 +332,26 @@ class _RunToastsState extends State<_RunToasts> {
     _btwToasts = widget.controller.btwToasts.listen(
       (toast) => _show(toast.toast, btwId: toast.btwId),
     );
+    _undoToasts = widget.controller.undoToasts.listen(
+      (toast) => _show(toast.toast, undo: toast.undo),
+    );
   }
 
   @override
   void dispose() {
     unawaited(_toasts.cancel());
     unawaited(_btwToasts.cancel());
+    unawaited(_undoToasts.cancel());
     super.dispose();
   }
 
-  /// With [btwId], a side question's, which a click opens.
-  void _show(GaiaRunToast toast, {String? btwId}) {
+  /// With [btwId], a side question's, which a click opens; with [undo], one
+  /// with an Undo button.
+  void _show(
+    GaiaRunToast toast, {
+    String? btwId,
+    Future<void> Function()? undo,
+  }) {
     if (!mounted) return;
     showGaiaToast(
       context,
@@ -353,6 +367,7 @@ class _RunToastsState extends State<_RunToasts> {
           : btwId != null
           ? () => widget.controller.revealBtw(toast.chatId, btwId)
           : () => widget.controller.selectChat(toast.chatId),
+      onUndo: undo == null ? null : () => unawaited(undo()),
     );
     // A run's toast, not the UI's own, into Voyager's notification history.
     widget.controller.toastShown(toast.title, toast.body);
@@ -392,8 +407,8 @@ class _GaiaShell extends StatelessWidget {
       return _PickUpPill(controller: controller);
     }
     final floater = controller.layout != GaiaMode.window;
-    // In the Gaia window, over the sidebar and chat (GAIA_SETTINGS_HLD.md
-    // §2.2), which are kept as they were underneath for when it closes.
+    // In the Gaia window, floating over the dimmed sidebar and chat
+    // (GAIA_SETTINGS_HLD.md §2.2), which are kept as they were underneath.
     final panelShown = !floater && controller.panel.open;
     // An Ask Gaia chat or a review card's source chat is the current chat,
     // shown in the panel: the one under it isn't built meanwhile, so there's
@@ -471,10 +486,7 @@ class _GaiaShell extends StatelessWidget {
                     maxStepMove: controller.debug.starStep,
                     // Below the header and its divider.
                     top: kGaiaHeaderHeight + 1,
-                    // The panel has no sidebar: across the whole window.
-                    left: floater || panelShown
-                        ? null
-                        : controller.sidebar.edge,
+                    left: floater ? null : controller.sidebar.edge,
                     placing: controller.debug.placeStars,
                     under: controller.scrolledUnder,
                     moonlight: () => gaiaMoonlight(
@@ -520,9 +532,7 @@ class _GaiaShell extends StatelessWidget {
                       cometLook: controller.debug.skyComet,
                       cometHead: controller.debug.skyCometHead,
                       top: kGaiaHeaderHeight + 1,
-                      left: floater || panelShown
-                          ? null
-                          : controller.sidebar.edge,
+                      left: floater ? null : controller.sidebar.edge,
                       // Nothing counts in dummy mode, which the sky tour
                       // turns on too (GAIA_STATS_HLD.md §3.1).
                       onSighting: controller.debug.dummyMode
@@ -530,63 +540,43 @@ class _GaiaShell extends StatelessWidget {
                           : controller.noteSighting,
                       child: floater
                           ? chat()
-                          : Stack(
-                              children: [
-                                Visibility(
-                                  visible: !panelShown,
-                                  maintainState: true,
-                                  child: ExcludeFocus(
-                                    excluding: panelShown,
-                                    child: GaiaSidebarLayout(
-                                      sidebar: controller.sidebar,
-                                      // A Material, which the sidebar's
-                                      // buttons paint their ink on.
-                                      side: Material(
-                                        color: Theme.of(
-                                          context,
-                                        ).scaffoldBackgroundColor,
-                                        child: _Sidebar(controller: controller),
-                                      ),
-                                      chat: (shown, toggle) {
-                                        toggleSidebar = toggle;
-                                        return chat(
-                                          sidebarShown: shown,
-                                          toggleSidebar: toggle,
-                                        );
-                                      },
-                                    ),
-                                  ),
+                          // Left as it is under the panel, for when it closes.
+                          : ExcludeFocus(
+                              excluding: panelShown,
+                              child: GaiaSidebarLayout(
+                                sidebar: controller.sidebar,
+                                // A Material, which the sidebar's
+                                // buttons paint their ink on.
+                                side: Material(
+                                  color: Theme.of(
+                                    context,
+                                  ).scaffoldBackgroundColor,
+                                  child: _Sidebar(controller: controller),
                                 ),
-                                if (panelShown)
-                                  Positioned.fill(
-                                    child: Column(
-                                      children: [
-                                        _Header(
-                                          controller: controller,
-                                          sidebarShown: true,
-                                          toggleSidebar: null,
-                                          panel: true,
-                                        ),
-                                        const Divider(height: 1),
-                                        Expanded(
-                                          child: GaiaSettingsPanelView(
-                                            controller: controller,
-                                            askChat: asking
-                                                ? _ChatColumn(
-                                                    controller: controller,
-                                                    readOnly: source,
-                                                  )
-                                                : null,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                              ],
+                                chat: (shown, toggle) {
+                                  toggleSidebar = toggle;
+                                  return chat(
+                                    sidebarShown: shown,
+                                    toggleSidebar: toggle,
+                                  );
+                                },
+                              ),
                             ),
                     ),
                   ),
                 ),
+                if (panelShown)
+                  Positioned.fill(
+                    child: _PanelCard(
+                      controller: controller,
+                      askChat: asking
+                          ? _ChatColumn(
+                              controller: controller,
+                              readOnly: source,
+                            )
+                          : null,
+                    ),
+                  ),
                 if (controller.debug.skyPanel)
                   Positioned(
                     top: kGaiaHeaderHeight + 12,
@@ -642,6 +632,85 @@ class _GaiaShell extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The settings panel (GAIA_SETTINGS_HLD.md §2.2), floating over the dimmed
+/// Gaia window: its tabs and its own ×, so the window's × above it isn't
+/// taken for the panel's. A click on the dimmed window around it closes it.
+class _PanelCard extends StatelessWidget {
+  const _PanelCard({required this.controller, required this.askChat});
+
+  final GaiaController controller;
+  final Widget? askChat;
+
+  @override
+  Widget build(BuildContext context) => Stack(
+    children: [
+      Positioned.fill(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: controller.closePanel,
+          child: const ColoredBox(color: Color(0x99000000)),
+        ),
+      ),
+      Positioned.fill(
+        child: Padding(
+          // Below the window's header, dimmed with the rest.
+          padding: const EdgeInsets.fromLTRB(40, kGaiaHeaderHeight + 9, 40, 16),
+          child: Container(
+            // The tabs' row in the body's colour, not the rim's darker one.
+            decoration: gaiaFloating(
+              Theme.of(context).colorScheme,
+              radius: GaiaRadius.panel,
+            ).copyWith(color: Theme.of(context).scaffoldBackgroundColor),
+            clipBehavior: Clip.antiAlias,
+            child: LayoutBuilder(
+              builder: (context, constraints) => Column(
+                children: [
+                  // The window still moves by its top edge.
+                  _DragArea(
+                    floater: false,
+                    fullScreen: controller.fullScreen,
+                    child: SizedBox(
+                      height: kGaiaHeaderHeight,
+                      child: Row(
+                        children: [
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: GaiaPanelTabs(
+                              controller: controller,
+                              width: constraints.maxWidth,
+                              start: 12,
+                            ),
+                          ),
+                          Tooltip(
+                            message: 'Close settings (Esc)',
+                            child: GaiaButton(
+                              icon: Icons.close,
+                              size: 34,
+                              onPressed: controller.closePanel,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  Expanded(
+                    child: GaiaSettingsPanelView(
+                      controller: controller,
+                      askChat: askChat,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    ],
+  );
 }
 
 /// The current chat's messages over its composer: the chat in the Gaia
@@ -851,15 +920,10 @@ class _Header extends StatelessWidget {
     required this.controller,
     required this.sidebarShown,
     required this.toggleSidebar,
-    this.panel = false,
   });
 
   final GaiaController controller;
   final bool sidebarShown;
-
-  /// Over the settings panel (GAIA_SETTINGS_HLD.md §2.3): its tabs, after a
-  /// button that closes it, with no chat's project, title or New chat.
-  final bool panel;
 
   /// Null in the floaters, which have no sidebar.
   final VoidCallback? toggleSidebar;
@@ -895,18 +959,7 @@ class _Header extends StatelessWidget {
         height: kGaiaHeaderHeight,
         child: Row(
           children: [
-            if (panel) ...[
-              const SizedBox(width: 12),
-              Tooltip(
-                message: 'Close settings (Esc)',
-                child: GaiaButton(
-                  icon: Icons.arrow_back,
-                  size: 34,
-                  onPressed: controller.closePanel,
-                ),
-              ),
-              const SizedBox(width: 10),
-            ] else if (toggleSidebar case final toggle?) ...[
+            if (toggleSidebar case final toggle?) ...[
               const SizedBox(width: 12),
               Tooltip(
                 message: 'Toggle sidebar (Ctrl+B)',
@@ -920,66 +973,59 @@ class _Header extends StatelessWidget {
             ] else
               const SizedBox(width: 16),
             Expanded(
-              child: panel
-                  // After the close button: 12 + 34 + 10.
-                  ? GaiaPanelTabs(controller: controller, start: 56)
-                  : LayoutBuilder(
-                      builder: (context, constraints) => Row(
-                        children: [
-                          if (project != null || controller.projects.isNotEmpty)
-                            _ProjectCrumb(
-                              controller: controller,
-                              project: project,
-                              // Narrow, as in the floaters: the icon alone.
-                              compact: constraints.maxWidth < 240,
-                            ),
-                          Flexible(
-                            child: _ChatSwitcher(controller: controller),
-                          ),
-                          // A click makes it an ordinary chat, as /temp
-                          // does (GAIA_TEMP_HLD.md §4). Narrow, as in the
-                          // floaters: the icon alone.
-                          if (controller.currentChat?.temporary ?? false) ...[
-                            const SizedBox(width: 8),
-                            GaiaButton(
-                              icon: Icons.hourglass_empty,
-                              label: constraints.maxWidth < 320
-                                  ? null
-                                  : 'Temporary',
-                              size: 28,
-                              padding: 10,
-                              iconSize: 14,
-                              tooltip: constraints.maxWidth < 320
-                                  ? 'Temporary: keep this chat'
-                                  : 'Keep this chat',
-                              onPressed: () async {
-                                final List<String>? thrown;
-                                try {
-                                  thrown = await controller.toggleTemporary();
-                                } on GaiaPipeException catch (error) {
-                                  if (!context.mounted) return;
-                                  showGaiaToast(
-                                    context,
-                                    mark: GaiaToastMark.error,
-                                    title: 'Temporary chat not changed',
-                                    body: '$error',
-                                  );
-                                  return;
-                                }
-                                final note = controller.temporaryNote(thrown);
-                                if (!context.mounted) return;
-                                showGaiaToast(
-                                  context,
-                                  mark: GaiaToastMark.done,
-                                  title: note.title,
-                                  body: note.body,
-                                );
-                              },
-                            ),
-                          ],
-                        ],
+              child: LayoutBuilder(
+                builder: (context, constraints) => Row(
+                  children: [
+                    if (project != null || controller.projects.isNotEmpty)
+                      _ProjectCrumb(
+                        controller: controller,
+                        project: project,
+                        // Narrow, as in the floaters: the icon alone.
+                        compact: constraints.maxWidth < 240,
                       ),
-                    ),
+                    Flexible(child: _ChatSwitcher(controller: controller)),
+                    // A click makes it an ordinary chat, as /temp
+                    // does (GAIA_TEMP_HLD.md §4). Narrow, as in the
+                    // floaters: the icon alone.
+                    if (controller.currentChat?.temporary ?? false) ...[
+                      const SizedBox(width: 8),
+                      GaiaButton(
+                        icon: Icons.hourglass_empty,
+                        label: constraints.maxWidth < 320 ? null : 'Temporary',
+                        size: 28,
+                        padding: 10,
+                        iconSize: 14,
+                        tooltip: constraints.maxWidth < 320
+                            ? 'Temporary: keep this chat'
+                            : 'Keep this chat',
+                        onPressed: () async {
+                          final List<String>? thrown;
+                          try {
+                            thrown = await controller.toggleTemporary();
+                          } on GaiaPipeException catch (error) {
+                            if (!context.mounted) return;
+                            showGaiaToast(
+                              context,
+                              mark: GaiaToastMark.error,
+                              title: 'Temporary chat not changed',
+                              body: '$error',
+                            );
+                            return;
+                          }
+                          final note = controller.temporaryNote(thrown);
+                          if (!context.mounted) return;
+                          showGaiaToast(
+                            context,
+                            mark: GaiaToastMark.done,
+                            title: note.title,
+                            body: note.body,
+                          );
+                        },
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ),
             if (controller.connectivity case final connectivity?)
               ListenableBuilder(
@@ -1029,7 +1075,7 @@ class _Header extends StatelessWidget {
               const SizedBox(width: 10),
             ],
             // The sidebar's New chat, when there's no sidebar.
-            if (!sidebarShown && !panel) ...[
+            if (!sidebarShown) ...[
               GaiaButton(
                 icon: Icons.add,
                 size: 32,
@@ -1833,7 +1879,7 @@ class _SidebarState extends State<_Sidebar> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
+        builder: (context, setState) => GaiaDialog(
           title: Text('Delete "${project.name}"?'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1857,19 +1903,20 @@ class _SidebarState extends State<_Sidebar> {
                       ? null
                       : () => setState(() => withChats = !withChats),
                   child: Padding(
-                    padding: const EdgeInsets.only(right: 7),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 6,
+                    ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IgnorePointer(
-                          child: Checkbox(
+                          child: GaiaCheckbox(
                             value: withChats,
-                            materialTapTargetSize:
-                                MaterialTapTargetSize.shrinkWrap,
-                            visualDensity: VisualDensity.compact,
                             onChanged: running ? null : (_) {},
                           ),
                         ),
+                        const SizedBox(width: 8),
                         Flexible(
                           child: Text(
                             running
@@ -2162,7 +2209,7 @@ class _SidebarState extends State<_Sidebar> {
       final them = ids.length == 1 ? 'it' : 'them';
       final confirmed = await showDialog<bool>(
         context: context,
-        builder: (context) => AlertDialog(
+        builder: (context) => GaiaDialog(
           title: Text(
             ids.length == 1
                 ? 'Delete a running chat?'
@@ -5069,6 +5116,22 @@ class _MessageView extends StatelessWidget {
                     accept: true,
                     pin: pin,
                   ),
+                  // "Update this?" (GAIA_MEMORY_TOPICS_HLD.md §27.3), undone
+                  // from its toast.
+                  onUpdate: () async {
+                    final undo = await controller.updateMemoryCard(
+                      message,
+                      part,
+                    );
+                    if (undo == null || !context.mounted) return;
+                    showGaiaToast(
+                      context,
+                      mark: GaiaToastMark.done,
+                      title: 'Updated',
+                      body: part.was ?? '',
+                      onUndo: () => unawaited(undo()),
+                    );
+                  },
                   onDismiss: () async {
                     // Undoable, as the memory inbox's Dismiss is.
                     if (!await controller.decideMemory(
@@ -5092,12 +5155,13 @@ class _MessageView extends StatelessWidget {
               GaiaRevisionPart() => GaiaRevisionCard(
                 key: ValueKey(part.id),
                 revision: part,
-                onApply: (text) => unawaited(
+                onApply: (text, topics) => unawaited(
                   controller.decideRevision(
                     message,
                     part,
                     accept: true,
                     text: text,
+                    topics: topics,
                   ),
                 ),
                 onDismiss: () => unawaited(
@@ -6262,13 +6326,17 @@ class _ComposerState extends State<_Composer> {
                 dock.close()))) {
       return KeyEventResult.handled;
     }
-    // Esc closes an Ask Gaia chat (GAIA_SETTINGS_HLD.md §7.1), once Vim has
-    // no use for it, the review's keys back.
+    // Esc in an Ask Gaia chat (GAIA_SETTINGS_HLD.md §7.1), once Vim has no
+    // use for it, gives the review's keys back, the chat left showing.
     if (widget.controller.asking != null &&
         event is KeyDownEvent &&
         event.logicalKey == LogicalKeyboardKey.escape &&
         VimTextScope.escapeIsSpare(node.context)) {
-      widget.controller.closeAsk(dismiss: true);
+      if (widget.controller.review case final review?) {
+        review.backToDeck();
+      } else {
+        widget.controller.closeAsk(dismiss: true);
+      }
       return KeyEventResult.handled;
     }
     // Up and Down move along them too, unless the draft runs over lines,
@@ -7518,19 +7586,20 @@ class _LimitDecisionState extends State<_LimitDecision> {
                   borderRadius: BorderRadius.circular(GaiaRadius.chip),
                   onTap: () => setState(() => _resend = !_resend),
                   child: Padding(
-                    padding: const EdgeInsets.only(right: 7),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 6,
+                    ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IgnorePointer(
-                          child: Checkbox(
+                          child: GaiaCheckbox(
                             value: _resend,
-                            materialTapTargetSize:
-                                MaterialTapTargetSize.shrinkWrap,
-                            visualDensity: VisualDensity.compact,
                             onChanged: (_) {},
                           ),
                         ),
+                        const SizedBox(width: 8),
                         Text(
                           'Resend my last message',
                           style: theme.textTheme.bodySmall,
@@ -8206,7 +8275,7 @@ Future<bool?> _confirmSwitch(
       bindings: {send.activator: () => Navigator.of(context).pop(true)},
       child: Focus(
         autofocus: true,
-        child: AlertDialog(
+        child: GaiaDialog(
           title: Text(title),
           content: Text(
             [
@@ -8467,8 +8536,9 @@ Future<void> _showGaiaUsage(BuildContext context, GaiaController controller) {
             ),
           ],
         );
-        return Dialog(
-          child: SizedBox(
+        return GaiaDialog(
+          maxWidth: 480,
+          content: SizedBox(
             width: 480,
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(28, 24, 28, 28),
@@ -8531,7 +8601,7 @@ Future<void> _chooseAuto(
       bindings: {send.activator: () => Navigator.of(context).pop(true)},
       child: Focus(
         autofocus: true,
-        child: AlertDialog(
+        child: GaiaDialog(
           title: const Text('Let Gaia act without asking?'),
           content: const Text(
             'In Auto, Gaia clicks, types, runs shell commands and edits files '
@@ -8651,7 +8721,7 @@ Future<void> _editMessage(
         bindings: {send.activator: () => Navigator.of(context).pop(true)},
         child: Focus(
           autofocus: true,
-          child: AlertDialog(
+          child: GaiaDialog(
             title: const Text('Replace the draft?'),
             content: Text(
               "What's in the composer now, and what's attached to it, is "
@@ -8730,7 +8800,7 @@ class _Aborted extends StatelessWidget {
         bindings: {send.activator: () => Navigator.of(context).pop(true)},
         child: Focus(
           autofocus: true,
-          child: AlertDialog(
+          child: GaiaDialog(
             title: const Text('Re-arm Gaia?'),
             content: Text('Chats and runs work again. Press $send to confirm.'),
             actions: [

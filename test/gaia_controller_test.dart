@@ -331,8 +331,46 @@ class _Main {
         curatorKept.add(context.kept);
         return {
           'kept': context.kept,
+          'ids': context.ids,
           'topics': gaiaTopicLinesToJson(context.topics),
         };
+      case 'memoryNear':
+        return [
+          for (final memory in await memories.near(
+            params['text']! as String,
+            byUser: params['byUser'] == true,
+          ))
+            {'id': memory.id, 'text': memory.text},
+        ];
+      case 'editMemory':
+        await memories.edit(
+          params['memoryId']! as String,
+          text: params['text']! as String,
+        );
+        return null;
+      case 'updateMemory':
+        final updated = await memories.update(params['memoryId']! as String);
+        if (updated.proposal.sourceChatId case final chatId?) {
+          await store.setMemoryCards(
+            chatId,
+            updated.proposal.id,
+            GaiaCardState.accepted,
+            updated.proposal.text,
+            updated: true,
+          );
+        }
+        return [
+          gaiaMemoryToJson(updated.old),
+          gaiaMemoryToJson(updated.proposal),
+        ];
+      case 'revertMemories':
+        await memories.revert(
+          memories: [
+            for (final memory in params['memories'] as List? ?? const [])
+              gaiaMemoryFromJson(memory! as Map),
+          ],
+        );
+        return null;
       case 'memoryTopics':
         return gaiaTopicLinesToJson(await memories.topicLines());
       case 'memoryFiling':
@@ -372,17 +410,31 @@ class _Main {
                 params['chatId'] as String?,
                 newChat: params['projectId'] as String?,
               );
-        final saved = await memories.save(
-          params['text']! as String,
-          chatId: params['chatId'] as String?,
-          status: GaiaMemoryStatus.active,
-          byUser: true,
-          projectId: project,
-        );
+        final same = params['same'] is String
+            ? await memories.activeMemory(params['same']! as String)
+            : null;
+        final replaces = same == null && params['replaces'] is String
+            ? await memories.activeMemory(params['replaces']! as String)
+            : null;
+        final updated = replaces == null
+            ? null
+            : await memories.rewrite(replaces.id, params['text']! as String);
+        final saved = same != null || updated != null
+            ? null
+            : await memories.save(
+                params['text']! as String,
+                chatId: params['chatId'] as String?,
+                status: GaiaMemoryStatus.active,
+                byUser: true,
+                projectId: project,
+              );
         String? pinFailed;
         if (params['pin'] == true) {
           final pin =
-              saved ?? await memories.sameActive(params['text']! as String);
+              saved ??
+              same ??
+              updated ??
+              await memories.sameActive(params['text']! as String);
           try {
             if (pin != null) await memories.pin(pin.id, pinned: true);
           } on GaiaReadException catch (error) {
@@ -394,11 +446,15 @@ class _Main {
           'memoryId': ?saved?.id,
           'project': project != null,
           'pinFailed': ?pinFailed,
+          'same': ?same?.text,
+          if (updated != null) 'updated': gaiaMemoryToJson(updated),
         };
       case 'proposeMemory':
         final proposed = await memories.propose(
           params['chatId']! as String,
           (params['arguments']! as Map).cast(),
+          sameId: params['same'] as String?,
+          replacesId: params['replaces'] as String?,
         );
         return {
           'text': proposed.text,
@@ -407,6 +463,7 @@ class _Main {
             'memoryText': memory.text,
             'project': proposed.project,
             if (proposed.place) 'place': true,
+            'was': ?proposed.was,
           },
         };
       case 'decideMemory':
@@ -430,6 +487,7 @@ class _Main {
       case 'offerRevision':
         try {
           final offer = await memories.reviseOffer(
+            params['chatId'] as String? ?? '',
             (params['arguments']! as Map).cast(),
           );
           return {
@@ -437,6 +495,10 @@ class _Main {
             'was': offer.memory.text,
             'text': offer.text,
             'why': ?offer.why,
+            if (offer.topics.isNotEmpty) ...{
+              'topics': [for (final change in offer.topics) change.toJson()],
+              'had': offer.had,
+            },
           };
         } on GaiaReadException catch (error) {
           throw GaiaPipeException(error.message);
@@ -446,10 +508,19 @@ class _Main {
         if (accept && aborted) {
           throw GaiaPipeException('Gaia is aborted. Rearm to save memories.');
         }
+        final topics = [
+          for (final change in params['topics'] as List? ?? const [])
+            GaiaTopicChange.fromJson((change! as Map).cast()),
+        ];
+        var applied = (made: const <String>[], skipped: const <String>[]);
         if (accept) {
           await memories.edit(
             params['memoryId']! as String,
             text: params['text']! as String,
+          );
+          applied = await memories.reviseTopics(
+            params['memoryId']! as String,
+            topics,
           );
         }
         await store.setRevisionCard(
@@ -457,8 +528,9 @@ class _Main {
           params['cardId']! as String,
           accept ? GaiaCardState.accepted : GaiaCardState.rejected,
           params['text']! as String,
+          topics: accept ? topics : null,
         );
-        return null;
+        return {'made': applied.made, 'skipped': applied.skipped};
       case 'restoreMemory':
         final text = await memories.restore(params['memoryId']! as String);
         if (text == null) return null;
@@ -479,6 +551,7 @@ class _Main {
                   topicIds: gaiaTopicIdsFromJson(memory['topicIds']),
                   suggested: gaiaSuggestedTopicFromJson(memory['suggested']),
                   pin: memory['pin'] == true,
+                  replacesId: memory['replacesId'] as String?,
                 ),
             ]);
         return null;
@@ -2563,6 +2636,34 @@ void main() {
     });
   });
 
+  group('screen access (§15.6)', () {
+    setUp(() => startCompanion());
+
+    test('with "can see screen" on, each message says so; off, none '
+        'does', () async {
+      await controller.toggleSeeScreen();
+      runner.turns.addAll(claudeFixtureTurns('tool_call_two_turns.jsonl'));
+      await controller.send('Read the list');
+      await settle();
+      await controller.send('And again');
+      await settle();
+      await controller.toggleSeeScreen();
+      await controller.send('Once more');
+      await settle();
+
+      final note = gaiaAccessPreamble(
+        GaiaGrant(seeScreen: true, at: DateTime.utc(2026)),
+      );
+      expect(note, contains('Can see screen: on'));
+      expect(note, contains('Can control: off'));
+      expect(runner.sent.map((s) => s.prompt), [
+        '$note\n\nRead the list',
+        '$note\n\nAnd again',
+        'Once more',
+      ]);
+    });
+  });
+
   group('window context (§15.4)', () {
     setUp(() => startCompanion());
 
@@ -3200,6 +3301,22 @@ void main() {
         expect(controller.usage[kGaiaClaudeCodeAdapter], isNull);
         expect(heard, isNotEmpty);
         expect(heard.first, isNull);
+      },
+    );
+
+    test(
+      "a running turn's context shows until its reply says its own",
+      () async {
+        runner.turns.add([
+          const ClaudeMessageStart(contextTokens: 5000),
+          const ClaudeTextStart(),
+        ]);
+        final sending = controller.send('Hi');
+        await settle();
+        expect(controller.contextTokens, 5000);
+        await controller.stop(controller.currentChatId!);
+        await sending;
+        expect(controller.contextTokens, isNull);
       },
     );
 
@@ -4821,6 +4938,45 @@ void main() {
         (await main.repository.getMemory(saved.id))!.text,
         'I always use metric units',
       );
+    });
+
+    test('memory_revise with only addTopics puts a card in the reply; '
+        'applied, the memory is in the topic and a new one is made '
+        '(GAIA_SETTINGS_HLD.md §7.5)', () async {
+      final saved = (await main.memories.save(
+        'I prefer metric units',
+        status: GaiaMemoryStatus.active,
+      ))!;
+      final units = await main.memories.newTopic('Units');
+      final tools = await hanging();
+      final offered = await tools.call('memory_revise', {
+        'id': saved.id,
+        'addTopics': ['Units', 'Habits'],
+      });
+      expect(offered.text, contains('card'));
+      await settle();
+      final card = controller.messages.last.parts
+          .whereType<GaiaRevisionPart>()
+          .single;
+      expect(card.text, card.was);
+      expect(
+        [for (final change in card.topics) (change.topicId, change.path)],
+        [(units.id, 'Units'), (null, 'Habits')],
+      );
+      expect(
+        await controller.decideRevision(
+          controller.messages.last,
+          card,
+          accept: true,
+        ),
+        isTrue,
+      );
+      final now = (await main.repository.getMemory(saved.id))!;
+      expect(now.text, 'I prefer metric units');
+      expect(now.topicIds, hasLength(2));
+      expect(now.topicIds, contains(units.id));
+      runner.finish(controller.currentChatId!);
+      await settle();
     });
 
     test('memory_revise with a wrong id, or the same text, is refused to '
@@ -6975,6 +7131,139 @@ void main() {
         expect(toasts.last.error, isTrue);
       },
     );
+  });
+
+  group('memory upkeep (GAIA_MEMORY_TOPICS_HLD.md §27.3)', () {
+    late FakeUtilityRunner utility;
+    late String check;
+    late String toronto;
+
+    /// The save check's inputs.
+    List<String> checks() => [
+      for (final (i, job) in utility.jobs.indexed)
+        if (job.startsWith('A new fact')) utility.inputs[i],
+    ];
+
+    setUp(() async {
+      check = '{"check": "new", "n": null}';
+      toronto = (await main.memories.save(
+        'I live in Toronto',
+        status: GaiaMemoryStatus.active,
+      ))!.id;
+      utility = FakeUtilityRunner(
+        (job) => job.startsWith('A new fact')
+            ? check
+            : job.startsWith('File a fact')
+            ? '{"topics": [], "new": null, "tags": []}'
+            : 'Title',
+      );
+      await startCompanion(utility: GaiaUtility(utility));
+    });
+
+    test('/remember of a correction updates the old memory at once, filed by '
+        'the same call, and Undo puts it back', () async {
+      check =
+          '{"check": "replaces", "n": 1, "topics": [], "new": null, '
+          '"tags": []}';
+      final undos = <({GaiaRunToast toast, Future<void> Function() undo})>[];
+      controller.undoToasts.listen(undos.add);
+      await controller.remember('I live in Vancouver now');
+      await settle();
+      final memory = (await main.repository.listMemories()).single;
+      expect(memory.id, toronto);
+      expect(memory.text, 'I live in Vancouver now');
+      expect(checks().single, contains('1. I live in Toronto'));
+      expect(
+        utility.jobs.where((job) => job.startsWith('File a fact')),
+        isEmpty,
+      );
+      expect(undos.single.toast.title, 'Updated');
+      expect(undos.single.toast.body, 'I live in Toronto');
+      await undos.single.undo();
+      expect(
+        (await main.repository.getMemory(toronto))!.text,
+        'I live in Toronto',
+      );
+    });
+
+    test(
+      '/remember of a fact already kept in other words saves nothing',
+      () async {
+        check = '{"check": "same", "n": 1}';
+        final toasts = <GaiaRunToast>[];
+        controller.toasts.listen(toasts.add);
+        await controller.remember('My home is in Toronto, I live there');
+        await settle();
+        expect(await main.repository.listMemories(), hasLength(1));
+        expect(toasts.last.title, 'Already remembered');
+        expect(toasts.last.body, 'I live in Toronto');
+      },
+    );
+
+    test('memory_propose of a correction saves an "Update this?" '
+        'proposal', () async {
+      check = '{"check": "replaces", "n": 1}';
+      runner.turns.add([const ClaudeTextStart(), const ClaudeTextDelta('Ok.')]);
+      unawaited(controller.send('Hi'));
+      await settle();
+      final result = await runner.sent.last.tools!.call('memory_propose', {
+        'text': 'I live in Vancouver now',
+      });
+      await settle();
+      expect(result.text, contains('as an update to: I live in Toronto'));
+      final offer = (await main.repository.listMemories()).singleWhere(
+        (memory) => memory.status == GaiaMemoryStatus.proposed,
+      );
+      expect(offer.replacesId, toronto);
+      expect(
+        (await main.repository.getMemory(toronto))!.text,
+        'I live in Toronto',
+        reason: 'it waits for the user',
+      );
+
+      // Its card in the chat offers Update too.
+      GaiaMemoryPart card() =>
+          controller.messages.last.parts.whereType<GaiaMemoryPart>().single;
+      expect(card().was, 'I live in Toronto');
+      controller.editMemory(card(), 'I live in Vancouver, BC');
+      final undo = await controller.updateMemoryCard(
+        controller.messages.last,
+        card(),
+      );
+      await settle();
+      expect(
+        (await main.repository.getMemory(toronto))!.text,
+        'I live in Vancouver, BC',
+      );
+      expect(card().state, GaiaCardState.accepted);
+      expect(card().updated, isTrue);
+      await undo!();
+      await settle();
+      expect(
+        (await main.repository.getMemory(toronto))!.text,
+        'I live in Toronto',
+      );
+      expect(card().isOpen, isTrue);
+    });
+
+    test('nothing near makes no call; a failed call saves as it would with '
+        'no check', () async {
+      await controller.remember('Prefers metric units');
+      await settle();
+      expect(checks(), isEmpty);
+      check = 'It replaces the first one';
+      await controller.remember('I live near Toronto Pearson airport');
+      await settle();
+      expect(checks(), hasLength(1));
+      expect(
+        (await main.repository.listMemories()).map((memory) => memory.text),
+        containsAll([
+          'I live in Toronto',
+          'Prefers metric units',
+          'I live near Toronto Pearson airport',
+        ]),
+      );
+    });
   });
 
   group('projects (GAIA_PROJECTS_HLD.md §12)', () {

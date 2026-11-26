@@ -336,6 +336,9 @@ class ClaudeCodeRunner
         if (event is ClaudeTextDelta) streamed = true;
         if (event is ClaudeCompacted) compacted = event;
         if (gaiaEventOf(event) case final event?) onEvent(event);
+        if (event case ClaudeMessageStart(:final contextTokens?)) {
+          onEvent(GaiaContextUpdate(contextTokens));
+        }
       },
     );
     var (result, started, sessionModel, notice) = await attempt();

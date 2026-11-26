@@ -1014,6 +1014,7 @@ void main() {
           topicIds: ['a1', 'gone'],
           suggested: (name: 'Languages', parentId: null),
           pin: false,
+          replacesId: null,
         ),
       ]);
       final found = await memoryOf('Prefers C++ for A5');
@@ -1227,6 +1228,7 @@ void main() {
           topicIds: const [],
           suggested: null,
           pin: true,
+          replacesId: null,
         ),
       ]);
       final hints = await repository.listMemoryHints();

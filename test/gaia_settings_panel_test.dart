@@ -29,15 +29,19 @@ void main() {
     drain: drain,
   );
 
-  GaiaQueueItem queued(String id, String text, double order, {String? chatId}) =>
-      GaiaQueueItem(
-        id: id,
-        chatId: chatId,
-        text: text,
-        order: order,
-        createdAt: at,
-        updatedAt: at,
-      );
+  GaiaQueueItem queued(
+    String id,
+    String text,
+    double order, {
+    String? chatId,
+  }) => GaiaQueueItem(
+    id: id,
+    chatId: chatId,
+    text: text,
+    order: order,
+    createdAt: at,
+    updatedAt: at,
+  );
 
   GaiaMessage committed({bool undone = false}) => GaiaMessage(
     id: 'm1',
@@ -193,8 +197,8 @@ void main() {
     ]) {
       expect(tab(label), findsOneWidget, reason: label);
     }
-    // The chat is kept underneath, hidden, rather than rebuilt.
-    expect(find.text('half a thought'), findsNothing);
+    // The chat is kept underneath, dimmed, rather than rebuilt.
+    expect(find.text('half a thought'), findsOneWidget);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await settle(tester);
@@ -222,14 +226,22 @@ void main() {
     expect(controller.skyActive.value, isFalse);
   });
 
-  testWidgets("the sidebar's gear opens it, and the header's back button "
-      'closes it', (tester) async {
+  testWidgets("the sidebar's gear opens it, and its own × or a click on "
+      'the dimmed window around it closes it', (tester) async {
     final controller = await pump(tester);
     await tester.tap(find.byIcon(Icons.settings_outlined));
     await settle(tester);
     expect(controller.panel.open, isTrue);
 
-    await tester.tap(find.byIcon(Icons.arrow_back));
+    await tester.tap(find.byTooltip('Close settings (Esc)'));
+    await settle(tester);
+    expect(controller.panel.open, isFalse);
+
+    await tester.tap(find.byIcon(Icons.settings_outlined));
+    await settle(tester);
+    expect(controller.panel.open, isTrue);
+    // In the card's margin, over the sidebar.
+    await tester.tapAt(const Offset(8, 300));
     await settle(tester);
     expect(controller.panel.open, isFalse);
   });
@@ -278,10 +290,10 @@ void main() {
 
       await tester.tap(find.text('Undo'));
       await settle(tester);
-      expect(
-        requests.where((r) => r.$1 == 'undoAction').single.$2,
-        {'messageId': 'm1', 'cardId': 'card'},
-      );
+      expect(requests.where((r) => r.$1 == 'undoAction').single.$2, {
+        'messageId': 'm1',
+        'cardId': 'card',
+      });
       // Read again: struck through, with no Undo.
       expect(find.text('Undo'), findsNothing);
       final title = tester.widget<Text>(
@@ -355,23 +367,28 @@ void main() {
       tester,
     ) async {
       final controller = await openQueue(tester);
+      // The panel's field, not the chat's composer under it.
+      final field = find.descendant(
+        of: find.byType(GaiaSettingsPanelView),
+        matching: find.byType(TextField),
+      );
       await tester.tap(find.text('First global'));
       await tester.pump();
-      await tester.enterText(find.byType(TextField), 'First, edited');
+      await tester.enterText(field, 'First, edited');
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await settle(tester);
-      expect(
-        requests.where((r) => r.$1 == 'queueEdit').single.$2,
-        {'id': 'q1', 'text': 'First, edited'},
-      );
+      expect(requests.where((r) => r.$1 == 'queueEdit').single.$2, {
+        'id': 'q1',
+        'text': 'First, edited',
+      });
 
       await tester.tap(find.text('Second global'));
       await tester.pump();
-      await tester.enterText(find.byType(TextField), 'never');
+      await tester.enterText(field, 'never');
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await settle(tester);
       expect(asked('queueEdit'), 1);
-      expect(find.byType(TextField), findsNothing);
+      expect(field, findsNothing);
       // Esc in the field ended the edit, not the panel.
       expect(controller.panel.open, isTrue);
     });

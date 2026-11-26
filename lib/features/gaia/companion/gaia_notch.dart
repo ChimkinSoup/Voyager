@@ -442,6 +442,7 @@ class _GaiaNotchState extends State<GaiaNotch> with TickerProviderStateMixin {
             child: GaiaGlowRing(
               radius: _radius,
               hovered: _hovered,
+              capsule: true,
               backdrop: !widget.bare
                   ? 1
                   : open

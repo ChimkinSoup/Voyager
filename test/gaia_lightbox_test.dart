@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart' show kDoubleTapTimeout;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,6 +12,13 @@ void main() {
     // The same picture again: one media id, its own page.
     GaiaImagePart(mediaId: 'a', label: 3, width: 1, height: 1),
   ];
+
+  Finder caption(String name, String position) => find.byWidgetPredicate(
+    (widget) =>
+        widget is RichText &&
+        widget.text.toPlainText().startsWith(name) &&
+        widget.text.toPlainText().endsWith(position),
+  );
 
   Future<void> open(WidgetTester tester) async {
     await tester.pumpWidget(
@@ -36,36 +44,37 @@ void main() {
     tester,
   ) async {
     await open(tester);
-    expect(find.text('2 / 3'), findsOneWidget);
-    expect(find.text('[image 2]'), findsOneWidget);
+    expect(caption('[image 2]', '2 of 3'), findsOneWidget);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pumpAndSettle();
-    expect(find.text('3 / 3'), findsOneWidget);
-    expect(find.text('[image 3]'), findsOneWidget);
+    expect(caption('[image 3]', '3 of 3'), findsOneWidget);
 
-    // The last image only leans past the edge and comes back.
+    // Past the last image it stays put.
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pumpAndSettle();
-    expect(find.text('3 / 3'), findsOneWidget);
+    expect(caption('[image 3]', '3 of 3'), findsOneWidget);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
     await tester.pumpAndSettle();
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
     await tester.pumpAndSettle();
-    expect(find.text('1 / 3'), findsOneWidget);
+    expect(caption('[image 1]', '1 of 3'), findsOneWidget);
   });
 
   testWidgets('Esc and a click beside the image close it', (tester) async {
     await open(tester);
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
-    expect(find.text('2 / 3'), findsNothing);
+    expect(caption('[image 2]', '2 of 3'), findsNothing);
 
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
-    await tester.tapAt(const Offset(20, 300));
+    // In the viewer, left of the square picture.
+    await tester.tapAt(const Offset(100, 300));
+    // A single click waits out the double click's window.
+    await tester.pump(kDoubleTapTimeout);
     await tester.pumpAndSettle();
-    expect(find.text('2 / 3'), findsNothing);
+    expect(caption('[image 2]', '2 of 3'), findsNothing);
   });
 }

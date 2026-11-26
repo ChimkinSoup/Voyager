@@ -62553,6 +62553,17 @@ class $GaiaMemoriesTableTable extends GaiaMemoriesTable
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _replacesIdMeta = const VerificationMeta(
+    'replacesId',
+  );
+  @override
+  late final GeneratedColumn<String> replacesId = GeneratedColumn<String>(
+    'replaces_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -62609,6 +62620,7 @@ class $GaiaMemoriesTableTable extends GaiaMemoriesTable
     topicIdsJson,
     pinned,
     suggestedTopicJson,
+    replacesId,
     createdAt,
     updatedAt,
     version,
@@ -62692,6 +62704,12 @@ class $GaiaMemoriesTableTable extends GaiaMemoriesTable
         ),
       );
     }
+    if (data.containsKey('replaces_id')) {
+      context.handle(
+        _replacesIdMeta,
+        replacesId.isAcceptableOrUnknown(data['replaces_id']!, _replacesIdMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -62765,6 +62783,10 @@ class $GaiaMemoriesTableTable extends GaiaMemoriesTable
         DriftSqlType.string,
         data['${effectivePrefix}suggested_topic_json'],
       ),
+      replacesId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}replaces_id'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -62813,6 +62835,10 @@ class GaiaMemoriesTableData extends DataClass
 
   /// `{name, parentId}`, a new topic offered for it; null for none.
   final String? suggestedTopicJson;
+
+  /// For a proposal, the memory it would update
+  /// (GAIA_MEMORY_TOPICS_HLD.md §27.3); null for none.
+  final String? replacesId;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -62827,6 +62853,7 @@ class GaiaMemoriesTableData extends DataClass
     required this.topicIdsJson,
     required this.pinned,
     this.suggestedTopicJson,
+    this.replacesId,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -62849,6 +62876,9 @@ class GaiaMemoriesTableData extends DataClass
     map['pinned'] = Variable<bool>(pinned);
     if (!nullToAbsent || suggestedTopicJson != null) {
       map['suggested_topic_json'] = Variable<String>(suggestedTopicJson);
+    }
+    if (!nullToAbsent || replacesId != null) {
+      map['replaces_id'] = Variable<String>(replacesId);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -62876,6 +62906,9 @@ class GaiaMemoriesTableData extends DataClass
       suggestedTopicJson: suggestedTopicJson == null && nullToAbsent
           ? const Value.absent()
           : Value(suggestedTopicJson),
+      replacesId: replacesId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(replacesId),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -62902,6 +62935,7 @@ class GaiaMemoriesTableData extends DataClass
       suggestedTopicJson: serializer.fromJson<String?>(
         json['suggestedTopicJson'],
       ),
+      replacesId: serializer.fromJson<String?>(json['replacesId']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -62921,6 +62955,7 @@ class GaiaMemoriesTableData extends DataClass
       'topicIdsJson': serializer.toJson<String>(topicIdsJson),
       'pinned': serializer.toJson<bool>(pinned),
       'suggestedTopicJson': serializer.toJson<String?>(suggestedTopicJson),
+      'replacesId': serializer.toJson<String?>(replacesId),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -62938,6 +62973,7 @@ class GaiaMemoriesTableData extends DataClass
     String? topicIdsJson,
     bool? pinned,
     Value<String?> suggestedTopicJson = const Value.absent(),
+    Value<String?> replacesId = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -62954,6 +62990,7 @@ class GaiaMemoriesTableData extends DataClass
     suggestedTopicJson: suggestedTopicJson.present
         ? suggestedTopicJson.value
         : this.suggestedTopicJson,
+    replacesId: replacesId.present ? replacesId.value : this.replacesId,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -62976,6 +63013,9 @@ class GaiaMemoriesTableData extends DataClass
       suggestedTopicJson: data.suggestedTopicJson.present
           ? data.suggestedTopicJson.value
           : this.suggestedTopicJson,
+      replacesId: data.replacesId.present
+          ? data.replacesId.value
+          : this.replacesId,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -62995,6 +63035,7 @@ class GaiaMemoriesTableData extends DataClass
           ..write('topicIdsJson: $topicIdsJson, ')
           ..write('pinned: $pinned, ')
           ..write('suggestedTopicJson: $suggestedTopicJson, ')
+          ..write('replacesId: $replacesId, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -63014,6 +63055,7 @@ class GaiaMemoriesTableData extends DataClass
     topicIdsJson,
     pinned,
     suggestedTopicJson,
+    replacesId,
     createdAt,
     updatedAt,
     version,
@@ -63032,6 +63074,7 @@ class GaiaMemoriesTableData extends DataClass
           other.topicIdsJson == this.topicIdsJson &&
           other.pinned == this.pinned &&
           other.suggestedTopicJson == this.suggestedTopicJson &&
+          other.replacesId == this.replacesId &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -63049,6 +63092,7 @@ class GaiaMemoriesTableCompanion
   final Value<String> topicIdsJson;
   final Value<bool> pinned;
   final Value<String?> suggestedTopicJson;
+  final Value<String?> replacesId;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -63064,6 +63108,7 @@ class GaiaMemoriesTableCompanion
     this.topicIdsJson = const Value.absent(),
     this.pinned = const Value.absent(),
     this.suggestedTopicJson = const Value.absent(),
+    this.replacesId = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -63080,6 +63125,7 @@ class GaiaMemoriesTableCompanion
     this.topicIdsJson = const Value.absent(),
     this.pinned = const Value.absent(),
     this.suggestedTopicJson = const Value.absent(),
+    this.replacesId = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -63100,6 +63146,7 @@ class GaiaMemoriesTableCompanion
     Expression<String>? topicIdsJson,
     Expression<bool>? pinned,
     Expression<String>? suggestedTopicJson,
+    Expression<String>? replacesId,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -63117,6 +63164,7 @@ class GaiaMemoriesTableCompanion
       if (pinned != null) 'pinned': pinned,
       if (suggestedTopicJson != null)
         'suggested_topic_json': suggestedTopicJson,
+      if (replacesId != null) 'replaces_id': replacesId,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -63135,6 +63183,7 @@ class GaiaMemoriesTableCompanion
     Value<String>? topicIdsJson,
     Value<bool>? pinned,
     Value<String?>? suggestedTopicJson,
+    Value<String?>? replacesId,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -63151,6 +63200,7 @@ class GaiaMemoriesTableCompanion
       topicIdsJson: topicIdsJson ?? this.topicIdsJson,
       pinned: pinned ?? this.pinned,
       suggestedTopicJson: suggestedTopicJson ?? this.suggestedTopicJson,
+      replacesId: replacesId ?? this.replacesId,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -63189,6 +63239,9 @@ class GaiaMemoriesTableCompanion
     if (suggestedTopicJson.present) {
       map['suggested_topic_json'] = Variable<String>(suggestedTopicJson.value);
     }
+    if (replacesId.present) {
+      map['replaces_id'] = Variable<String>(replacesId.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -63219,6 +63272,7 @@ class GaiaMemoriesTableCompanion
           ..write('topicIdsJson: $topicIdsJson, ')
           ..write('pinned: $pinned, ')
           ..write('suggestedTopicJson: $suggestedTopicJson, ')
+          ..write('replacesId: $replacesId, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -96465,6 +96519,7 @@ typedef $$GaiaMemoriesTableTableCreateCompanionBuilder =
       Value<String> topicIdsJson,
       Value<bool> pinned,
       Value<String?> suggestedTopicJson,
+      Value<String?> replacesId,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -96482,6 +96537,7 @@ typedef $$GaiaMemoriesTableTableUpdateCompanionBuilder =
       Value<String> topicIdsJson,
       Value<bool> pinned,
       Value<String?> suggestedTopicJson,
+      Value<String?> replacesId,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -96540,6 +96596,11 @@ class $$GaiaMemoriesTableTableFilterComposer
 
   ColumnFilters<String> get suggestedTopicJson => $composableBuilder(
     column: $table.suggestedTopicJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get replacesId => $composableBuilder(
+    column: $table.replacesId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -96618,6 +96679,11 @@ class $$GaiaMemoriesTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get replacesId => $composableBuilder(
+    column: $table.replacesId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -96678,6 +96744,11 @@ class $$GaiaMemoriesTableTableAnnotationComposer
 
   GeneratedColumn<String> get suggestedTopicJson => $composableBuilder(
     column: $table.suggestedTopicJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get replacesId => $composableBuilder(
+    column: $table.replacesId,
     builder: (column) => column,
   );
 
@@ -96743,6 +96814,7 @@ class $$GaiaMemoriesTableTableTableManager
                 Value<String> topicIdsJson = const Value.absent(),
                 Value<bool> pinned = const Value.absent(),
                 Value<String?> suggestedTopicJson = const Value.absent(),
+                Value<String?> replacesId = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -96758,6 +96830,7 @@ class $$GaiaMemoriesTableTableTableManager
                 topicIdsJson: topicIdsJson,
                 pinned: pinned,
                 suggestedTopicJson: suggestedTopicJson,
+                replacesId: replacesId,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -96775,6 +96848,7 @@ class $$GaiaMemoriesTableTableTableManager
                 Value<String> topicIdsJson = const Value.absent(),
                 Value<bool> pinned = const Value.absent(),
                 Value<String?> suggestedTopicJson = const Value.absent(),
+                Value<String?> replacesId = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -96790,6 +96864,7 @@ class $$GaiaMemoriesTableTableTableManager
                 topicIdsJson: topicIdsJson,
                 pinned: pinned,
                 suggestedTopicJson: suggestedTopicJson,
+                replacesId: replacesId,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,

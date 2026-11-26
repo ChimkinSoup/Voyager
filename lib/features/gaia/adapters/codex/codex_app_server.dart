@@ -644,6 +644,9 @@ class CodexAppServerClient {
           turn.contextWindow =
               (usage['modelContextWindow'] as num?)?.toInt() ??
               turn.contextWindow;
+          if (turn.contextTokens case final tokens?) {
+            turn.onEvent(GaiaContextUpdate(tokens, window: turn.contextWindow));
+          }
         }
       case 'error':
         if (params['willRetry'] == true || turn == null) return;

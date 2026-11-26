@@ -41,19 +41,22 @@ gains a new card-by-card review with an "Ask Gaia" chat about the memory in fron
 | Ctrl+, | The same, from anywhere in the companion. A Gaia keybind (`gaia_keybinds.dart`), so it can be rebound. |
 | A floater | Ctrl+, or a floater's own gear switches to the Gaia window first, then opens the panel. Floaters are too small for it. |
 | Elsewhere | A recall chip in a chat (`GaiaRecallChip`, shown for a `GaiaRecallPart`) opens the panel at Memories with the clicked memory revealed, instead of Voyager's Gaia page. In a floater it switches to the Gaia window first, as Ctrl+, does. It's handled in the companion, with no round trip to the host (§3.3). The desktop page's "Open in Gaia" opens it at its tab (§9). |
-| Closing | Esc (when no field or menu has it), the gear again, or ×. The chat that was open comes back as it was. |
+| Closing | Esc (when no field or menu has it), the gear again, the card's own ×, or a click on the dimmed window around it. The chat that was open comes back as it was. |
 
 ### 2.2 Where it lives in the tree
 
-**The panel is a mode of `_GaiaShell`, not a route.** While it's open, the shell builds the
-panel where the sidebar and chat were, under the same header and window buttons. It is not a
-dialog over the chat, for two reasons:
+**The panel is a mode of `_GaiaShell`, not a route.** While it's open, the shell floats it as
+a card (`_PanelCard`) over the whole window, the sidebar and chat left as they were under a dim
+scrim, with no focus. The card sits below the window's header, which is dimmed with the rest. A card with its own ×, rather than a page under the window's header, so
+the window's × isn't taken for the panel's (changed 2026-11-25). It is still not a route, for
+two reasons:
 
 1. **Ask Gaia (§7) shows a chat inside the panel.** If the panel were a route over the shell,
    two `_Messages` and two `_Composer`s would be built for the same current chat: two
    draft editors over one draft, two focus owners, and two scroll controllers on one list.
    As a mode, only one chat view is ever built.
-2. **It's "most of the page"** without a second surface or backdrop to style.
+   While an Ask Gaia or source chat shows in the panel, the chat under the scrim is left empty.
+2. **It's "most of the page"** without a second route or focus scope to manage.
 
 The panel's state (open, tab, scroll position per tab, review position) is held by a small
 `GaiaSettingsPanel` `ChangeNotifier` on the controller, like `GaiaSidebar`. The last tab is
@@ -61,10 +64,12 @@ kept in `gaia/settings_panel.json`; nothing else is kept across restarts.
 
 ### 2.3 Layout
 
+- **Card:** inset from the window's edges, in `gaiaFloating`'s rim and shadow. Its top row
+  moves the window, as the header does.
 - **Header row:** the tab strip (labels in the sidebar's row style: dim, lit when selected,
   edged in the glow rings' rim like the open chat's tile), the inbox count on Memories as on
   the page today, and × on the right.
-- **Body:** each tab is one `CustomScrollView`. Nothing inside a tab scrolls on its own
+- **Body:** each tab is one `CustomScrollView`, with no scrollbar. Nothing inside a tab scrolls on its own
   except a text field. Content is capped at a readable width (about 760 px) and centred, so
   a wide window doesn't stretch rows.
 - **Sections** use one heading style (`_SectionLabel` in Gaia's ink), and rows are Gaia rows:
@@ -260,7 +265,7 @@ opens that chat in a split under the card, read-only), and the actions below.
 | Remembered | **Keep** (Enter / →), **Archive** (Backspace / D), **Delete** (Ctrl+Backspace), **Edit**, **Pin**/**Unpin** (P), **Ask Gaia** |
 | Pin suggestion | **Pin** (Enter), **Not now** (Backspace) |
 | Merge suggestion | **Merge** (Enter), **Keep apart** (Backspace) |
-| Unsorted with a placement | **File there** (Enter), **Choose…** (T, the topic picker), **Skip** |
+| Unsorted with a placement | **File there** (Enter), **Choose…** (T, the topic picker), **Leave unsorted** (Backspace or D, drops the suggestion), **Skip** |
 
 - **← goes back** a card, and **Ctrl+Z undoes** the last decision (`restoreMemory` for a
   decline, restoring the soft delete, unarchiving, unpinning, putting topics back).
@@ -287,7 +292,11 @@ question: "Is this already mentioned in memories?", "Rewrite this so it's more c
   the rest of the review (a memoryId → chatId map on the panel, not kept across restarts).
 - **The card stays live above it.** A rewrite Gaia offers and you apply changes the card's
   text in place.
-- **Esc in the chat's composer** closes the chat and returns focus to the card's keys.
+- **Esc in the chat's composer** gives the keys back to the card, the chat left showing, so
+  you can decide with Gaia's answer in view; / goes back into the composer. Esc on the deck
+  then closes the chat, and the next one ends the review.
+- **`/new` (and `/clear`, `/reset`) doesn't run here**: the chat is about the card in
+  front, so a toast says so and the chat stays.
 
 ### 7.2 It's a real chat
 
@@ -334,6 +343,7 @@ the way it carries quotes (`transcript`).
 |---|---|---|
 | "Is this already in memories?" | `memory_search` (exists) | Gaia answers from the results. |
 | "Add the XYZ version too" | `memory_propose` (exists) | A memory card in the chat, as in any chat. Remember files it. During an Inbox review, it also joins the end of the deck (§6.1). |
+| "Put this in CS246 › Assignments" | `memory_revise` with `addTopics` / `removeTopics` (Phase 8, §7.5) | The same card, with a chip per topic change. |
 | "Rewrite this more compactly" | **`memory_revise`** (new) | A **revision card**: the current text struck through over the offered text, with **Apply** and **Dismiss**, and the text editable before Apply. Apply calls `editMemory`; for a proposed memory it changes the proposal's text and leaves it in the inbox. |
 
 **`memory_revise`** {id, text, why}: "Offer a rewrite of an existing memory, by id from
@@ -348,6 +358,79 @@ in the message, as `decideMemory` does.
 so and you decline or archive the card yourself, one key away. Decided: Gaia doesn't offer
 that as a card (§11).
 
+### 7.5 Topic changes from Gaia (Phase 8, planned 2026-11-25)
+
+`memory_revise` changes only a memory's text, so "add this to CS246 › Assignments" has no
+tool today. Phase 8 lets the same tool and card carry topic changes too, still applied only
+by you.
+
+**The tool.** `memory_revise` gets two optional fields, and `text` becomes optional:
+
+- `addTopics`: names or paths, read as `memory_propose`'s `topics` are.
+- `removeTopics`: names or paths of topics the memory is in now.
+
+A call that changes neither the text nor a topic is refused, with a message the agent sees.
+Add and remove lists, not "the topics it should have": with a whole list, a model that leaves
+out a current topic would take it off without meaning to, and the two lists are what the
+card shows anyway.
+
+**Reading the names.** `propose`'s name-to-topic matching (`gaia_memories.dart`) moves into
+one function both tools use, so a name means the same topic in either. In `reviseOffer`:
+
+- An added name that matches a topic is that topic (one in the chat's project first, as now).
+  One the memory is already in is dropped.
+- An added name that matches none is a **new topic**, under the deepest part of its path that
+  exists, as `memory_propose` places one. **Several may be new on one card** (decided
+  2026-11-25), since each is its own chip you can leave out.
+- A removed name must be a topic the memory is in; otherwise the call is refused and the agent
+  is told which. **Removing the last topic is allowed** (decided 2026-11-25): the memory goes
+  to Unsorted, and the − chip shows that before Apply.
+
+**The part.** `GaiaRevisionPart` gains its topic changes: for each, the topic's id (or, for a
+new one, its name and parent), the path it read as when offered, so a decided card still reads
+right after a rename, and whether it's an add or a remove. `text` equals `was` when only
+topics change. Parts saved before Phase 8 have none and read as they do now.
+
+**The card.** `GaiaRevisionCard` shows the struck-through text and its rewrite only when the
+text changes. Under it, a chip per change: `+ CS246 › Assignments`, `− School`,
+`+ New topic: Exams`. While it's open, a click on a chip leaves that change out, as the
+text can be edited before Apply. Its title is "Change this memory?", or "Rewrite this
+memory?" when only the text changes. Decided, it's a record; the phone's chat
+(`gaia_remote_chat.dart`) shows the same chips, read-only.
+
+**Applying.** `reviseMemory` carries the changes kept. Apply edits the text if it changed,
+makes the new topics, then adds and removes the memory's topics through the requests the
+`+ Topic` chip uses (`addMemoryTopic`, `removeMemoryTopic`), and records the card. It's
+still refused while Gaia is aborted. A topic gone since the offer skips that one change, and
+the toast says so; the rest goes on.
+
+**Applying from the deck (R).** With an Ask Gaia chat showing and the keys on the deck
+(§7.1), **R** applies the latest open revision card in that chat for the card in front, as
+its Apply would, with every chip it offers. **Ctrl+Z / U** undoes it like a decision: the
+memory's text and topics back as they were, any topic it made deleted, and the revision card
+open again. R doesn't move the deck on, as P and T don't. With no open revision card, R does
+nothing. The hint shows `R apply Gaia's change` only while there's one to apply.
+
+**Unchanged:** applying a card with the mouse isn't a deck decision, so Ctrl+Z doesn't undo
+that one, as with text rewrites today. Text-only revisions look and behave as before.
+
+**Checked by:**
+
+- Host tests: names read as an existing topic, a path, one name fitting several topics (the
+  chat's project's wins), a new topic under an existing parent, several new topics, removing a
+  topic the memory isn't in (refused), and a call that changes nothing (refused).
+  `reviseMemory`: text only (as before), topics only, both, new topics made and filed, the
+  last topic removed, a dismissed card writing nothing, a topic gone since the offer skipped,
+  and the aborted refusal.
+- Model: topic changes survive JSON, and a pre-Phase 8 part still reads.
+- Card: the chips show, a clicked one is left out of what Apply sends, the title and text
+  section for a topics-only card, and a decided card is read-only.
+- Controller: a `memory_revise` call with only `addTopics` puts a card in the reply.
+- Review: R applies the latest open card for the card in front and leaves the deck where it
+  is; Ctrl+Z / U puts the memory, its topics and the card back; R with no open card does
+  nothing; the hint shows R only when there's a card to apply.
+- Live, in gaiaqa on Claude Haiku and on Codex: Phase 8's "done when" (§10).
+
 ## 8. Keys
 
 | Key | Where | |
@@ -357,7 +440,8 @@ that as a card (§11).
 | Ctrl+F | Memories | focus search |
 | §6.2's keys | review | decisions; they're off while a text field or the Ask Gaia composer has focus |
 | / | review or a focused memory card | Ask Gaia |
-| Esc | | closes the innermost thing: menu, edit, Ask Gaia, review, panel |
+| R | review, with an Ask Gaia chat showing | apply Gaia's latest open revision card for the card in front (Phase 8, §7.5) |
+| Esc | | closes the innermost thing: menu, edit, Ask Gaia, review, panel. In the Ask Gaia composer it first gives the keys back to the deck, the chat still showing |
 
 ## 9. The Gaia page afterwards
 
@@ -383,6 +467,7 @@ that as a card (§11).
 | 5 | **Review.** §6: decks, keys, animation, undo, the summary. The review bar (§5.2 item 4). | A 30-memory inbox can be cleared from the keyboard alone, and Ctrl+Z restores any decision. |
 | 6 | **Ask Gaia.** `_ChatColumn`, `GaiaMemoryRefPart`, archived review chats, `memory_revise` and its card. | The three example questions in §7.1 work on Claude and on Codex, and an applied rewrite updates the card above. |
 | 7 | **Desktop page → link.** §9. | The Windows Gaia page shows only the link and tab buttons; Android's is unchanged. |
+| 8 | **Topic changes from Gaia.** §7.5: `memory_revise`'s `addTopics` / `removeTopics`, the shared name matching, topic changes in `GaiaRevisionPart` and its card, `reviseMemory` applying them, R on the deck with its undo. | In an Ask Gaia chat on Claude and on Codex, asking to add an existing topic, add a new one, remove one, and change the text and a topic together each gives one card; Apply (or R) updates the card above, and Ctrl+Z after R puts the memory and the card back. |
 
 After Phase 4 is a natural point for the UI pass you mentioned (look and feel only).
 
@@ -1056,6 +1141,70 @@ Open in Gaia and the six buttons, and no tabs.
 
 **Not checked live:** the phone's page (unchanged code).
 
+### 10.8 Phase 8 as built (2026-11-25)
+
+**Built:** §7.5. `memory_revise` takes `addTopics` / `removeTopics`, `text` optional
+(`gaia_mcp.dart`). `propose`'s name matching is now `_readTopicName` / `_pickTopic` in
+`gaia_memories.dart`, used by `propose` and `reviseOffer` alike. `offerRevision` now carries
+`chatId` (for the chat's project) and answers `topics` and `had`. `GaiaTopicChange` {add,
+topicId | name + parentId, path} sits on `GaiaRevisionPart.topics`. `GaiaRevisionCard` shows a
+chip per change, toggled out by a click, and `onApply` is now `(text, topics)`.
+`reviseMemory` takes the kept `topics` and answers `{made, skipped}`. R on the deck goes
+through `GaiaController.reviseMemory` / `openRevision` / `reopenRevision`.
+
+**Where it differs from the design above:**
+- **The topic writes are made in the host**, by `GaiaMemories.reviseTopics` (the same
+  `newTopic` / `addMemoryTopic` / `removeMemoryTopic` the `+ Topic` chip's requests call),
+  in the one `reviseMemory` request, not as separate requests from the companion. The
+  aborted refusal is then checked once.
+- **The part also stores `had`**: how many topics the memory was in when offered. The card
+  needs it to say "· leaves it Unsorted" on the last kept − chip.
+- **A new request, `reopenRevision {chatId, cardId, text, topics}`**, for R's undo.
+- A removed name fitting several of the memory's topics takes one, picked as an added name is.
+- A decided card records only the changes applied, without any that were skipped.
+
+**Tests:** `gaia_host_test.dart`, `gaia_memory_card_test.dart` (2),
+`gaia_controller_test.dart` and `gaia_memory_review_test.dart` each have new tests
+covering the "Checked by" list in §7.5. The review fake handles topic changes.
+
+**Checked live (2026-11-25, `gaiaqa`, Claude Haiku):** from an out-of-tree Debug build of this
+tree, background input only, in an inbox review with the Ask Gaia chat beside the card. Each ask
+gave one revision card, titled "Change this memory?":
+- **Add an existing topic** ("Add this memory to the Preferences topic"): `+ Preferences`. Apply
+  put the chip on the card above at once.
+- **Add a new topic** (Fruit inside Cooking): `+ New topic: Cooking › Fruit`, Preferences (already
+  on it) left out. With the keys on the deck the hint showed `R apply Gaia's change`; R made the
+  topic and filed the memory, the deck stayed on 1 / 39, and R left the hint. Ctrl+Z deleted
+  Fruit, put the memory's topics back and opened the card again, with R back in the hint.
+- **Remove the last topic**: `− Preferences · leaves it Unsorted`; Apply left it in Unsorted.
+- **Text and a topic together**: the struck-through text, the rewrite and `+ Cooking`. R applied
+  both; Ctrl+Z put back the text, the topics and the open card. Then a click on the chip left it
+  out, and Apply changed only the text, the decided card titled "Rewrite this memory?".
+- Haiku's first call there removed a topic the memory wasn't in and was refused with that reason.
+- Stored parts: `accepted`, `open` (the undone one), `accepted`, `accepted` with no topics;
+  the chat archived from the start; the made-then-undone topic gone. No error in the error log.
+
+Seen, not from this change:
+- **The deck's key hint beside the chat was unreadable**: its `FittedBox` shrank the ~2,500 px
+  line into the ~1,000 px column (3.9 px tall). It now wraps between items at full size (fixed
+  2026-11-25; the R test checks its height). Without the chat it's one line, as before.
+- **The deck's keys did nothing after a long pause**. That was the harness, not a bug: Flutter's
+  `View` parks the focus on the root scope when the window loses OS focus and gives it back on
+  re-activation, which background input never does. A test showed the deck gets its focus back.
+- Once, the `/` that opened Ask Gaia also landed in its composer. Not reproduced in 26 more
+  tries (13 with real keys, 13 background; fresh chats and cold starts). Likely the harness:
+  `Bg.cs` posts `WM_KEYDOWN` and `WM_KEYUP` together, so the `WM_CHAR` Windows makes from the
+  keydown comes after the keyup, unpaired, and can reach the composer as text once it has the
+  focus. A real key's `WM_CHAR` follows its keydown and is dropped with the handled key.
+
+**Not checked live:** Codex (skipped: gaiaqa's Codex login had expired, "refresh token was
+already used") and a topic gone since the offer.
+
+**The phone (2026-11-25, OnePlus 12R, qa-128):** the same chat on the phone showed each card
+read-only with its chips: `+ Preferences` Applied, `+ New topic: Cooking › Fruit` "Not applied
+yet" with no buttons, `− Preferences · leaves it Unsorted` Applied, and the text-only rewrite
+with no chips. Tapping a chip did nothing.
+
 ## 11. Decisions (2026-11-20)
 
 These were open questions; all four are decided.
@@ -1067,6 +1216,12 @@ These were open questions; all four are decided.
 3. **One review chat per memory** (§7.1), so "this" always means the card in front of you.
 4. **Opening the panel from a floater switches to the Gaia window first** (§2.1). The panel
    isn't shown in the floaters.
+
+Added 2026-11-25, for Phase 8 (§7.5):
+
+5. **A revision card may offer several new topics**, each its own chip.
+6. **Gaia may remove a memory's last topic**, leaving it in Unsorted.
+7. **R applies Gaia's latest revision card from the deck**, undone with Ctrl+Z / U.
 
 ## 12. How it's checked
 

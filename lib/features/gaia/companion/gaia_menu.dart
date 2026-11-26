@@ -601,16 +601,10 @@ class _MenuShellState extends State<_MenuShell>
             blurRadius: 40,
             spreadRadius: -8,
           );
-          // A study's look may be see-through, as a frosted one is: its
-          // shadow skips what's under it, or it would show through.
-          if (GaiaRingLook.maybeOf(context) != null) {
-            return CustomPaint(painter: _ShadowAround(shadow), child: ring);
-          }
-          return DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(_radius),
-              boxShadow: [shadow],
-            ),
+          // The shell is see-through: its shadow skips what's under it,
+          // or it would show through.
+          return CustomPaint(
+            painter: GaiaShadowAround(shadow, radius: _radius),
             child: ring,
           );
         },
@@ -643,38 +637,6 @@ class _MenuShellState extends State<_MenuShell>
       child: shell,
     );
   }
-}
-
-/// [shadow] round a [_MenuShell], as its [BoxDecoration] would draw it,
-/// less what's under the shell.
-class _ShadowAround extends CustomPainter {
-  const _ShadowAround(this.shadow);
-
-  final BoxShadow shadow;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final shell = RRect.fromRectAndRadius(
-      Offset.zero & size,
-      const Radius.circular(_radius),
-    );
-    final around = Path.combine(
-      PathOperation.difference,
-      Path()..addRect(shell.outerRect.inflate(shadow.blurRadius * 2 + 64)),
-      Path()..addRRect(shell),
-    );
-    canvas
-      ..save()
-      ..clipPath(around)
-      ..drawRRect(
-        shell.shift(shadow.offset).inflate(shadow.spreadRadius),
-        shadow.toPaint(),
-      )
-      ..restore();
-  }
-
-  @override
-  bool shouldRepaint(_ShadowAround old) => old.shadow != shadow;
 }
 
 Widget _menuRow(

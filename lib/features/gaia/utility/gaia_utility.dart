@@ -314,7 +314,9 @@ class GaiaUtility {
         'File each fact about the user in <input>, kept by their assistant '
             'Gaia, under the topics listed. For each fact: $_placementRules '
             'Offer the same new topic, with the same name, for facts that '
-            'belong together. Also give up to 3 tags: one-word keywords '
+            'belong together. Leave a fact with no topics and no new topic when '
+            "it doesn't belong in any group, such as a one-off detail. "
+            'Also give up to 3 tags: one-word keywords '
             "someone might use when the fact matters that aren't among its "
             'own words.\n\n'
             'Reply with only a JSON array, one item per fact: {"n": <its '
@@ -345,12 +347,14 @@ class GaiaUtility {
   /// [transcript], none of them among [kept], the memories kept, in the
   /// inbox or set aside that are nearest to it (§11), each filed in [topics]
   /// (GAIA_MEMORY_TOPICS_HLD.md §5); null when it failed, so the turns are
-  /// read again next time.
+  /// read again next time. [keptIds] are the ids of [kept]'s numbered
+  /// lines, in order: one a fact updates is named by its number (§27.3).
   Future<List<GaiaFoundMemory>?> curate(
     String transcript,
     String kept,
-    List<GaiaTopicLine> topics,
-  ) async {
+    List<GaiaTopicLine> topics, [
+    List<String> keptIds = const [],
+  ]) async {
     try {
       final answer = await _runner.generate(
         'You keep a short list of lasting facts about the user for '
@@ -374,9 +378,13 @@ class GaiaUtility {
             '"parent": "<id>" or null} in its item. Add "pin": true to an '
             'item only when the fact is about the user in general rather '
             'than one subject: who they are, or how they like answers given '
-            '("I\'m a CS student at Waterloo", "I prefer short answers").',
-        'Memories kept, waiting for the user to approve, or set aside by '
-            'the user, that may overlap:\n'
+            '("I\'m a CS student at Waterloo", "I prefer short answers").\n\n'
+            'The memories kept are numbered. When a fact corrects or updates '
+            'one of them, so both can\'t be true at once (the user moved, or '
+            'changed their mind), add "replaces": <its number> to its item, '
+            'still giving the fact in full. Not when it only adds detail.',
+        'Memories kept (numbered), then those waiting for the user to '
+            'approve or set aside by the user (-), that may overlap:\n'
             '${kept.trim().isEmpty ? '(none)' : kept}\n\n'
             '${_topicLines(topics)}\n\n'
             // The newest kept: the chat is marked read up to its last.
@@ -384,9 +392,61 @@ class GaiaUtility {
         timeout: _curateTimeout,
         source: 'memory curation',
       );
-      return parseCuratorAnswer(answer, topics);
+      return parseCuratorAnswer(answer, topics, keptIds);
     } catch (error) {
       debugPrint('[gaia] curator: $error');
+      return null;
+    }
+  }
+
+  /// The save check for new memory [text] (GAIA_MEMORY_TOPICS_HLD.md
+  /// §27.3): whether one of [near], the kept memories nearest it, says it
+  /// already or is corrected by it, and, given [topics], where it's filed,
+  /// so it needs no second call. Null when it failed or timed out (the
+  /// router's 5 seconds): it's saved as it would be with no check.
+  Future<GaiaSaveCheck?> check(
+    String text,
+    List<({String id, String text})> near, {
+    List<GaiaTopicLine>? topics,
+  }) async {
+    final elapsed = Stopwatch()..start();
+    try {
+      final answer = await _runner.generate(
+        'A new fact about the user is about to be saved among the memories '
+            'their assistant, Gaia, keeps. Compare it with the saved '
+            'memories in <input>, numbered. Answer "same" with the number of '
+            'one that already says it, however worded; "replaces" with the '
+            "number of one it corrects or updates, so both can't be true at "
+            'once (the user moved, or changed their mind), not one it only '
+            'adds detail to; otherwise "new".'
+            '${topics == null ? '' : '\n\nAlso file the new fact under the topics listed. $_placementRules Also give up to 3 tags: one-word keywords someone might use when it matters that aren\'t among its own words.'}'
+            '\n\nReply with only a JSON object: {"check": "new", "same" or '
+            '"replaces", "n": <its number, or null for new>'
+            '${topics == null ? '' : ', "topics": ["<id>"], "new": null or {"name": "...", "parent": "<id>" or null}, "tags": ["..."]'}}.',
+        'New fact: ${_clip(text, 1000)}\n\n'
+            'Saved memories:\n'
+            '${[for (final (i, memory) in near.indexed) '${i + 1}. ${_clip(memory.text.replaceAll(RegExp(r'\s+'), ' ').trim(), 1000)}'].join('\n')}'
+            '${topics == null ? '' : '\n\n${_topicLines(topics)}'}',
+        usage: 'memory save check',
+        timeout: _routeTimeout,
+        source: 'memory save check',
+      );
+      final check = parseSaveCheck(answer, near, topics);
+      final said = check.sameId != null
+          ? 'same'
+          : check.replacesId != null
+          ? 'replaces'
+          : 'new';
+      debugPrint(
+        '[gaia] memory save check: $said of ${near.length} in '
+        '${elapsed.elapsedMilliseconds} ms',
+      );
+      return check;
+    } catch (error) {
+      debugPrint(
+        '[gaia] memory save check: failed after '
+        '${elapsed.elapsedMilliseconds} ms, saving as it is: $error',
+      );
       return null;
     }
   }
@@ -410,13 +470,24 @@ GaiaTier? parseRoute(String answer) {
   };
 }
 
+/// What the save check found (GAIA_MEMORY_TOPICS_HLD.md §27.3): the
+/// memory that says it already, or the one it updates, neither for a new
+/// one, and where it's filed when that was asked.
+typedef GaiaSaveCheck = ({
+  String? sameId,
+  String? replacesId,
+  GaiaPlacement? placement,
+});
+
 /// The memories in a curator [answer]: its JSON array, wherever it is in
-/// the text, at most three, each filed in those of [topics] it names.
+/// the text, at most three, each filed in those of [topics] it names, and
+/// updating the one of [keptIds] its `replaces` numbers (from 1), if any.
 /// Throws a [FormatException] when there's none.
 @visibleForTesting
 List<GaiaFoundMemory> parseCuratorAnswer(
   String answer, [
   List<GaiaTopicLine> topics = const [],
+  List<String> keptIds = const [],
 ]) {
   final start = answer.indexOf('[');
   final end = answer.lastIndexOf(']');
@@ -439,8 +510,45 @@ List<GaiaFoundMemory> parseCuratorAnswer(
             topicIds: placement.topicIds,
             suggested: placement.suggested,
             pin: item['pin'] == true,
+            replacesId: _numbered(item['replaces'], keptIds),
           ),
   ].take(3).toList();
+}
+
+/// What a save check [answer] says of a new memory and [near]
+/// (GAIA_MEMORY_TOPICS_HLD.md §27.3): its JSON object, wherever it is in
+/// the text. A number missing or out of range reads as new. Filed in
+/// [topics] when they're given. Throws a [FormatException] when there's no
+/// object.
+@visibleForTesting
+GaiaSaveCheck parseSaveCheck(
+  String answer,
+  List<({String id, String text})> near, [
+  List<GaiaTopicLine>? topics,
+]) {
+  final start = answer.indexOf('{');
+  final end = answer.lastIndexOf('}');
+  if (start < 0 || end < start) {
+    throw FormatException('no JSON object', answer);
+  }
+  final json = jsonDecode(answer.substring(start, end + 1));
+  if (json is! Map) throw FormatException('not a JSON object', answer);
+  final id = _numbered(json['n'], [for (final memory in near) memory.id]);
+  return (
+    sameId: json['check'] == 'same' ? id : null,
+    replacesId: json['check'] == 'replaces' ? id : null,
+    placement: topics == null ? null : _placementOf(json, topics),
+  );
+}
+
+/// The one of [ids] that [n] numbers, from 1; null for none.
+String? _numbered(Object? n, List<String> ids) {
+  final i = switch (n) {
+    final int n => n,
+    final String n => int.tryParse(n.trim()),
+    _ => null,
+  };
+  return i == null || i < 1 || i > ids.length ? null : ids[i - 1];
 }
 
 /// Where a placement [answer] files a memory (GAIA_MEMORY_TOPICS_HLD.md

@@ -1,11 +1,13 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
+import 'package:voyager/features/gaia/companion/gaia_controls.dart';
 import 'package:voyager/features/gaia/companion/gaia_sky.dart';
 import 'package:voyager/features/gaia/companion/gaia_starfield.dart';
 import 'package:voyager/features/gaia/companion/gaia_style.dart';
@@ -68,10 +70,10 @@ Future<void> showGaiaStats(
         String compact(int? n) =>
             n == null ? '–' : NumberFormat.compact().format(n);
 
-        return Dialog(
-          clipBehavior: Clip.antiAlias,
-          child: SizedBox(
-            // Most of the window's width; the Dialog's insets still cap it.
+        return GaiaDialog(
+          maxWidth: double.infinity,
+          content: SizedBox(
+            // Most of the window's width; the dialog's insets still cap it.
             width: MediaQuery.sizeOf(context).width * 0.8,
             // Scrolls without a bar.
             child: ScrollConfiguration(
@@ -513,10 +515,10 @@ class _SeenTileState extends State<_SeenTile>
 }
 
 /// How tall a tile's window onto the sky is.
-const _windowHeight = 56.0;
+const _windowHeight = 84.0;
 
 /// Room for a satellite in its window.
-const _iconSize = Size(64, 32);
+const _iconSize = Size(80, 44);
 
 /// What locked tiles draw in.
 const _silhouetteInk = GaiaInk.faint;
@@ -646,15 +648,17 @@ class _HeaderStarsPainter extends CustomPainter {
 }
 
 /// Each rare craft's extent as the sky draws it, unscaled and heading right,
-/// to fit it to [_iconSize].
+/// to fit it to [_iconSize]. The dish's is centred on its body, which it
+/// turns about.
 const _satelliteBounds = {
   GaiaSatellite.iss: Rect.fromLTRB(-7, -14, 7.6, 14),
   GaiaSatellite.array: Rect.fromLTRB(-20.6, -5.6, 20.6, 2.8),
   GaiaSatellite.hubble: Rect.fromLTRB(-8.9, -6.3, 8, 6.3),
-  GaiaSatellite.dish: Rect.fromLTRB(-13.9, -2.1, 13.9, 7.7),
+  GaiaSatellite.dish: Rect.fromLTRB(-13.9, -7.7, 13.9, 7.7),
 };
 
-/// A rare satellite as the sky draws it, still and level (§5.3).
+/// A rare satellite as the sky draws it, level, its lights blinking and its
+/// parts turning as they do crossing the sky; a silhouette still (§5.3).
 class _SatelliteIcon extends StatelessWidget {
   const _SatelliteIcon(this.look, {required this.silhouette});
 
@@ -662,15 +666,21 @@ class _SatelliteIcon extends StatelessWidget {
   final bool silhouette;
 
   @override
-  Widget build(BuildContext context) =>
-      CustomPaint(painter: _SatellitePainter(look, silhouette));
+  Widget build(BuildContext context) => _Ticking(
+    still: silhouette,
+    painter: (time) => _SatellitePainter(look, silhouette, time),
+  );
 }
 
 class _SatellitePainter extends CustomPainter {
-  _SatellitePainter(this.look, this.silhouette);
+  _SatellitePainter(this.look, this.silhouette, this.time)
+    : super(repaint: time);
 
   final GaiaSatellite look;
   final bool silhouette;
+
+  /// Seconds since it appeared.
+  final ValueListenable<double> time;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -695,6 +705,7 @@ class _SatellitePainter extends CustomPainter {
       look,
       at,
       const Offset(1, 0),
+      time: time.value,
       scale: scale,
       flat: silhouette,
     );
@@ -703,12 +714,66 @@ class _SatellitePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_SatellitePainter old) =>
-      old.look != look || old.silhouette != silhouette;
+      old.look != look || old.silhouette != silhouette || old.time != time;
+}
+
+/// [painter] given the seconds since it appeared, repainted every frame;
+/// held at 0 when [still] and under reduced motion.
+class _Ticking extends StatefulWidget {
+  const _Ticking({required this.still, required this.painter});
+
+  final bool still;
+  final CustomPainter Function(ValueListenable<double> time) painter;
+
+  @override
+  State<_Ticking> createState() => _TickingState();
+}
+
+class _TickingState extends State<_Ticking>
+    with SingleTickerProviderStateMixin {
+  final _time = ValueNotifier(0.0);
+  late final _ticker = createTicker(
+    (elapsed) => _time.value = elapsed.inMicroseconds / 1e6,
+  );
+
+  void _sync() {
+    final run = !widget.still && !MediaQuery.disableAnimationsOf(context);
+    if (run && !_ticker.isActive) {
+      _ticker.start();
+    } else if (!run && _ticker.isActive) {
+      _ticker.stop();
+      _time.value = 0;
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _sync();
+  }
+
+  @override
+  void didUpdateWidget(_Ticking old) {
+    super.didUpdateWidget(old);
+    _sync();
+  }
+
+  @override
+  void dispose() {
+    _ticker.dispose();
+    _time.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      CustomPaint(painter: widget.painter(_time));
 }
 
 /// The rare aurora's curtains, high, main and low, as the sky hangs them:
-/// rays brightest at their lower edge and fading up, the edge waving
-/// (§5.3). Locked, the same curtains faint and flat.
+/// rays brightest at their lower edge and fading up, the edge waving and
+/// the rays rising and falling (§5.3). Locked, the same curtains faint,
+/// flat and still.
 class _AuroraCurtains extends StatelessWidget {
   const _AuroraCurtains(this.colours, {required this.silhouette});
 
@@ -716,15 +781,21 @@ class _AuroraCurtains extends StatelessWidget {
   final bool silhouette;
 
   @override
-  Widget build(BuildContext context) =>
-      CustomPaint(painter: _AuroraPainter(colours, silhouette));
+  Widget build(BuildContext context) => _Ticking(
+    still: silhouette,
+    painter: (time) => _AuroraPainter(colours, silhouette, time),
+  );
 }
 
 class _AuroraPainter extends CustomPainter {
-  _AuroraPainter(this.colours, this.silhouette);
+  _AuroraPainter(this.colours, this.silhouette, this.time)
+    : super(repaint: time);
 
   final GaiaRareAurora colours;
   final bool silhouette;
+
+  /// Seconds since it appeared.
+  final ValueListenable<double> time;
 
   /// Each curtain's upper and lower edge as shares of the height: the high
   /// one up top, the low one at the bottom.
@@ -735,6 +806,7 @@ class _AuroraPainter extends CustomPainter {
     final [main, high, low] = gaiaRareAuroraColors(colours);
     final random = math.Random(colours.index + 3);
     final phase = random.nextDouble() * math.pi * 2;
+    final t = time.value;
     const step = 2.0;
     final paint = Paint()
       ..blendMode = silhouette ? BlendMode.srcOver : BlendMode.plus;
@@ -745,15 +817,18 @@ class _AuroraPainter extends CustomPainter {
         final along = (x + step / 2) / size.width;
         final edge =
             (bottom +
-                0.05 * math.sin(along * math.pi * 2.6 + phase + i * 1.7) +
-                0.025 * math.sin(along * math.pi * 6.2 - phase + i)) *
+                0.05 *
+                    math.sin(
+                      along * math.pi * 2.6 + phase + i * 1.7 + t * 0.5,
+                    ) +
+                0.025 * math.sin(along * math.pi * 6.2 - phase + i - t * 0.8)) *
             size.height;
         final reach =
             (bottom - top) *
             size.height *
             (0.6 +
-                0.25 * math.sin(along * 13 + phase * 2 + i) +
-                0.15 * math.sin(along * 31 - phase + i * 2));
+                0.25 * math.sin(along * 13 + phase * 2 + i + t * 0.9) +
+                0.15 * math.sin(along * 31 - phase + i * 2 - t * 1.3));
         // Softer at its ends, and each ray its own brightness.
         final strength =
             (silhouette ? 0.3 : 0.7) *
@@ -780,7 +855,9 @@ class _AuroraPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_AuroraPainter old) =>
-      old.colours != colours || old.silhouette != silhouette;
+      old.colours != colours ||
+      old.silhouette != silhouette ||
+      old.time != time;
 }
 
 /// The stats' lifetime tokens: the total's split (the total itself is the
@@ -837,18 +914,24 @@ List<Widget> gaiaTokenLines(
         : theme.textTheme.bodySmall?.copyWith(color: GaiaInk.muted);
     final row = Row(
       children: [
-        Flexible(child: Text(name, style: style)),
-        if (open != null)
-          AnimatedRotation(
-            turns: open ? 0.25 : 0,
-            duration: GaiaMotion.quick,
-            child: const Icon(
-              Icons.chevron_right,
-              size: 16,
-              color: GaiaInk.faint,
-            ),
+        // All the room the total leaves, so the totals line up at the right.
+        Expanded(
+          child: Row(
+            children: [
+              Flexible(child: Text(name, style: style)),
+              if (open != null)
+                AnimatedRotation(
+                  turns: open ? 0.25 : 0,
+                  duration: GaiaMotion.quick,
+                  child: const Icon(
+                    Icons.chevron_right,
+                    size: 16,
+                    color: GaiaInk.faint,
+                  ),
+                ),
+            ],
           ),
-        const Spacer(),
+        ),
         Text(compact(used.total), style: style),
       ],
     );

@@ -12,12 +12,15 @@ import 'package:voyager/features/gaia/companion/gaia_activity_chip.dart';
 import 'package:voyager/features/gaia/companion/gaia_appear.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_button_studies.dart';
+import 'package:voyager/features/gaia/companion/gaia_calendar_draft.dart';
 import 'package:voyager/features/gaia/companion/gaia_card_view.dart';
 import 'package:voyager/features/gaia/companion/gaia_comet_studies.dart';
 import 'package:voyager/features/gaia/companion/gaia_control_showcase.dart';
 import 'package:voyager/features/gaia/companion/gaia_memory_card.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
+import 'package:voyager/features/gaia/companion/gaia_controls_showcase.dart';
 import 'package:voyager/features/gaia/companion/gaia_debug.dart';
+import 'package:voyager/features/gaia/companion/gaia_lightbox_studies.dart';
 import 'package:voyager/features/gaia/companion/gaia_file_card.dart';
 import 'package:voyager/features/gaia/companion/gaia_image_thumb.dart';
 import 'package:voyager/features/gaia/companion/gaia_offline_icon.dart';
@@ -88,557 +91,609 @@ class _DebugMenuState extends State<_DebugMenu> {
       color: theme.colorScheme.onSurfaceVariant,
     );
     final speedIndex = kGaiaDebugStreamSpeeds.indexOf(debug.streamSpeed);
-    Widget heading(String text) => Padding(
-      padding: const EdgeInsets.fromLTRB(0, 16, 0, 4),
-      child: Text(text, style: theme.textTheme.titleSmall),
+    Widget heading(String text) => _Heading(
+      title: text,
+      open: !debug.closedSections.contains(text),
+      onTap: () => debug.toggleSection(text),
     );
+    final children = <Widget>[
+      Row(
+        children: [
+          Expanded(
+            child: Text('Gaia debug', style: theme.textTheme.titleMedium),
+          ),
+          GaiaButton(
+            icon: Icons.close,
+            size: 32,
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ],
+      ),
+      Text('Kept on this desktop, never synced.', style: muted),
+      heading('Text field studies'),
+      const GaiaTextFieldStudies(),
+      heading('Button studies'),
+      const GaiaButtonStudies(),
+      heading('Menu and capsule studies'),
+      GaiaShellStudies(controller: controller),
+      heading('Gaia controls'),
+      const GaiaControlsShowcase(),
+      heading('Image lightbox study'),
+      const GaiaLightboxStudy(),
+      heading('Calendar draft'),
+      const GaiaCalendarStudy(),
+      heading('Red layered orb studies'),
+      const GaiaRedOrbStudies(),
+      heading('Orb studio'),
+      const GaiaOrbStudio(),
+      heading('Comet studies'),
+      GaiaCometStudies(debug: controller.debug),
+      heading('Thinking and replying studies'),
+      const GaiaOrbMotionStudies(),
+      heading('Astral message animations'),
+      Text(
+        'The live chat orb. Its white orbits become the model arcs while '
+        'gold beads spiral into the centre. A new message opens them again.',
+        style: muted,
+      ),
+      const GaiaOrbMessagePreview(),
+      heading('Auto picking a tier'),
+      Text(
+        "A new chat's tier picker, with a stand-in router: Send asks it, "
+        'Auto runs through the tiers faster while it decides, then settles '
+        "into its answer as the notch flashes. A tier picked in the notch's "
+        'menu meanwhile wins. The account notch beside it always shows '
+        'here, with stand-in accounts when the provider has only one.',
+        style: muted,
+      ),
+      _AutoRoutePreview(controller: controller),
+      heading('Replies'),
+      GaiaPanelSwitch(
+        title: 'Scripted replies',
+        subtitle:
+            'A message that is one of the commands below gets a canned reply '
+            'instead of a Claude Code run: no tokens. The chat is saved like '
+            'any other.',
+        value: debug.scriptedReplies,
+        onChanged: debug.setScriptedReplies,
+      ),
+      GaiaPanelSwitch(
+        title: 'Dummy mode',
+        subtitle:
+            'Every other message gets the same canned reply. Nothing reaches '
+            'a provider: no agent run, no routing, no titles.',
+        value: debug.dummyMode,
+        onChanged: debug.setDummyMode,
+      ),
+      _SliderRow(
+        label: 'Wait before replying',
+        value: debug.replyDelay.inMilliseconds / 1000,
+        max: 10,
+        divisions: 20,
+        display:
+            '${(debug.replyDelay.inMilliseconds / 1000).toStringAsFixed(1)} s',
+        onChanged: (seconds, {required save}) => debug.setReplyDelay(
+          Duration(milliseconds: (seconds * 1000).round()),
+          save: save,
+        ),
+      ),
+      _SliderRow(
+        label: 'Streaming speed',
+        value: speedIndex.toDouble(),
+        max: kGaiaDebugStreamSpeeds.length - 1.0,
+        divisions: kGaiaDebugStreamSpeeds.length - 1,
+        display: '${debug.streamSpeed} chars/s',
+        onChanged: (index, {required save}) => debug.setStreamSpeed(
+          kGaiaDebugStreamSpeeds[index.round()],
+          save: save,
+        ),
+      ),
+      const SizedBox(height: 4),
+      Text(
+        debug.scriptedReplies
+            ? 'Click one to send it to the open chat.'
+            : 'Turn scripted replies on to use these.',
+        style: muted,
+      ),
+      for (final MapEntry(:key, :value) in gaiaDebugScripts.entries)
+        ListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          enabled: debug.scriptedReplies && !controller.currentRunning,
+          title: Text(
+            key,
+            style: const TextStyle(fontFamily: AppFonts.monoFamily),
+          ),
+          subtitle: Text(value.description),
+          onTap: () {
+            Navigator.of(context).pop();
+            controller.send(key);
+          },
+        ),
+      heading('Sending images and files'),
+      Text(
+        "A message shows as soon as it's sent. Its images stay dimmed under "
+        "a spinner until they're attached, then Gaia's reply starts. Files "
+        'and folders go by path, so they show at once.',
+        style: muted,
+      ),
+      const _UploadPreview(),
+      _SliderRow(
+        label: 'Wait to attach',
+        value: debug.attachDelay.inMilliseconds / 1000,
+        max: 10,
+        divisions: 20,
+        display:
+            '${(debug.attachDelay.inMilliseconds / 1000).toStringAsFixed(1)} s',
+        onChanged: (seconds, {required save}) => debug.setAttachDelay(
+          Duration(milliseconds: (seconds * 1000).round()),
+          save: save,
+        ),
+      ),
+      Text(
+        'Holds each image of a real send this long before attaching it, to '
+        'watch it upload in the chat.',
+        style: muted,
+      ),
+      heading('Attachments vanishing'),
+      Text(
+        "Sent, a draft's images, files and folders dissolve from right to "
+        'left like its text, and their row closes behind them; the caret '
+        'comes back once the text has gone. Pick a count to draft that many '
+        'images again.',
+        style: muted,
+      ),
+      const _ImageVanishPreview(),
+      heading('Messages appearing'),
+      Text(
+        'Sent, a message gathers into the chat out of particles, swept from '
+        'left to right: its text and attachments, but not its bubble. Pick '
+        'a message to send it again. Past the particle cap, only some of a '
+        "long message's pixels are particles; the rest fade in ahead of the "
+        'sweep.',
+        style: muted,
+      ),
+      const _AppearPreview(),
+      heading('Toast icon studies'),
+      const GaiaToastIconStudio(),
+      heading('Toasts'),
+      Text(
+        "Gaia's own toast, shown now. Hover holds it; a click dismisses it.",
+        style: muted,
+      ),
+      const SizedBox(height: 8),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          GaiaButton(
+            label: 'Done',
+            onPressed: () => showGaiaToast(
+              context,
+              mark: GaiaToastMark.done,
+              title: 'Gaia is done',
+              body:
+                  'Debug chat: Fixed. dispose now cancels the timer, and all '
+                  '48 tests pass.',
+            ),
+          ),
+          GaiaButton(
+            label: 'Question',
+            onPressed: () => showGaiaToast(
+              context,
+              mark: GaiaToastMark.question,
+              title: 'Gaia has a question',
+              body: 'Debug chat: Which would you rather I do?',
+            ),
+          ),
+          GaiaButton(
+            label: 'Error',
+            onPressed: () => showGaiaToast(
+              context,
+              mark: GaiaToastMark.error,
+              title: 'Gaia ran into an error',
+              body: 'Debug chat: Claude Code exited (code 1)',
+            ),
+          ),
+          GaiaButton(
+            label: 'Long',
+            onPressed: () => showGaiaToast(
+              context,
+              mark: GaiaToastMark.info,
+              title: 'A toast with a long body',
+              body:
+                  'It runs well past two lines, so the toast grows to '
+                  'show all of it, up to eight lines of body text, and '
+                  'stays up longer to give time to read it. Anything '
+                  'past eight lines is cut off with an ellipsis rather '
+                  'than growing the toast taller still, which would '
+                  'cover most of a small floater.',
+            ),
+          ),
+        ],
+      ),
+      heading('A card while you are away'),
+      Text(
+        'Plays /away in the open chat: a question card after five seconds. '
+        'With Gaia behind another app, or minimised, it comes in front '
+        "without the focus and the Gaia window's taskbar button flashes. "
+        'Hidden, it comes up as the small floater, also without the focus. '
+        'Either way, the keys you type stay in your app. Then the Gaia '
+        'hotkey goes to the chat of the waiting card. Needs scripted replies '
+        'and "Notify when a run finishes" on the Gaia page.',
+        style: muted,
+      ),
+      const SizedBox(height: 8),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          GaiaButton(
+            label: 'Then switch apps',
+            onPressed: debug.scriptedReplies && !controller.currentRunning
+                ? () {
+                    Navigator.of(context).pop();
+                    controller.send('/away');
+                  }
+                : null,
+          ),
+          GaiaButton(
+            label: 'Hide Gaia',
+            onPressed: debug.scriptedReplies && !controller.currentRunning
+                ? () {
+                    Navigator.of(context).pop();
+                    controller.send('/away');
+                    controller.dismiss();
+                  }
+                : null,
+          ),
+        ],
+      ),
+      heading('Connection drops'),
+      Text(
+        'Each plays in the open chat as a real run would show it: retries '
+        'under the reply, a cut-off reply taken back before it is written '
+        'again, and the two ways a run ends in an error. Needs scripted '
+        'replies.',
+        style: muted,
+      ),
+      const SizedBox(height: 8),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final (label, command) in const [
+            ('Retries', '/retry'),
+            ('Overloaded', '/retry2'),
+            ('Cut off, retried', '/cut'),
+            ('May be incomplete', '/incomplete'),
+            ('Gave up', '/gaveup'),
+          ])
+            GaiaButton(
+              label: label,
+              onPressed: debug.scriptedReplies && !controller.currentRunning
+                  ? () {
+                      Navigator.of(context).pop();
+                      controller.send(command);
+                    }
+                  : null,
+            ),
+        ],
+      ),
+      heading('Remember toasts'),
+      Text(
+        'Each toast /remember can show, as its text says it. Saved and '
+        'refused alike, none of them opens a chat.',
+        style: muted,
+      ),
+      const SizedBox(height: 8),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final (label, title, body, mark) in _rememberToasts)
+            GaiaButton(
+              label: label,
+              onPressed: () =>
+                  showGaiaToast(context, mark: mark, title: title, body: body),
+            ),
+        ],
+      ),
+      heading('Offline icon'),
+      Text(
+        "In the header once the next tier's CLI has failed to reach its "
+        'servers twice in a row. Hover for its tooltip; a click checks '
+        'again, here for a second.',
+        style: muted,
+      ),
+      const _OfflinePreview(),
+      heading('Usage limits'),
+      Text(
+        'Each case of the low warning and the exhausted card, shown in the '
+        'real composer with made-up accounts. Its buttons, Ctrl+Enter and '
+        'Esc only close it: no account switches and nothing is resent. Real '
+        'usage stays as it is; a low case turns the current ring rose.',
+        style: muted,
+      ),
+      for (final MapEntry(key: group, value: previews)
+          in gaiaLimitPreviews().entries) ...[
+        const SizedBox(height: 8),
+        Text(group, style: theme.textTheme.bodySmall),
+        const SizedBox(height: 4),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            for (final preview in previews)
+              ChoiceChip(
+                label: Text(preview.label),
+                selected: controller.limitPreview?.label == preview.label,
+                onSelected: (_) {
+                  Navigator.of(context).pop();
+                  controller.previewLimit(preview);
+                },
+              ),
+          ],
+        ),
+      ],
+      if (controller.limitPreview != null) ...[
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: GaiaButton(
+            icon: Icons.close,
+            label: 'Close the preview',
+            onPressed: () => controller.previewLimit(null),
+          ),
+        ),
+      ],
+      heading('Lifetime stats'),
+      Text(
+        'The stats dialog with made-up stats and tokens. Accounts are the '
+        'default Claude and Codex ones, plus one that has been removed. The '
+        'real stats are left as they are.',
+        style: muted,
+      ),
+      const SizedBox(height: 8),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final MapEntry(key: label, value: preview)
+              in gaiaStatsPreviews().entries)
+            GaiaButton(
+              label: label,
+              // Over the menu, so closing it comes back here.
+              onPressed: () => unawaited(
+                showGaiaStats(context, controller, preview: preview),
+              ),
+            ),
+        ],
+      ),
+      heading('Forking'),
+      Text(
+        'Shown at the end of the message forked from while the fork waits for a '
+        'prompt just sent to reach its session, up to five seconds. Shown '
+        "here on the open chat's last message for four seconds; nothing is "
+        'forked.',
+        style: muted,
+      ),
+      const SizedBox(height: 8),
+      Align(
+        alignment: Alignment.centerLeft,
+        child: GaiaButton(
+          label: 'Show forking',
+          onPressed: controller.messages.isEmpty
+              ? null
+              : () {
+                  Navigator.of(context).pop();
+                  controller.previewForking();
+                },
+        ),
+      ),
+      heading('Untested CLI'),
+      Text(
+        "The header chip shown when the next message's CLI is past its "
+        "tested range and printed output Gaia couldn't read, as after an "
+        'update: here it reads the first untested version for eight '
+        'seconds. Nothing is run.',
+        style: muted,
+      ),
+      const SizedBox(height: 8),
+      Align(
+        alignment: Alignment.centerLeft,
+        child: GaiaButton(
+          label: 'Show untested CLI',
+          onPressed: () {
+            Navigator.of(context).pop();
+            controller.previewUntestedCli();
+          },
+        ),
+      ),
+      heading('Side questions'),
+      Text(
+        "The /btw panel and chip on the open chat, with made-up side "
+        'questions in place of its own: answered, with a notice, failed, '
+        'stopped, answering on another device, and one streaming here, '
+        'which Stop stops. Nothing is stored, synced or run; Clear history '
+        'clears only these, and Fork is refused. They go when the chat is '
+        'opened again.',
+        style: muted,
+      ),
+      const SizedBox(height: 8),
+      Align(
+        alignment: Alignment.centerLeft,
+        child: GaiaButton(
+          label: 'Show side questions',
+          onPressed: controller.currentChatId == null
+              ? null
+              : () {
+                  Navigator.of(context).pop();
+                  controller.previewBtws();
+                },
+        ),
+      ),
+      heading('Screen read results'),
+      Text(
+        "A reply's os_* reads, with made-up results kept as this device "
+        'keeps real ones. Open the chip to see each call with its result: '
+        'the screen read runs past the preview, the screenshot has its '
+        'image, and the refused clipboard read has no result. Other devices '
+        'show only the '
+        'calls.',
+        style: muted,
+      ),
+      const _ToolResultsPreview(),
+      heading('Actions beside tool chips'),
+      Text(
+        'A reply that worked Chrome: its activity card and its tool chips. '
+        'Before, the chips listed every os_* action the card already shows. '
+        "Now they keep only the reads, and a chip of actions alone isn't "
+        'shown.',
+        style: muted,
+      ),
+      const _ActivityDedupePreview(),
+      heading('Memory card'),
+      Text(
+        'The card memory_propose puts in a reply: edit the text, then '
+        'Remember or Dismiss. Its topics are made up: click one to drop it, '
+        'or add one back with + Topic. Here they only change the card; '
+        'nothing is saved.',
+        style: muted,
+      ),
+      const GaiaMemoryCardPreview(),
+      heading('Taking control of the screen'),
+      GaiaControlShowcase(clientOrigin: () => controller.windowOrigin),
+      heading('Display'),
+      GaiaPanelSwitch(
+        title: 'Show FPS counter',
+        subtitle:
+            "Gaia's rendered frame rate and a five-minute graph, as on "
+            "Voyager's Dev page.",
+        value: debug.showFps,
+        onChanged: debug.setShowFps,
+      ),
+      GaiaPanelSwitch(
+        title: 'FPS drop alert',
+        subtitle:
+            'Records the frame rate hidden, and shows the counter once a '
+            'reading falls below the threshold, until it is closed.',
+        value: debug.fpsAlert,
+        onChanged: debug.setFpsAlert,
+      ),
+      _SliderRow(
+        label: 'Alert below',
+        value: debug.fpsAlertThreshold.toDouble(),
+        min: 10,
+        max: 240,
+        divisions: 46,
+        display: '${debug.fpsAlertThreshold} FPS',
+        onChanged: (fps, {required save}) =>
+            debug.setFpsAlertThreshold(fps.round(), save: save),
+      ),
+      GaiaPanelSwitch(
+        title: 'Slow animations',
+        subtitle: 'Every animation at a tenth of its speed.',
+        value: debug.slowAnimations,
+        onChanged: debug.setSlowAnimations,
+      ),
+      GaiaPanelSwitch(
+        title: 'Sky debug',
+        subtitle:
+            "A panel over the chat to tune the empty chat's sky: its rotation, "
+            'stars, constellations, meteors, aurora and exit.',
+        value: debug.skyPanel,
+        onChanged: debug.setSkyPanel,
+      ),
+      GaiaPanelSwitch(
+        title: 'Constellation figures (experimental)',
+        subtitle:
+            "Once the sky traces a constellation, a sketch of what it's named "
+            'for is drawn over it, fading with its lines.',
+        value: debug.skyFigures,
+        onChanged: debug.setSkyFigures,
+      ),
+      GaiaPanelSwitch(
+        title: 'Place stars',
+        subtitle:
+            'Hold Ctrl over the chat: click to place a star in the starfield '
+            'behind, Shift+click for a small cluster, drag to move either, '
+            'right-click to take one away. They go when this is turned off.',
+        value: debug.placeStars,
+        onChanged: debug.setPlaceStars,
+      ),
+      GaiaPanelSwitch(
+        title: 'Allow screenshots',
+        subtitle:
+            "Gaia shows in screenshots, screen recordings and screen shares, "
+            "which it's hidden from otherwise.",
+        value: debug.allowScreenshots,
+        onChanged: debug.setAllowScreenshots,
+      ),
+      GaiaPanelSwitch(
+        title: 'Haiku picks recalled memories',
+        subtitle:
+            "Recall's stage 2: the utility model picks from the matched "
+            "memories on a chat's first message, and on later ones with a "
+            'new strong match. Each pass is logged with its tokens. On by '
+            'default.',
+        value: debug.recallPick,
+        onChanged: debug.setRecallPick,
+      ),
+    ];
+    // A closed section shows its heading alone. Keyed by place in the full
+    // list, so the widgets below a closed section keep their own state.
+    final shown = <Widget>[];
+    var open = true;
+    for (final (i, child) in children.indexed) {
+      if (child is _Heading) open = child.open;
+      if (open || child is _Heading) {
+        shown.add(KeyedSubtree(key: ValueKey(i), child: child));
+      }
+    }
     return ListView(
       controller: _scroll,
       shrinkWrap: true,
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text('Gaia debug', style: theme.textTheme.titleMedium),
-            ),
-            GaiaButton(
-              icon: Icons.close,
-              size: 32,
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-          ],
-        ),
-        Text('Kept on this desktop, never synced.', style: muted),
-        heading('Text field studies'),
-        const GaiaTextFieldStudies(),
-        heading('Button studies'),
-        const GaiaButtonStudies(),
-        heading('Menu and capsule studies'),
-        GaiaShellStudies(controller: controller),
-        heading('Red layered orb studies'),
-        const GaiaRedOrbStudies(),
-        heading('Orb studio'),
-        const GaiaOrbStudio(),
-        heading('Comet studies'),
-        GaiaCometStudies(debug: controller.debug),
-        heading('Thinking and replying studies'),
-        const GaiaOrbMotionStudies(),
-        heading('Astral message animations'),
-        Text(
-          'The live chat orb. Its white orbits become the model arcs while '
-          'gold beads spiral into the centre. A new message opens them again.',
-          style: muted,
-        ),
-        const GaiaOrbMessagePreview(),
-        heading('Auto picking a tier'),
-        Text(
-          "A new chat's tier picker, with a stand-in router: Send asks it, "
-          'Auto runs through the tiers faster while it decides, then settles '
-          "into its answer as the notch flashes. A tier picked in the notch's "
-          'menu meanwhile wins. The account notch beside it always shows '
-          'here, with stand-in accounts when the provider has only one.',
-          style: muted,
-        ),
-        _AutoRoutePreview(controller: controller),
-        heading('Replies'),
-        GaiaPanelSwitch(
-          title: 'Scripted replies',
-          subtitle:
-              'A message that is one of the commands below gets a canned reply '
-              'instead of a Claude Code run: no tokens. The chat is saved like '
-              'any other.',
-          value: debug.scriptedReplies,
-          onChanged: debug.setScriptedReplies,
-        ),
-        GaiaPanelSwitch(
-          title: 'Dummy mode',
-          subtitle:
-              'Every other message gets the same canned reply. Nothing reaches '
-              'a provider: no agent run, no routing, no titles.',
-          value: debug.dummyMode,
-          onChanged: debug.setDummyMode,
-        ),
-        _SliderRow(
-          label: 'Wait before replying',
-          value: debug.replyDelay.inMilliseconds / 1000,
-          max: 10,
-          divisions: 20,
-          display:
-              '${(debug.replyDelay.inMilliseconds / 1000).toStringAsFixed(1)} s',
-          onChanged: (seconds, {required save}) => debug.setReplyDelay(
-            Duration(milliseconds: (seconds * 1000).round()),
-            save: save,
-          ),
-        ),
-        _SliderRow(
-          label: 'Streaming speed',
-          value: speedIndex.toDouble(),
-          max: kGaiaDebugStreamSpeeds.length - 1.0,
-          divisions: kGaiaDebugStreamSpeeds.length - 1,
-          display: '${debug.streamSpeed} chars/s',
-          onChanged: (index, {required save}) => debug.setStreamSpeed(
-            kGaiaDebugStreamSpeeds[index.round()],
-            save: save,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          debug.scriptedReplies
-              ? 'Click one to send it to the open chat.'
-              : 'Turn scripted replies on to use these.',
-          style: muted,
-        ),
-        for (final MapEntry(:key, :value) in gaiaDebugScripts.entries)
-          ListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            enabled: debug.scriptedReplies && !controller.currentRunning,
-            title: Text(
-              key,
-              style: const TextStyle(fontFamily: AppFonts.monoFamily),
-            ),
-            subtitle: Text(value.description),
-            onTap: () {
-              Navigator.of(context).pop();
-              controller.send(key);
-            },
-          ),
-        heading('Sending images and files'),
-        Text(
-          "A message shows as soon as it's sent. Its images stay dimmed under "
-          "a spinner until they're attached, then Gaia's reply starts. Files "
-          'and folders go by path, so they show at once.',
-          style: muted,
-        ),
-        const _UploadPreview(),
-        _SliderRow(
-          label: 'Wait to attach',
-          value: debug.attachDelay.inMilliseconds / 1000,
-          max: 10,
-          divisions: 20,
-          display:
-              '${(debug.attachDelay.inMilliseconds / 1000).toStringAsFixed(1)} s',
-          onChanged: (seconds, {required save}) => debug.setAttachDelay(
-            Duration(milliseconds: (seconds * 1000).round()),
-            save: save,
-          ),
-        ),
-        Text(
-          'Holds each image of a real send this long before attaching it, to '
-          'watch it upload in the chat.',
-          style: muted,
-        ),
-        heading('Attachments vanishing'),
-        Text(
-          "Sent, a draft's images, files and folders dissolve from right to "
-          'left like its text, and their row closes behind them; the caret '
-          'comes back once the text has gone. Pick a count to draft that many '
-          'images again.',
-          style: muted,
-        ),
-        const _ImageVanishPreview(),
-        heading('Messages appearing'),
-        Text(
-          'Sent, a message gathers into the chat out of particles, swept from '
-          'left to right: its text and attachments, but not its bubble. Pick '
-          'a message to send it again. Past the particle cap, only some of a '
-          "long message's pixels are particles; the rest fade in ahead of the "
-          'sweep.',
-          style: muted,
-        ),
-        const _AppearPreview(),
-        heading('Toast icon studies'),
-        const GaiaToastIconStudio(),
-        heading('Toasts'),
-        Text(
-          "Gaia's own toast, shown now. Hover holds it; a click dismisses it.",
-          style: muted,
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            GaiaButton(
-              label: 'Done',
-              onPressed: () => showGaiaToast(
-                context,
-                mark: GaiaToastMark.done,
-                title: 'Gaia is done',
-                body:
-                    'Debug chat: Fixed. dispose now cancels the timer, and all '
-                    '48 tests pass.',
-              ),
-            ),
-            GaiaButton(
-              label: 'Question',
-              onPressed: () => showGaiaToast(
-                context,
-                mark: GaiaToastMark.question,
-                title: 'Gaia has a question',
-                body: 'Debug chat: Which would you rather I do?',
-              ),
-            ),
-            GaiaButton(
-              label: 'Error',
-              onPressed: () => showGaiaToast(
-                context,
-                mark: GaiaToastMark.error,
-                title: 'Gaia ran into an error',
-                body: 'Debug chat: Claude Code exited (code 1)',
-              ),
-            ),
-            GaiaButton(
-              label: 'Long',
-              onPressed: () => showGaiaToast(
-                context,
-                mark: GaiaToastMark.info,
-                title: 'A toast with a long body',
-                body:
-                    'It runs well past two lines, so the toast grows to '
-                    'show all of it, up to eight lines of body text, and '
-                    'stays up longer to give time to read it. Anything '
-                    'past eight lines is cut off with an ellipsis rather '
-                    'than growing the toast taller still, which would '
-                    'cover most of a small floater.',
-              ),
-            ),
-          ],
-        ),
-        heading('A card while you are away'),
-        Text(
-          'Plays /away in the open chat: a question card after five seconds. '
-          'With Gaia behind another app, or minimised, it comes in front '
-          "without the focus and the Gaia window's taskbar button flashes. "
-          'Hidden, it comes up as the small floater, also without the focus. '
-          'Either way, the keys you type stay in your app. Then the Gaia '
-          'hotkey goes to the chat of the waiting card. Needs scripted replies '
-          'and "Notify when a run finishes" on the Gaia page.',
-          style: muted,
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            GaiaButton(
-              label: 'Then switch apps',
-              onPressed: debug.scriptedReplies && !controller.currentRunning
-                  ? () {
-                      Navigator.of(context).pop();
-                      controller.send('/away');
-                    }
-                  : null,
-            ),
-            GaiaButton(
-              label: 'Hide Gaia',
-              onPressed: debug.scriptedReplies && !controller.currentRunning
-                  ? () {
-                      Navigator.of(context).pop();
-                      controller.send('/away');
-                      controller.dismiss();
-                    }
-                  : null,
-            ),
-          ],
-        ),
-        heading('Connection drops'),
-        Text(
-          'Each plays in the open chat as a real run would show it: retries '
-          'under the reply, a cut-off reply taken back before it is written '
-          'again, and the two ways a run ends in an error. Needs scripted '
-          'replies.',
-          style: muted,
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final (label, command) in const [
-              ('Retries', '/retry'),
-              ('Overloaded', '/retry2'),
-              ('Cut off, retried', '/cut'),
-              ('May be incomplete', '/incomplete'),
-              ('Gave up', '/gaveup'),
-            ])
-              GaiaButton(
-                label: label,
-                onPressed: debug.scriptedReplies && !controller.currentRunning
-                    ? () {
-                        Navigator.of(context).pop();
-                        controller.send(command);
-                      }
-                    : null,
-              ),
-          ],
-        ),
-        heading('Remember toasts'),
-        Text(
-          'Each toast /remember can show, as its text says it. Saved and '
-          'refused alike, none of them opens a chat.',
-          style: muted,
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final (label, title, body, mark) in _rememberToasts)
-              GaiaButton(
-                label: label,
-                onPressed: () => showGaiaToast(
-                  context,
-                  mark: mark,
-                  title: title,
-                  body: body,
-                ),
-              ),
-          ],
-        ),
-        heading('Offline icon'),
-        Text(
-          "In the header once the next tier's CLI has failed to reach its "
-          'servers twice in a row. Hover for its tooltip; a click checks '
-          'again, here for a second.',
-          style: muted,
-        ),
-        const _OfflinePreview(),
-        heading('Usage limits'),
-        Text(
-          'Each case of the low warning and the exhausted card, shown in the '
-          'real composer with made-up accounts. Its buttons, Ctrl+Enter and '
-          'Esc only close it: no account switches and nothing is resent. Real '
-          'usage stays as it is; a low case turns the current ring rose.',
-          style: muted,
-        ),
-        for (final MapEntry(key: group, value: previews)
-            in gaiaLimitPreviews().entries) ...[
-          const SizedBox(height: 8),
-          Text(group, style: theme.textTheme.bodySmall),
-          const SizedBox(height: 4),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
+      children: shown,
+    );
+  }
+}
+
+/// A section's title in the debug menu, which opens or closes it.
+class _Heading extends StatelessWidget {
+  const _Heading({
+    required this.title,
+    required this.open,
+    required this.onTap,
+  });
+
+  final String title;
+  final bool open;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(6),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
             children: [
-              for (final preview in previews)
-                ChoiceChip(
-                  label: Text(preview.label),
-                  selected: controller.limitPreview?.label == preview.label,
-                  onSelected: (_) {
-                    Navigator.of(context).pop();
-                    controller.previewLimit(preview);
-                  },
-                ),
+              Expanded(child: Text(title, style: theme.textTheme.titleSmall)),
+              Icon(
+                open ? Icons.expand_less : Icons.expand_more,
+                size: 18,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ],
           ),
-        ],
-        if (controller.limitPreview != null) ...[
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: GaiaButton(
-              icon: Icons.close,
-              label: 'Close the preview',
-              onPressed: () => controller.previewLimit(null),
-            ),
-          ),
-        ],
-        heading('Lifetime stats'),
-        Text(
-          'The stats dialog with made-up stats and tokens. Accounts are the '
-          'default Claude and Codex ones, plus one that has been removed. The '
-          'real stats are left as they are.',
-          style: muted,
         ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final MapEntry(key: label, value: preview)
-                in gaiaStatsPreviews().entries)
-              GaiaButton(
-                label: label,
-                // Over the menu, so closing it comes back here.
-                onPressed: () => unawaited(
-                  showGaiaStats(context, controller, preview: preview),
-                ),
-              ),
-          ],
-        ),
-        heading('Forking'),
-        Text(
-          'Shown at the end of the message forked from while the fork waits for a '
-          'prompt just sent to reach its session, up to five seconds. Shown '
-          "here on the open chat's last message for four seconds; nothing is "
-          'forked.',
-          style: muted,
-        ),
-        const SizedBox(height: 8),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: GaiaButton(
-            label: 'Show forking',
-            onPressed: controller.messages.isEmpty
-                ? null
-                : () {
-                    Navigator.of(context).pop();
-                    controller.previewForking();
-                  },
-          ),
-        ),
-        heading('Untested CLI'),
-        Text(
-          "The header chip shown when the next message's CLI is past its "
-          "tested range and printed output Gaia couldn't read, as after an "
-          'update: here it reads the first untested version for eight '
-          'seconds. Nothing is run.',
-          style: muted,
-        ),
-        const SizedBox(height: 8),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: GaiaButton(
-            label: 'Show untested CLI',
-            onPressed: () {
-              Navigator.of(context).pop();
-              controller.previewUntestedCli();
-            },
-          ),
-        ),
-        heading('Side questions'),
-        Text(
-          "The /btw panel and chip on the open chat, with made-up side "
-          'questions in place of its own: answered, with a notice, failed, '
-          'stopped, answering on another device, and one streaming here, '
-          'which Stop stops. Nothing is stored, synced or run; Clear history '
-          'clears only these, and Fork is refused. They go when the chat is '
-          'opened again.',
-          style: muted,
-        ),
-        const SizedBox(height: 8),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: GaiaButton(
-            label: 'Show side questions',
-            onPressed: controller.currentChatId == null
-                ? null
-                : () {
-                    Navigator.of(context).pop();
-                    controller.previewBtws();
-                  },
-          ),
-        ),
-        heading('Screen read results'),
-        Text(
-          "A reply's os_* reads, with made-up results kept as this device "
-          'keeps real ones. Open the chip to see each call with its result: '
-          'the screen read runs past the preview, the screenshot has its '
-          'image, and the refused clipboard read has no result. Other devices '
-          'show only the '
-          'calls.',
-          style: muted,
-        ),
-        const _ToolResultsPreview(),
-        heading('Actions beside tool chips'),
-        Text(
-          'A reply that worked Chrome: its activity card and its tool chips. '
-          'Before, the chips listed every os_* action the card already shows. '
-          "Now they keep only the reads, and a chip of actions alone isn't "
-          'shown.',
-          style: muted,
-        ),
-        const _ActivityDedupePreview(),
-        heading('Memory card'),
-        Text(
-          'The card memory_propose puts in a reply: edit the text, then '
-          'Remember or Dismiss. Its topics are made up: click one to drop it, '
-          'or add one back with + Topic. Here they only change the card; '
-          'nothing is saved.',
-          style: muted,
-        ),
-        const GaiaMemoryCardPreview(),
-        heading('Taking control of the screen'),
-        GaiaControlShowcase(clientOrigin: () => controller.windowOrigin),
-        heading('Display'),
-        GaiaPanelSwitch(
-          title: 'Show FPS counter',
-          subtitle:
-              "Gaia's rendered frame rate and a five-minute graph, as on "
-              "Voyager's Dev page.",
-          value: debug.showFps,
-          onChanged: debug.setShowFps,
-        ),
-        GaiaPanelSwitch(
-          title: 'FPS drop alert',
-          subtitle:
-              'Records the frame rate hidden, and shows the counter once a '
-              'reading falls below the threshold, until it is closed.',
-          value: debug.fpsAlert,
-          onChanged: debug.setFpsAlert,
-        ),
-        _SliderRow(
-          label: 'Alert below',
-          value: debug.fpsAlertThreshold.toDouble(),
-          min: 10,
-          max: 240,
-          divisions: 46,
-          display: '${debug.fpsAlertThreshold} FPS',
-          onChanged: (fps, {required save}) =>
-              debug.setFpsAlertThreshold(fps.round(), save: save),
-        ),
-        GaiaPanelSwitch(
-          title: 'Slow animations',
-          subtitle: 'Every animation at a tenth of its speed.',
-          value: debug.slowAnimations,
-          onChanged: debug.setSlowAnimations,
-        ),
-        GaiaPanelSwitch(
-          title: 'Sky debug',
-          subtitle:
-              "A panel over the chat to tune the empty chat's sky: its rotation, "
-              'stars, constellations, meteors, aurora and exit.',
-          value: debug.skyPanel,
-          onChanged: debug.setSkyPanel,
-        ),
-        GaiaPanelSwitch(
-          title: 'Constellation figures (experimental)',
-          subtitle:
-              "Once the sky traces a constellation, a sketch of what it's named "
-              'for is drawn over it, fading with its lines.',
-          value: debug.skyFigures,
-          onChanged: debug.setSkyFigures,
-        ),
-        GaiaPanelSwitch(
-          title: 'Place stars',
-          subtitle:
-              'Hold Ctrl over the chat: click to place a star in the starfield '
-              'behind, Shift+click for a small cluster, drag to move either, '
-              'right-click to take one away. They go when this is turned off.',
-          value: debug.placeStars,
-          onChanged: debug.setPlaceStars,
-        ),
-        GaiaPanelSwitch(
-          title: 'Allow screenshots',
-          subtitle:
-              "Gaia shows in screenshots, screen recordings and screen shares, "
-              "which it's hidden from otherwise.",
-          value: debug.allowScreenshots,
-          onChanged: debug.setAllowScreenshots,
-        ),
-        GaiaPanelSwitch(
-          title: 'Haiku picks recalled memories',
-          subtitle:
-              "Recall's stage 2: the utility model picks from the matched "
-              "memories on a chat's first message, and on later ones with a "
-              'new strong match. Each pass is logged with its tokens. On by '
-              'default.',
-          value: debug.recallPick,
-          onChanged: debug.setRecallPick,
-        ),
-      ],
+      ),
     );
   }
 }

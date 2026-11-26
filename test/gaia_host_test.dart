@@ -2596,6 +2596,201 @@ void main() {
       });
     });
 
+    test('offerRevision reads topic names as memory_propose does; '
+        'reviseMemory applies the changes kept, makes new topics, skips one '
+        'gone since, and a dismissed card writes nothing '
+        '(GAIA_SETTINGS_HLD.md §7.5)', () {
+      final repository = DriftGaiaRepository(db);
+      run(show: true, memories: GaiaMemories(repository), (async, _) {
+        repository.upsertProject(
+          GaiaProject(id: 'p1', name: 'Trip', createdAt: now, updatedAt: now),
+        );
+        repository.upsertMemoryTopics(
+          [
+            topic(gaiaProjectTopicId('p1'), 'Trip', projectId: 'p1'),
+            topic('tn', 'Notes', parentId: gaiaProjectTopicId('p1')),
+            topic('n', 'Notes'),
+            topic('a', 'School'),
+            topic('b', 'CS246', parentId: 'a'),
+            topic('f', 'Food'),
+          ],
+          [
+            memory('m1', 'Assignment 3 is due Friday', topicIds: ['f']),
+          ],
+        );
+        for (final (id, project) in [('c0', null), ('c1', 'p1')]) {
+          repository.upsertChat(
+            GaiaChat(
+              id: id,
+              title: 'About',
+              projectId: project,
+              createdAt: now,
+              updatedAt: now,
+              lastMessageAt: now,
+            ),
+          );
+        }
+        async.flushMicrotasks();
+        connect(async);
+        Map<Object?, Object?> offer(
+          String chatId,
+          Map<String, Object?> arguments,
+        ) =>
+            request(async, 'offerRevision', {
+                  'chatId': chatId,
+                  'arguments': {'id': 'm1', ...arguments},
+                })!
+                as Map;
+        List<GaiaTopicChange> changes(Map<Object?, Object?> offered) => [
+          for (final json in offered['topics'] as List? ?? const [])
+            GaiaTopicChange.fromJson((json! as Map).cast()),
+        ];
+        List<(bool, String?, String?, String?, String)> read(
+          Map<Object?, Object?> offered,
+        ) => [
+          for (final change in changes(offered))
+            (
+              change.add,
+              change.topicId,
+              change.name,
+              change.parentId,
+              change.path,
+            ),
+        ];
+
+        // A name, a path to a new topic under the deepest part of it that's
+        // there, a second new one at the root, and one it's in already,
+        // dropped.
+        final adds = offer('c0', {
+          'addTopics': ['CS246', 'School › CS246 › Exams', 'Clubs', 'Food'],
+        });
+        expect(read(adds), [
+          (true, 'b', null, null, 'School › CS246'),
+          (true, null, 'Exams', 'b', 'School › CS246 › Exams'),
+          (true, null, 'Clubs', null, 'Clubs'),
+        ]);
+        expect(
+          (adds['text'], adds['was'], adds['had']),
+          ('Assignment 3 is due Friday', 'Assignment 3 is due Friday', 1),
+          reason: 'topics only: the text as it is',
+        );
+        // One name, two topics: the chat's project's wins.
+        expect(read(offer('c0', {'addTopics': ['Notes']})).single.$2, 'n');
+        expect(read(offer('c1', {'addTopics': ['Notes']})).single.$2, 'tn');
+        expect(read(offer('c0', {'removeTopics': ['Food']})), [
+          (false, 'f', null, null, 'Food'),
+        ]);
+        expect(
+          refusal(() => offer('c0', {'removeTopics': ['School']})),
+          contains('Its topics: Food.'),
+        );
+        expect(
+          refusal(() => offer('c0', {'addTopics': ['Food']})),
+          contains('changes nothing'),
+        );
+        expect(refusal(() => offer('c0', {})), contains('addTopics'));
+
+        GaiaMemory stored() {
+          GaiaMemory? found;
+          repository.getMemory('m1').then((m) => found = m);
+          async.flushMicrotasks();
+          return found!;
+        }
+
+        List<GaiaMemoryTopic> topics() =>
+            gaiaMemoryListFromJson(request(async, 'memories')! as Map).topics;
+        GaiaRevisionPart card(String id) => GaiaRevisionPart(
+          id: id,
+          memoryId: 'm1',
+          was: 'Assignment 3 is due Friday',
+          text: 'Assignment 3 is due Friday',
+        );
+        request(async, 'putMessage', {
+          'message': GaiaMessage(
+            id: 'r1',
+            chatId: 'c0',
+            seq: 0,
+            role: GaiaMessageRole.assistant,
+            parts: [for (final id in ['v', 'w', 'x', 'y', 'z']) card(id)],
+            status: GaiaMessageStatus.complete,
+            createdAt: now,
+            updatedAt: now,
+          ).toJson(),
+        });
+        Map<Object?, Object?> decide(
+          String cardId,
+          List<GaiaTopicChange> topics, {
+          String? text,
+          bool accept = true,
+        }) =>
+            request(async, 'reviseMemory', {
+                  'chatId': 'c0',
+                  'cardId': cardId,
+                  'memoryId': 'm1',
+                  'text': text ?? stored().text,
+                  'topics': [for (final change in topics) change.toJson()],
+                  'accept': accept,
+                })!
+                as Map;
+        Map<String, GaiaRevisionPart> cards() => {
+          for (final part
+              in GaiaMessage.fromJson(
+                ((request(async, 'messages', {'chatId': 'c0'})! as List).single
+                        as Map)
+                    .cast(),
+              ).parts.whereType<GaiaRevisionPart>())
+            part.id: part,
+        };
+
+        decide('v', changes(adds), accept: false);
+        expect(stored().topicIds, ['f'], reason: 'dismissed');
+        expect(topics(), hasLength(6));
+        expect(cards()['v']!.state, GaiaCardState.rejected);
+
+        // Topics only, two of them new: made and filed.
+        final made = (decide('w', changes(adds))['made']! as List)
+            .cast<String>();
+        expect(made, hasLength(2));
+        expect(
+          {for (final topic in topics()) topic.id: (topic.name, topic.parentId)},
+          containsPair(made[0], ('Exams', 'b')),
+        );
+        expect(
+          {for (final topic in topics()) topic.id: (topic.name, topic.parentId)},
+          containsPair(made[1], ('Clubs', null)),
+        );
+        expect(stored().topicIds, unorderedEquals(['f', 'b', ...made]));
+        expect(
+          (cards()['w']!.state, cards()['w']!.topics.length),
+          (GaiaCardState.accepted, 3),
+        );
+
+        // The text and a topic together.
+        decide('x', [
+          const GaiaTopicChange(add: false, topicId: 'f', path: 'Food'),
+        ], text: 'A3 is due Friday');
+        expect(stored().text, 'A3 is due Friday');
+        expect(stored().topicIds, unorderedEquals(['b', ...made]));
+
+        // A topic gone since the offer is skipped; the rest goes on.
+        request(async, 'deleteTopic', {'topicId': 'n'});
+        final partly = decide('y', [
+          const GaiaTopicChange(add: true, topicId: 'n', path: 'Notes'),
+          const GaiaTopicChange(add: true, topicId: 'a', path: 'School'),
+        ]);
+        expect(partly['skipped'], ['Notes']);
+        expect(stored().topicIds, contains('a'));
+        expect([for (final c in cards()['y']!.topics) c.path], ['School']);
+
+        // The last topic removed: Unsorted.
+        decide('z', [
+          for (final id in stored().topicIds)
+            GaiaTopicChange(add: false, topicId: id, path: id),
+        ]);
+        expect(stored().topicIds, isEmpty);
+      });
+    });
+
     test('archive, remember again, delete and undelete, pin; a proposal '
         'remembered with no chat id, and one an active one says merged', () {
       final repository = DriftGaiaRepository(db);

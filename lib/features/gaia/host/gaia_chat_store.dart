@@ -36,18 +36,21 @@ Future<GaiaMessage?> gaiaToggleCheck(
 /// Memory [memoryId]'s cards in [chatId]'s messages set to [state] with
 /// [text] in [repository] (GAIA_HLD.md §11): what came of it, decided on
 /// its card or in the memory inbox, or open again once a dismissal is
-/// undone. Where there's no [GaiaChatStore], as on the phone.
+/// undone, [updated] when it was applied as an update
+/// (GAIA_MEMORY_TOPICS_HLD.md §27.3). Where there's no [GaiaChatStore], as
+/// on the phone.
 Future<void> gaiaSetMemoryCards(
   GaiaRepository repository,
   String chatId,
   String memoryId,
   GaiaCardState state,
-  String text,
-) async {
+  String text, {
+  bool updated = false,
+}) async {
   bool stale(GaiaPart part) =>
       part is GaiaMemoryPart &&
       part.memoryId == memoryId &&
-      (part.state != state || part.text != text);
+      (part.state != state || part.text != text || part.updated != updated);
   for (final message in await repository.listMessages(chatId)) {
     if (message.isDeleted || !message.parts.any(stale)) continue;
     await repository.upsertMessage(
@@ -55,7 +58,11 @@ Future<void> gaiaSetMemoryCards(
         parts: [
           for (final part in message.parts)
             stale(part)
-                ? (part as GaiaMemoryPart).decided(state, text: text)
+                ? (part as GaiaMemoryPart).decided(
+                    state,
+                    text: text,
+                    updated: updated,
+                  )
                 : part,
         ],
       ),
@@ -64,19 +71,24 @@ Future<void> gaiaSetMemoryCards(
 }
 
 /// Revision card [cardId] in [chatId]'s messages set to [state] with [text]
-/// in [repository] (GAIA_SETTINGS_HLD.md §7.4): applied as [text] says, or
-/// dismissed.
+/// in [repository] (GAIA_SETTINGS_HLD.md §7.4): applied as [text] says, with
+/// the topic changes [topics] when given (§7.5), dismissed, or open again.
 Future<void> gaiaSetRevisionCard(
   GaiaRepository repository,
   String chatId,
   String cardId,
   GaiaCardState state,
-  String text,
-) async {
+  String text, {
+  List<GaiaTopicChange>? topics,
+}) async {
   bool stale(GaiaPart part) =>
       part is GaiaRevisionPart &&
       part.id == cardId &&
-      (part.state != state || part.text != text);
+      (part.state != state ||
+          part.text != text ||
+          (topics != null &&
+              part.topics.map((change) => change.path).join('\n') !=
+                  topics.map((change) => change.path).join('\n')));
   for (final message in await repository.listMessages(chatId)) {
     if (message.isDeleted || !message.parts.any(stale)) continue;
     await repository.upsertMessage(
@@ -84,7 +96,11 @@ Future<void> gaiaSetRevisionCard(
         parts: [
           for (final part in message.parts)
             stale(part)
-                ? (part as GaiaRevisionPart).decided(state, text: text)
+                ? (part as GaiaRevisionPart).decided(
+                    state,
+                    text: text,
+                    topics: topics,
+                  )
                 : part,
         ],
       ),
@@ -895,9 +911,17 @@ class GaiaChatStore {
     String chatId,
     String memoryId,
     GaiaCardState state,
-    String text,
-  ) => _serial(
-    () => gaiaSetMemoryCards(_repository, chatId, memoryId, state, text),
+    String text, {
+    bool updated = false,
+  }) => _serial(
+    () => gaiaSetMemoryCards(
+      _repository,
+      chatId,
+      memoryId,
+      state,
+      text,
+      updated: updated,
+    ),
   );
 
   /// [gaiaSetRevisionCard], one write at a time with the companion's.
@@ -905,9 +929,17 @@ class GaiaChatStore {
     String chatId,
     String cardId,
     GaiaCardState state,
-    String text,
-  ) => _serial(
-    () => gaiaSetRevisionCard(_repository, chatId, cardId, state, text),
+    String text, {
+    List<GaiaTopicChange>? topics,
+  }) => _serial(
+    () => gaiaSetRevisionCard(
+      _repository,
+      chatId,
+      cardId,
+      state,
+      text,
+      topics: topics,
+    ),
   );
 
   /// Message [messageId]'s chapter set to [chapter], or unpinned for null

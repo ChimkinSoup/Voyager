@@ -7,6 +7,7 @@ import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_card_text_field.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
+import 'package:voyager/features/gaia/companion/gaia_controls.dart';
 import 'package:voyager/features/gaia/companion/gaia_memory_card.dart';
 import 'package:voyager/features/gaia/companion/gaia_memory_review.dart';
 import 'package:voyager/features/gaia/companion/gaia_notch.dart';
@@ -293,7 +294,7 @@ class _GaiaMemoriesTabState extends State<GaiaMemoriesTab> {
     };
     final newest = list.memories.reversed;
     final inbox = [
-      for (final memory in newest)
+      for (final memory in list.memories)
         // Across every topic, as on the page.
         if (memory.status == GaiaMemoryStatus.proposed && matches(memory))
           memory,
@@ -477,10 +478,28 @@ class _GaiaMemoriesTabState extends State<GaiaMemoriesTab> {
                 ),
               ),
               if (showInbox) ...[
+                // In the Inbox deck's order: proposed memories oldest first,
+                // then pin and merge suggestions.
+                cards(inbox),
                 SliverToBoxAdapter(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      for (final pin in pins)
+                        _SuggestionRow(
+                          key: ValueKey('pin ${pin.memory.id}'),
+                          icon: Icons.push_pin_outlined,
+                          title: pin.memory.text,
+                          why: 'Pin this? ${pin.why}.',
+                          yes: 'Pin',
+                          no: 'Not now',
+                          onYes: () => _write('pinMemory', {
+                            'memoryId': pin.memory.id,
+                            'pinned': true,
+                          }, failed: 'Not pinned'),
+                          onNo: () =>
+                              _write('pinLater', {'memoryId': pin.memory.id}),
+                        ),
                       for (final merge in merges)
                         _SuggestionRow(
                           key: ValueKey(
@@ -502,25 +521,9 @@ class _GaiaMemoriesTabState extends State<GaiaMemoriesTab> {
                             'intoId': merge.into.id,
                           }),
                         ),
-                      for (final pin in pins)
-                        _SuggestionRow(
-                          key: ValueKey('pin ${pin.memory.id}'),
-                          icon: Icons.push_pin_outlined,
-                          title: pin.memory.text,
-                          why: 'Pin this? ${pin.why}.',
-                          yes: 'Pin',
-                          no: 'Not now',
-                          onYes: () => _write('pinMemory', {
-                            'memoryId': pin.memory.id,
-                            'pinned': true,
-                          }, failed: 'Not pinned'),
-                          onNo: () =>
-                              _write('pinLater', {'memoryId': pin.memory.id}),
-                        ),
                     ],
                   ),
                 ),
-                cards(inbox),
               ],
             ],
             if (toSort.isNotEmpty)
@@ -929,7 +932,7 @@ Future<bool> _confirm(
 }) async =>
     await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => GaiaDialog(
         title: Text(title),
         content: Text(message),
         actions: [
@@ -1526,6 +1529,32 @@ class _MemoryCardState extends State<_MemoryCard> {
     );
   }
 
+  /// "Update this?" accepted (GAIA_MEMORY_TOPICS_HLD.md §27.3): the
+  /// memory it updates takes its text, a toast offering to undo it.
+  Future<void> _update() async {
+    final controller = widget.controller;
+    var was = const <GaiaMemory>[];
+    if (!await widget.run(
+      () async => was = await controller.updateMemory(_memory.id),
+      "Couldn't update it",
+    )) {
+      return;
+    }
+    if (!mounted) return;
+    showGaiaToast(
+      context,
+      mark: GaiaToastMark.done,
+      title: 'Updated',
+      body: was.first.text,
+      onUndo: () => unawaited(
+        widget.run(
+          () => controller.revertMemories(memories: was),
+          "Couldn't undo it",
+        ),
+      ),
+    );
+  }
+
   Future<void> _suggest() async {
     setState(() => _suggesting = true);
     final said = await widget.controller.suggestTopics(_memory);
@@ -1598,6 +1627,13 @@ class _MemoryCardState extends State<_MemoryCard> {
     GaiaMemoryReview.memory(widget.controller, _memory),
   );
 
+  /// The memory this proposal would update (GAIA_MEMORY_TOPICS_HLD.md
+  /// §27.3); null for a plain proposal.
+  GaiaMemory? get _replaced => gaiaReplacedMemory(
+    _memory,
+    widget.controller.memoryList?.memories ?? const [],
+  );
+
   List<GaiaMenuItem> _menu() {
     final memory = _memory;
     final chatId = memory.sourceChatId;
@@ -1620,6 +1656,17 @@ class _MemoryCardState extends State<_MemoryCard> {
           label: 'Ask Gaia',
           icon: Icons.forum_outlined,
           onPressed: _askGaia,
+        ),
+      if (proposed && _replaced != null)
+        GaiaMenuItem(
+          label: 'Keep both',
+          icon: Icons.check,
+          onPressed: () => unawaited(
+            widget.run(
+              () => widget.controller.rememberMemory(memory),
+              "Couldn't remember it",
+            ),
+          ),
         ),
       if (proposed)
         GaiaMenuItem(
@@ -1666,6 +1713,7 @@ class _MemoryCardState extends State<_MemoryCard> {
               label: path.join(' › '),
               style: label,
               background: background,
+              tint: gaiaTopicTint(id, theme.brightness),
               tooltip: 'Remove from topic',
               removes: true,
               onTap: () => unawaited(
@@ -1731,6 +1779,7 @@ class _MemoryCardState extends State<_MemoryCard> {
               label: path.join(' › '),
               style: label,
               background: background,
+              tint: gaiaTopicTint(id, theme.brightness),
               tooltip: 'Leave this topic out',
               removes: true,
               onTap: () => controller.changeSorted(_memory.id, (
@@ -1793,7 +1842,13 @@ class _MemoryCardState extends State<_MemoryCard> {
       (id) => widget.tree.path(id).isEmpty,
     );
     final shown = _hovered && editing == null;
+    final replaced = _replaced;
     final (primaryIcon, primaryLabel, primary) = switch (memory.status) {
+      GaiaMemoryStatus.proposed when replaced != null => (
+        Icons.update,
+        'Update',
+        _update,
+      ),
       GaiaMemoryStatus.proposed => (
         Icons.check,
         'Remember',
@@ -1835,7 +1890,9 @@ class _MemoryCardState extends State<_MemoryCard> {
           Padding(
             padding: const EdgeInsets.only(top: 2),
             child: Icon(
-              proposed
+              replaced != null
+                  ? Icons.update
+                  : proposed
                   ? Icons.bookmark_add_outlined
                   : memory.pinned
                   ? Icons.push_pin
@@ -1851,6 +1908,17 @@ class _MemoryCardState extends State<_MemoryCard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // "Update this?": the text it replaces, struck through.
+                if (replaced != null) ...[
+                  Text(
+                    replaced.text,
+                    style: GaiaType.row.copyWith(
+                      color: GaiaInk.faint,
+                      decoration: TextDecoration.lineThrough,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                ],
                 if (editing != null)
                   Focus(
                     onKeyEvent: _onEditKey,
@@ -1984,6 +2052,19 @@ class _MemoryCardState extends State<_MemoryCard> {
                     iconSize: 16,
                     onPressed: () => unawaited(primary()),
                   ),
+                  if (replaced != null)
+                    GaiaButton(
+                      tooltip: 'Keep both',
+                      icon: Icons.check,
+                      size: 24,
+                      iconSize: 16,
+                      onPressed: () => unawaited(
+                        widget.run(
+                          () => controller.rememberMemory(memory),
+                          "Couldn't remember it",
+                        ),
+                      ),
+                    ),
                   GaiaButton(
                     tooltip: proposed ? 'Dismiss' : 'Delete',
                     icon: proposed ? Icons.close : Icons.delete_outline,

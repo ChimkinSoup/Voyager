@@ -2463,6 +2463,10 @@ class GaiaMemoriesTable extends Table {
 
   /// `{name, parentId}`, a new topic offered for it; null for none.
   TextColumn get suggestedTopicJson => text().nullable()();
+
+  /// For a proposal, the memory it would update
+  /// (GAIA_MEMORY_TOPICS_HLD.md §27.3); null for none.
+  TextColumn get replacesId => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -2612,7 +2616,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 204;
+  int get schemaVersion => 205;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4927,6 +4931,15 @@ class AppDatabase extends _$AppDatabase {
           'gaia_chats_table',
           gaiaChatsTable,
           gaiaChatsTable.temporaryAt,
+        );
+      }
+      if (from >= 181 && from < 205) {
+        // "Update this?" proposals (GAIA_MEMORY_TOPICS_HLD.md §27.3).
+        await _addColumnIfNotExists(
+          migrator,
+          'gaia_memories_table',
+          gaiaMemoriesTable,
+          gaiaMemoriesTable.replacesId,
         );
       }
     },

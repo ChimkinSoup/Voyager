@@ -56,6 +56,51 @@ void main() {
     home: Scaffold(body: SingleChildScrollView(child: child)),
   );
 
+  testWidgets('"Update this?" strikes the old text through, offers Update and '
+      'Keep both with no pin, and reads Updated once applied '
+      '(GAIA_MEMORY_TOPICS_HLD.md §27.3)', (tester) async {
+    const offer = GaiaMemoryPart(
+      memoryId: 'u1',
+      text: 'I live in Vancouver',
+      was: 'I live in Toronto',
+    );
+    final back =
+        GaiaPart.fromJson(
+              offer.decided(GaiaCardState.accepted, updated: true).toJson(),
+            )
+            as GaiaMemoryPart;
+    expect(back.was, 'I live in Toronto');
+    expect(back.updated, isTrue);
+
+    var updated = 0;
+    var kept = 0;
+    await tester.pumpWidget(
+      host(
+        GaiaMemoryCard(
+          memory: offer,
+          onRemember: (_) => kept++,
+          onUpdate: () => updated++,
+        ),
+      ),
+    );
+    expect(find.text('Update this?'), findsOneWidget);
+    expect(
+      tester.widget<Text>(find.text('I live in Toronto')).style?.decoration,
+      TextDecoration.lineThrough,
+    );
+    expect(find.byTooltip('Pin it to every chat'), findsNothing);
+    await tester.tap(find.text('Update'));
+    await tester.tap(find.text('Keep both'));
+    expect((updated, kept), (1, 1));
+
+    await tester.pumpWidget(host(GaiaMemoryCard(memory: back)));
+    expect(find.text('Updated'), findsOneWidget);
+    await tester.pumpWidget(
+      host(GaiaMemoryCard(memory: offer.decided(GaiaCardState.accepted))),
+    );
+    expect(find.text('Remembered'), findsOneWidget);
+  });
+
   testWidgets('open, it follows an edit made in the inbox, unless typed in', (
     tester,
   ) async {
@@ -409,7 +454,7 @@ void main() {
           body: GaiaRevisionCard(
             key: const ValueKey('r1'),
             revision: revision,
-            onApply: applied.add,
+            onApply: (text, _) => applied.add(text),
             onDismiss: () => dismissed++,
           ),
         ),
@@ -429,5 +474,129 @@ void main() {
     expect(find.text('Applied'), findsOneWidget);
     expect(find.text('Apply'), findsNothing);
     expect(find.byType(EditableText), findsNothing);
+  });
+
+  test("a revision card's topic changes survive the round trip, and one "
+      'saved before them reads with none (GAIA_SETTINGS_HLD.md §7.5)', () {
+    const offered = GaiaRevisionPart(
+      id: 'r1',
+      memoryId: 'm1',
+      was: 'Assignment 3 is due Friday',
+      text: 'Assignment 3 is due Friday',
+      topics: [
+        GaiaTopicChange(add: true, topicId: 'b', path: 'School › CS246'),
+        GaiaTopicChange(
+          add: true,
+          name: 'Exams',
+          parentId: 'b',
+          path: 'School › CS246 › Exams',
+        ),
+        GaiaTopicChange(add: false, topicId: 'f', path: 'Food'),
+      ],
+      had: 1,
+    );
+    final back =
+        GaiaPart.fromJson(
+              offered.decided(GaiaCardState.accepted).toJson(),
+            )
+            as GaiaRevisionPart;
+    expect(
+      [
+        for (final change in back.topics)
+          (
+            change.add,
+            change.topicId,
+            change.name,
+            change.parentId,
+            change.path,
+          ),
+      ],
+      [
+        (true, 'b', null, null, 'School › CS246'),
+        (true, null, 'Exams', 'b', 'School › CS246 › Exams'),
+        (false, 'f', null, null, 'Food'),
+      ],
+    );
+    expect((back.had, back.state), (1, GaiaCardState.accepted));
+    final before =
+        GaiaPart.fromJson({
+              'type': 'revision',
+              'id': 'r0',
+              'memoryId': 'm1',
+              'was': 'I prefer metric units',
+              'text': 'Metric',
+              'state': 'open',
+            })
+            as GaiaRevisionPart;
+    expect(before.topics, isEmpty);
+    expect((before.had, before.text), (null, 'Metric'));
+  });
+
+  testWidgets('a topics-only revision card: its title, no rewrite, a chip '
+      'per change; a clicked chip is left out of what Apply sends; the last '
+      '− chip says when it leaves the memory Unsorted; decided, a record', (
+    tester,
+  ) async {
+    const offered = GaiaRevisionPart(
+      id: 'r1',
+      memoryId: 'm1',
+      was: 'Assignment 3 is due Friday',
+      text: 'Assignment 3 is due Friday',
+      topics: [
+        GaiaTopicChange(add: true, topicId: 'b', path: 'School › CS246'),
+        GaiaTopicChange(add: true, name: 'Clubs', path: 'Clubs'),
+        GaiaTopicChange(add: false, topicId: 'f', path: 'Food'),
+      ],
+      had: 1,
+    );
+    final applied = <(String, String)>[];
+    Future<void> show(GaiaRevisionPart revision) => tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: GaiaRevisionCard(
+            key: ValueKey(revision.state),
+            revision: revision,
+            onApply: (text, topics) => applied.add((
+              text,
+              [for (final change in topics) change.path].join(', '),
+            )),
+            onDismiss: () {},
+          ),
+        ),
+      ),
+    );
+    await show(offered);
+    expect(find.text('Change this memory?'), findsOneWidget);
+    expect(find.byType(EditableText), findsNothing);
+    final text = tester.widget<Text>(find.text('Assignment 3 is due Friday'));
+    expect(text.style?.decoration, isNot(TextDecoration.lineThrough));
+    expect(find.text('+ School › CS246'), findsOneWidget);
+    expect(find.text('+ New topic: Clubs'), findsOneWidget);
+    expect(find.text('− Food'), findsOneWidget);
+
+    await tester.tap(find.text('+ School › CS246'));
+    await tester.tap(find.text('+ New topic: Clubs'));
+    await tester.pump();
+    expect(find.text('− Food · leaves it Unsorted'), findsOneWidget);
+    await tester.tap(find.text('+ New topic: Clubs'));
+    await tester.pump();
+    expect(find.text('− Food'), findsOneWidget);
+    await tester.tap(find.text('Apply'));
+    expect(applied, [
+      ('Assignment 3 is due Friday', 'Clubs, Food'),
+    ]);
+
+    await show(
+      offered.decided(
+        GaiaCardState.accepted,
+        topics: [offered.topics[1], offered.topics[2]],
+      ),
+    );
+    expect(find.text('Applied'), findsOneWidget);
+    expect(find.text('+ School › CS246'), findsNothing);
+    await tester.tap(find.text('+ New topic: Clubs'));
+    await tester.pump();
+    expect(find.text('Apply'), findsNothing);
+    expect(applied, hasLength(1));
   });
 }

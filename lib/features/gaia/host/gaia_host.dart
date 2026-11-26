@@ -83,8 +83,12 @@ const kGaiaNotificationBtwSeparator = '#btw:';
 /// height}`), `mediaFile {mediaId}` (a path, or null), `voyagerRead {tool,
 /// arguments}` (a `voyager_*` tool's text), `voyagerWrite {tool, arguments}`
 /// (`add_reminder`, the one write without a card), `curatorContext {text}`
-/// (`{kept, topics}`: the memories nearest a chat's turns and every topic,
-/// for the curator, GAIA_MEMORY_TOPICS_HLD.md §5), `memoryTopics` (every
+/// (`{kept, ids, topics}`: the memories nearest a chat's turns, the kept
+/// ones' ids by their numbers, and every topic, for the curator,
+/// GAIA_MEMORY_TOPICS_HLD.md §5, §27.3), `memoryNear {text, byUser}` (the
+/// `{id, text}` of the memories the save check compares a new one with,
+/// §27.3), `updateMemory {memoryId}` ("Update this?" accepted: the
+/// memory and the proposal as they were, for Undo), `memoryTopics` (every
 /// topic's `{id, path}`), `memoryFiling {memoryId}` and `placedMemory
 /// {memoryId, placement}` (a memory's `{topics, suggested}` for its card,
 /// after the utility model's placement for the latter, §3.2, §5),
@@ -94,12 +98,14 @@ const kGaiaNotificationBtwSeparator = '#btw:';
 /// message, §4.2-§4.4), `recalled {chatId, memoryIds}` (the recall
 /// history, §3.3),
 /// `memoryTool {chatId, tool, arguments}` (a `memory_*` tool's text),
-/// `offerRevision {arguments}` (a `memory_revise` call's `{memoryId, was,
-/// text, why}`), `reviseMemory {chatId, cardId, memoryId, text, accept}`,
+/// `offerRevision {chatId, arguments}` (a `memory_revise` call's `{memoryId,
+/// was, text, why, topics, had}`), `reviseMemory {chatId, cardId, memoryId,
+/// text, topics, accept}` (`{made, skipped}`), `reopenRevision {chatId,
+/// cardId, text, topics}`,
 /// `projectTool {chatId, tool, arguments}` (a `project_*` tool's text),
 /// `setSummary {chatId, summary, seq}`,
-/// `remember {chatId, projectId?, text, global?, pin?}` (returns `{saved,
-/// memoryId?, project, pinned?}`), `curated {chatId, seq, memories}`, `setSeeScreen
+/// `remember {chatId, projectId?, text, global?, pin?, same?, replaces?}`
+/// (returns `{saved, memoryId?, project, pinned?, same?, updated?}`), `curated {chatId, seq, memories}`, `setSeeScreen
 /// {chatId, on}`, `osRead {chatId, tool, arguments}` (an `os_*` tool's `{text,
 /// image, mimeType}`), `setCanControl {chatId, on}`, `osPlan {chatId, cardId,
 /// tool, arguments}`, `osRun {chatId, cardId, once}`, `osDrop {cardId}`,
@@ -966,15 +972,24 @@ class GaiaHost {
     String chatId,
     String memoryId,
     GaiaCardState state,
-    String text,
-  ) async => _attached.isCompleted
+    String text, {
+    bool updated = false,
+  }) async => _attached.isCompleted
       ? await (await _attached.future).setMemoryCards(
           chatId,
           memoryId,
           state,
           text,
+          updated: updated,
         )
-      : await gaiaSetMemoryCards(repository, chatId, memoryId, state, text);
+      : await gaiaSetMemoryCards(
+          repository,
+          chatId,
+          memoryId,
+          state,
+          text,
+          updated: updated,
+        );
 
   /// Opens [chatId] in the Gaia window: a notification clicked, or a chat
   /// picked on the Gaia page.
@@ -1761,8 +1776,18 @@ class GaiaHost {
         );
         return {
           'kept': context.kept,
+          'ids': context.ids,
           'topics': gaiaTopicLinesToJson(context.topics),
         };
+      case 'memoryNear':
+        // What the save check compares a new memory with (§27.3).
+        return [
+          for (final memory in await _memoriesOrThrow().near(
+            params['text']! as String,
+            byUser: params['byUser'] == true,
+          ))
+            {'id': memory.id, 'text': memory.text},
+        ];
       case 'memoryTopics':
         return gaiaTopicLinesToJson(await _memoriesOrThrow().topicLines());
       case 'memoryFiling':
@@ -1807,6 +1832,8 @@ class GaiaHost {
           final proposed = await _memoriesOrThrow().propose(
             params['chatId']! as String,
             _map(params['arguments']),
+            sameId: params['same'] as String?,
+            replacesId: params['replaces'] as String?,
           );
           return {
             'text': proposed.text,
@@ -1815,6 +1842,7 @@ class GaiaHost {
               'memoryText': memory.text,
               'project': proposed.project,
               if (proposed.place) 'place': true,
+              'was': ?proposed.was,
             },
           };
         } on GaiaReadException catch (error) {
@@ -1871,6 +1899,30 @@ class GaiaHost {
         } on GaiaReadException catch (error) {
           throw GaiaPipeException(error.message);
         }
+      case 'updateMemory':
+        // "Update this?" accepted (GAIA_MEMORY_TOPICS_HLD.md §27.3). A
+        // changed memory steers every chat after it, as one remembered does.
+        if (_aborted) {
+          throw GaiaPipeException('Gaia is aborted. Rearm to save memories.');
+        }
+        final updated = await _readOrThrow(
+          () => _memoriesOrThrow().update(params['memoryId']! as String),
+        );
+        // Its card in its chat, if it has one, shows it taken.
+        if (updated.proposal.sourceChatId case final chatId?) {
+          await store.setMemoryCards(
+            chatId,
+            updated.proposal.id,
+            GaiaCardState.accepted,
+            updated.proposal.text,
+            updated: true,
+          );
+        }
+        // Both as they were, for Undo through revertMemories.
+        return [
+          gaiaMemoryToJson(updated.old),
+          gaiaMemoryToJson(updated.proposal),
+        ];
       case 'restoreMemory':
         // A dismissal from the card, undone: open again, card and inbox.
         final memoryId = params['memoryId']! as String;
@@ -1900,6 +1952,7 @@ class GaiaHost {
       case 'offerRevision':
         try {
           final offer = await _memoriesOrThrow().reviseOffer(
+            params['chatId'] as String? ?? '',
             _map(params['arguments']),
           );
           return {
@@ -1907,6 +1960,10 @@ class GaiaHost {
             'was': offer.memory.text,
             'text': offer.text,
             'why': ?offer.why,
+            if (offer.topics.isNotEmpty) ...{
+              'topics': [for (final change in offer.topics) change.toJson()],
+              'had': offer.had,
+            },
           };
         } on GaiaReadException catch (error) {
           throw GaiaPipeException(error.message);
@@ -1918,14 +1975,46 @@ class GaiaHost {
           throw GaiaPipeException('Gaia is aborted. Rearm to save memories.');
         }
         final text = (params['text']! as String).trim();
-        if (accept) {
-          await _editMemory(store, params['memoryId']! as String, text);
+        final memoryId = params['memoryId']! as String;
+        // The changes kept on the card (§7.5); a dismissed card keeps all.
+        var topics = _topicChanges(params['topics']);
+        var applied = (made: const <String>[], skipped: const <String>[]);
+        // As it was, put back if applying fails partway: the card stays
+        // open and says "Not applied", so the memory mustn't be half-changed.
+        final before = accept
+            ? await _memoriesOrThrow().stored(memoryId)
+            : null;
+        try {
+          if (accept) {
+            await _editMemory(store, memoryId, text);
+            applied = await _memoriesOrThrow().reviseTopics(memoryId, topics);
+            topics = [
+              for (final change in topics)
+                if (!applied.skipped.contains(change.path)) change,
+            ];
+          }
+          await store.setRevisionCard(
+            params['chatId']! as String,
+            params['cardId']! as String,
+            accept ? GaiaCardState.accepted : GaiaCardState.rejected,
+            text,
+            topics: accept ? topics : null,
+          );
+        } catch (_) {
+          if (before != null) {
+            await _memoriesOrThrow().revert(memories: [before]);
+          }
+          rethrow;
         }
+        return {'made': applied.made, 'skipped': applied.skipped};
+      // Ctrl+Z after R on the deck (§7.5): the card open again as offered.
+      case 'reopenRevision':
         await store.setRevisionCard(
           params['chatId']! as String,
           params['cardId']! as String,
-          accept ? GaiaCardState.accepted : GaiaCardState.rejected,
-          text,
+          GaiaCardState.open,
+          params['text']! as String,
+          topics: _topicChanges(params['topics']),
         );
         return null;
       case 'archiveMemory':
@@ -2113,19 +2202,37 @@ class GaiaHost {
                   params['chatId'] as String?,
                   newChat: params['projectId'] as String?,
                 );
-          final saved = await memories.save(
-            params['text']! as String,
-            chatId: params['chatId'] as String?,
-            status: GaiaMemoryStatus.active,
-            byUser: true,
-            projectId: project,
-          );
-          // `--pin` (GAIA_MEMORY_TOPICS_HLD.md §3.3): the one saved, or the
-          // one already saying it. One only proposed can't be pinned yet.
+          // The save check's answer (GAIA_MEMORY_TOPICS_HLD.md §27.3): an
+          // active memory saying it already, so nothing is saved, or one it
+          // corrects, given its text at once, since the user asked by name.
+          final same = params['same'] is String
+              ? await memories.activeMemory(params['same']! as String)
+              : null;
+          final replaces = same == null && params['replaces'] is String
+              ? await memories.activeMemory(params['replaces']! as String)
+              : null;
+          final updated = replaces == null
+              ? null
+              : await memories.rewrite(replaces.id, params['text']! as String);
+          final saved = same != null || updated != null
+              ? null
+              : await memories.save(
+                  params['text']! as String,
+                  chatId: params['chatId'] as String?,
+                  status: GaiaMemoryStatus.active,
+                  byUser: true,
+                  projectId: project,
+                );
+          // `--pin` (GAIA_MEMORY_TOPICS_HLD.md §3.3): the one saved or
+          // updated, or the one already saying it. One only proposed can't
+          // be pinned yet.
           String? pinFailed;
           if (params['pin'] == true) {
             final pin =
-                saved ?? await memories.sameActive(params['text']! as String);
+                saved ??
+                same ??
+                updated ??
+                await memories.sameActive(params['text']! as String);
             try {
               if (pin == null) {
                 pinFailed =
@@ -2143,6 +2250,12 @@ class GaiaHost {
             'memoryId': ?saved?.id,
             'project': project != null,
             'pinFailed': ?pinFailed,
+            'same': ?same?.text,
+            if (updated != null) 'updated': gaiaMemoryToJson(updated),
+            // The memory it corrected lives outside the scope asked for
+            // (a global one from a project chat, say): the toast says so.
+            if (updated != null && updated.projectId != project)
+              'elsewhere': updated.projectId == null ? 'global' : 'project',
           };
         } on GaiaReadException catch (error) {
           throw GaiaPipeException(error.message);
@@ -2159,6 +2272,7 @@ class GaiaHost {
                     topicIds: gaiaTopicIdsFromJson(memory['topicIds']),
                     suggested: gaiaSuggestedTopicFromJson(memory['suggested']),
                     pin: memory['pin'] == true,
+                    replacesId: memory['replacesId'] as String?,
                   ),
             ]);
         return null;
@@ -2566,6 +2680,11 @@ class GaiaHost {
       throw GaiaPipeException(error.message);
     }
   }
+
+  static List<GaiaTopicChange> _topicChanges(Object? json) => [
+    for (final change in json as List? ?? const [])
+      GaiaTopicChange.fromJson((change! as Map).cast()),
+  ];
 
   GaiaMemories _memoriesOrThrow() =>
       _memories ?? (throw GaiaPipeException('Voyager data is not ready'));

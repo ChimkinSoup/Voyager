@@ -1,18 +1,14 @@
-import 'dart:math' as math;
-import 'dart:ui';
-
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
+import 'package:voyager/features/gaia/companion/gaia_aurora_edge.dart';
 import 'package:voyager/features/gaia/companion/gaia_style.dart';
 
 /// Gaia's surface colour: near black, tinted a little toward [accent].
 Color gaiaSurface(Color accent) =>
     Color.lerp(const Color(0xFF15181B), accent, 0.1)!;
 
-/// Whether Gaia's idle motion runs, the glow rings' circling light and the
-/// tier glyphs' turning rings: while Gaia is in front with the cursor in its
-/// window, as the starfield does, so a window left alone costs nothing.
+/// Whether Gaia's idle motion runs, the tier glyphs' turning rings: while
+/// Gaia is in front with the cursor in its window, as the starfield does, so
+/// a window left alone costs nothing.
 /// Without one above them, they run.
 class GaiaAmbient extends InheritedWidget {
   const GaiaAmbient({super.key, required this.running, required super.child});
@@ -86,20 +82,6 @@ class GaiaButton extends StatefulWidget {
   @override
   State<GaiaButton> createState() => _GaiaButtonState();
 }
-
-/// How near the cursor has to come to the button's edge for the light to
-/// face it.
-const _reach = 90.0;
-
-/// The light's pace around the ring, in radians a second: a turn every 16s.
-const _spin = math.pi / 8;
-
-/// How fast the light turns to face the cursor: the rate it closes the gap
-/// at, per second.
-const _follow = 2.5;
-
-/// The light's strength, at rest and on hover.
-const _glow = 0.6;
 
 class _GaiaButtonState extends State<GaiaButton> {
   var _hovered = false;
@@ -230,17 +212,20 @@ class GaiaRingLook extends InheritedWidget {
   bool updateShouldNotify(GaiaRingLook old) => old.builder != builder;
 }
 
-/// The ring of light round Gaia's notch, menus and date picker: a dark fill
-/// in a thin ring that the light circles. Near the cursor the light swings
-/// round to face it; while [hovered], it centres on the cursor, widens, and
-/// turns the accent at full saturation.
-class GaiaGlowRing extends StatefulWidget {
+/// The shell round Gaia's notch, menus, palette, panels, date picker and
+/// toast: a dark fill in a grey line, which on hover brings the text
+/// field's aurora up along the line. What floats is frosted, a see-through
+/// fill blurring what's behind it; a [capsule] (the composer's notches) is
+/// opaque instead, its fill steady while only its line lights, so nothing
+/// always on screen blurs. Its aurora's loop runs only while it shows.
+class GaiaGlowRing extends StatelessWidget {
   const GaiaGlowRing({
     super.key,
     required this.radius,
     required this.hovered,
     this.color,
     this.backdrop = 1,
+    this.capsule = false,
     required this.child,
   });
 
@@ -248,247 +233,214 @@ class GaiaGlowRing extends StatefulWidget {
   final double radius;
   final bool hovered;
 
-  /// How much of the ring and its fill shows behind [child]: 0 leaves the
-  /// child bare, as the composer's closed + is.
+  /// How much of the shell shows behind [child]: 0 leaves the child bare,
+  /// as the composer's closed + is.
   final double backdrop;
 
-  /// The light's colour; the accent when null.
+  /// The aurora's accent; the theme's when null.
   final Color? color;
+
+  /// Opaque and tinted rather than frosted, with a smaller aurora.
+  final bool capsule;
 
   /// Clipped to the fill.
   final Widget child;
 
   @override
-  State<GaiaGlowRing> createState() => _GaiaGlowRingState();
+  Widget build(BuildContext context) {
+    final accent = color ?? Theme.of(context).colorScheme.primary;
+    if (GaiaRingLook.maybeOf(context) case final look?) {
+      return look.builder(
+        radius: radius,
+        hovered: hovered,
+        backdrop: backdrop,
+        accent: accent,
+        child: child,
+      );
+    }
+    return TweenAnimationBuilder<double>(
+      tween: Tween(end: hovered ? 1 : 0),
+      duration: GaiaMotion.quick,
+      curve: GaiaMotion.curve,
+      child: child,
+      builder: (context, t, child) => _shell(context, t, accent, child!),
+    );
+  }
+
+  Widget _shell(BuildContext context, double t, Color accent, Widget child) {
+    final white = Colors.white;
+    final base = Color.lerp(
+      Theme.of(context).colorScheme.surface,
+      Colors.black,
+      0.5,
+    )!;
+    // Faded with the backdrop.
+    Color shown(Color color) => color.withValues(alpha: color.a * backdrop);
+    final line = shown(white.withValues(alpha: 0.14));
+    final fill = capsule
+        ? Color.alphaBlend(white.withValues(alpha: 0.05), base)
+        : base.withValues(alpha: 0.55);
+    // The line's 1 px, outside the fill.
+    final filled = Padding(
+      padding: const EdgeInsets.all(1),
+      child: Container(
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: shown(fill),
+          borderRadius: BorderRadius.circular(radius - 1),
+        ),
+        child: child,
+      ),
+    );
+    final blur = 10 * backdrop;
+    final shell = capsule
+        ? DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border.all(color: line),
+              borderRadius: BorderRadius.circular(radius),
+            ),
+            child: filled,
+          )
+        // Always there, so a bare notch opening keeps its contents' state.
+        // Its line over the clip, not inside it, where the clip's
+        // antialiasing would soften its outer half into a haze.
+        : DecoratedBox(
+            position: DecorationPosition.foreground,
+            decoration: BoxDecoration(
+              border: Border.all(color: line),
+              borderRadius: BorderRadius.circular(radius),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(radius),
+              child: BackdropFilter(
+                // Bounded: it blurs only what's under the shell, so nothing
+                // just past its edge bleeds in as a haze.
+                filterConfig: ImageFilterConfig.blur(
+                  sigmaX: blur,
+                  sigmaY: blur,
+                  bounded: true,
+                ),
+                child: filled,
+              ),
+            ),
+          );
+    // Outside the clip, so its glow spreads past the edge.
+    return GaiaAuroraLine(
+      t: t * backdrop,
+      radius: radius,
+      accent: accent,
+      // The capsule is small: a full field's glow would swamp it.
+      scale: capsule ? 0.6 : 1,
+      child: shell,
+    );
+  }
 }
 
-class _GaiaGlowRingState extends State<GaiaGlowRing>
-    with TickerProviderStateMixin {
-  /// The cursor in this ring's coordinates; null when it's out of the
-  /// window or hasn't moved yet.
-  Offset? _cursor;
+/// The text field's aurora on a shell's edge, [t] of the way lit: its loop
+/// runs only while it shows.
+class GaiaAuroraLine extends StatefulWidget {
+  const GaiaAuroraLine({
+    super.key,
+    required this.t,
+    required this.radius,
+    required this.accent,
+    required this.scale,
+    required this.child,
+  });
 
-  /// Where the light is around the ring: the angle from the centre, in a
-  /// space where the ring is a circle, clockwise from the right. Starts
-  /// at the top.
-  final _angle = ValueNotifier(-math.pi / 2);
-  late final Ticker _ticker;
-  var _lastTick = Duration.zero;
+  final double t, radius, scale;
+  final Color accent;
+  final Widget child;
 
-  late final _hover = AnimationController(
+  @override
+  State<GaiaAuroraLine> createState() => _GaiaAuroraLineState();
+}
+
+class _GaiaAuroraLineState extends State<GaiaAuroraLine>
+    with SingleTickerProviderStateMixin {
+  /// The aurora's loop, as long as the field's.
+  late final _spin = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 500),
-    value: widget.hovered ? 1 : 0,
+    duration: const Duration(minutes: 2),
   );
 
   @override
   void initState() {
     super.initState();
-    _ticker = createTicker(_tick);
-    // The cursor anywhere in the window, not only over the ring.
-    GestureBinding.instance.pointerRouter.addGlobalRoute(_onPointer);
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
     _sync();
   }
 
-  // Hovered, it runs regardless, so the light follows the cursor over a
-  // floater left in front of another app.
-  void _sync() {
-    final run =
-        GaiaRingLook.maybeOf(context) == null &&
-        (GaiaAmbient.of(context) || widget.hovered);
-    if (run == _ticker.isActive) return;
-    if (run) {
-      _lastTick = Duration.zero;
-      _ticker.start();
-    } else {
-      _ticker.stop();
-    }
-  }
-
   @override
-  void didUpdateWidget(GaiaGlowRing old) {
+  void didUpdateWidget(GaiaAuroraLine old) {
     super.didUpdateWidget(old);
-    if (widget.hovered == old.hovered) return;
     _sync();
-    if (widget.hovered) {
-      _hover.forward();
+  }
+
+  void _sync() {
+    final run = widget.t > 0;
+    if (run == _spin.isAnimating) return;
+    if (run) {
+      _spin.repeat();
     } else {
-      _hover.reverse();
+      _spin.stop();
     }
   }
 
   @override
   void dispose() {
-    GestureBinding.instance.pointerRouter.removeGlobalRoute(_onPointer);
-    _ticker.dispose();
-    _hover.dispose();
-    _angle.dispose();
+    _spin.dispose();
     super.dispose();
   }
 
-  void _onPointer(PointerEvent event) {
-    if (event is PointerRemovedEvent) {
-      _cursor = null;
-      return;
-    }
-    if (event is! PointerHoverEvent && event is! PointerMoveEvent) return;
-    final box = context.findRenderObject() as RenderBox?;
-    if (box == null || !box.attached) return;
-    _cursor = box.globalToLocal(event.position);
-  }
-
-  void _tick(Duration elapsed) {
-    final dt = (elapsed - _lastTick).inMicroseconds / 1e6;
-    _lastTick = elapsed;
-    final box = context.findRenderObject() as RenderBox?;
-    if (box == null || !box.hasSize) return;
-    final size = box.size;
-    final cursor = _cursor;
-    final near =
-        cursor != null && (Offset.zero & size).inflate(_reach).contains(cursor);
-    if (!near) {
-      _angle.value += _spin * dt;
-      return;
-    }
-    final half = Offset(size.width / 2, size.height / 2);
-    final away = cursor - half;
-    final target = math.atan2(away.dy / half.dy, away.dx / half.dx);
-    // The short way round, eased.
-    var turn = (target - _angle.value) % (2 * math.pi);
-    if (turn > math.pi) turn -= 2 * math.pi;
-    _angle.value += turn * (1 - math.exp(-dt * _follow));
-  }
-
   @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final outer = widget.radius;
-    final accent = widget.color ?? colors.primary;
-    final backdrop = widget.backdrop;
-    if (GaiaRingLook.maybeOf(context) case final look?) {
-      return look.builder(
-        radius: outer,
-        hovered: widget.hovered,
-        backdrop: backdrop,
-        accent: accent,
-        child: widget.child,
-      );
-    }
-    return Container(
-      decoration: BoxDecoration(
-        color: GaiaInk.hairline.withValues(
-          alpha: GaiaInk.hairline.a * backdrop,
-        ),
-        borderRadius: BorderRadius.circular(outer),
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: _spin,
+    builder: (context, child) => CustomPaint(
+      foregroundPainter: gaiaAuroraPainter(
+        t: widget.t,
+        time: _spin.value,
+        // The shell draws the grey line itself.
+        rest: Colors.transparent,
+        accent: widget.accent,
+        radius: widget.radius,
+        scale: widget.scale,
       ),
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: Opacity(
-              opacity: backdrop,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(outer),
-                child: ImageFiltered(
-                  imageFilter: ImageFilter.blur(sigmaX: 2, sigmaY: 2),
-                  child: CustomPaint(
-                    painter: GaiaGlowPainter(
-                      angle: _angle,
-                      hover: _hover,
-                      cursor: () => _cursor,
-                      idle: Color.lerp(accent, Colors.white, 0.5)!,
-                      lit: HSLColor.fromColor(
-                        accent,
-                      ).withSaturation(1).toColor(),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          // Covers all but the ring of the light.
-          Padding(
-            padding: const EdgeInsets.all(1),
-            child: Container(
-              clipBehavior: Clip.antiAlias,
-              decoration: BoxDecoration(
-                color: Color.lerp(
-                  colors.surface,
-                  Colors.black,
-                  0.5,
-                )!.withValues(alpha: backdrop),
-                borderRadius: BorderRadius.circular(outer - 1),
-              ),
-              child: widget.child,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+      child: child,
+    ),
+    child: widget.child,
+  );
 }
 
-/// The light: an elliptical radial gradient on the ring at [angle], moving
-/// onto the cursor as [hover] runs. Also the Gaia toast's.
-class GaiaGlowPainter extends CustomPainter {
-  GaiaGlowPainter({
-    required this.angle,
-    required this.hover,
-    required this.cursor,
-    required this.idle,
-    required this.lit,
-  }) : super(repaint: Listenable.merge([angle, hover]));
+/// [shadow] round a see-through shell of [radius], as its [BoxDecoration]
+/// would draw it, less what's under the shell, which would show through.
+class GaiaShadowAround extends CustomPainter {
+  const GaiaShadowAround(this.shadow, {required this.radius});
 
-  final ValueNotifier<double> angle;
-  final Animation<double> hover;
-  final Offset? Function() cursor;
-  final Color idle;
-  final Color lit;
+  final BoxShadow shadow;
+  final double radius;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final t = Curves.easeOut.transform(hover.value);
-    final half = Offset(size.width / 2, size.height / 2);
-    // From the circle the angle lives in out to the button's edge.
-    final x = math.cos(angle.value);
-    final y = math.sin(angle.value);
-    final onRing =
-        half + Offset(x * half.dx, y * half.dy) / math.max(x.abs(), y.abs());
-    // The cursor held inside the button: once it's left, the light eases
-    // back from the edge it left by, not from out where it's clipped away.
-    final over = cursor();
-    final center = Offset.lerp(
-      onRing,
-      over == null
-          ? onRing
-          : Offset(over.dx.clamp(0, size.width), over.dy.clamp(0, size.height)),
-      t,
-    )!;
-    final radii = Size.lerp(
-      Size(size.width * 0.4, size.height),
-      Size(size.width * 0.75, size.height * 1.8),
-      t,
-    )!;
-    final color = Color.lerp(idle, lit, t)!.withValues(alpha: _glow);
+    final shell = RRect.fromRectAndRadius(
+      Offset.zero & size,
+      Radius.circular(radius),
+    );
+    final around = Path.combine(
+      PathOperation.difference,
+      Path()..addRect(shell.outerRect.inflate(shadow.blurRadius * 2 + 64)),
+      Path()..addRRect(shell),
+    );
     canvas
       ..save()
-      ..translate(center.dx, center.dy)
-      ..scale(radii.width, radii.height)
-      ..drawCircle(
-        Offset.zero,
-        1,
-        Paint()
-          ..shader = RadialGradient(
-            colors: [color, color.withValues(alpha: 0)],
-          ).createShader(Rect.fromCircle(center: Offset.zero, radius: 1)),
+      ..clipPath(around)
+      ..drawRRect(
+        shell.shift(shadow.offset).inflate(shadow.spreadRadius),
+        shadow.toPaint(),
       )
       ..restore();
   }
 
   @override
-  bool shouldRepaint(GaiaGlowPainter old) => old.idle != idle || old.lit != lit;
+  bool shouldRepaint(GaiaShadowAround old) =>
+      old.shadow != shadow || old.radius != radius;
 }

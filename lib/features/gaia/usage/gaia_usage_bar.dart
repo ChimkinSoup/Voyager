@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:voyager/features/gaia/companion/gaia_controls.dart';
 import 'package:voyager/features/gaia/usage/gaia_usage.dart';
 import 'package:voyager/features/gaia/usage/gaia_usage_limits.dart';
 
@@ -58,17 +59,7 @@ class GaiaUsageBar extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 4),
-          LinearProgressIndicator(
-            value: used,
-            minHeight: 4,
-            borderRadius: BorderRadius.circular(2),
-            // The text's colour, not white: the Setup tab shows these on
-            // the light theme's paper too, where a white track is invisible.
-            backgroundColor: theme.colorScheme.onSurface.withValues(
-              alpha: 0.15,
-            ),
-            color: theme.colorScheme.primary,
-          ),
+          GaiaProgressBar(value: used),
           const SizedBox(height: 4),
           Text(detail, style: muted),
         ],

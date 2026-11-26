@@ -400,6 +400,9 @@ class FakeClaudeRunner
       await Future<void>.microtask(() {});
       if (turn.isCompleted) break;
       if (gaiaEventOf(event) case final event?) onEvent(event);
+      if (event case ClaudeMessageStart(:final contextTokens?)) {
+        onEvent(GaiaContextUpdate(contextTokens));
+      }
       if (event is ClaudeInit) sessionModel = event.model;
       if (event is ClaudeCompacted) compacted = true;
       if (event is ClaudeResult) {

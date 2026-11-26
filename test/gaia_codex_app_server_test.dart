@@ -217,6 +217,14 @@ void main() {
     expect(replay.sent.where((m) => m['method'] == 'thread/resume'), isEmpty);
     final secondResult = await second;
     expect(secondResult.isError, isFalse);
+    // Each model call's context as it ends, with the model's window.
+    expect(
+      [
+        for (final event in events.whereType<GaiaContextUpdate>())
+          (event.tokens, event.window),
+      ],
+      [(18328, 475000), (18421, 475000), (18489, 475000)],
+    );
     expect(_parts(again), [
       {'type': 'text', 'text': 'gaia contract ok'},
     ]);

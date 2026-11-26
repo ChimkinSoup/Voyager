@@ -188,6 +188,15 @@ void main() {
             };
           case 'placedMemory':
             return gaiaMemoryFilingToJson((topics: const [], suggested: null));
+          case 'updateMemory':
+            final proposal = memories.singleWhere(
+              (memory) => memory.id == params['memoryId'],
+            );
+            return [
+              for (final memory in memories)
+                if (memory.id == proposal.replacesId) gaiaMemoryToJson(memory),
+              gaiaMemoryToJson(proposal),
+            ];
         }
         return null;
       };
@@ -323,6 +332,45 @@ void main() {
     await tester.pump();
     expect(inTab(find.text('I prefer metric units')), findsOneWidget);
     expect(inTab(find.text('Pack sunscreen')), findsNothing);
+  });
+
+  testWidgets('an "Update this?" row strikes the old text through; Update '
+      'shows a toast whose Undo puts both back; Keep both is offered', (
+    tester,
+  ) async {
+    final controller = await pump(tester);
+    memories = [
+      ...memories,
+      memory(
+        'u1',
+        'I prefer imperial units',
+        status: GaiaMemoryStatus.proposed,
+      ).copyWith(replacesId: 'm3'),
+    ];
+    await open(tester, controller);
+    expect(
+      tester
+          .widgetList<Text>(inTab(find.text('I prefer metric units')))
+          .where(
+            (text) => text.style?.decoration == TextDecoration.lineThrough,
+          ),
+      hasLength(1),
+    );
+    await hover(tester, inTab(find.text('I prefer imperial units')));
+    expect(inTab(find.byTooltip('Keep both')), findsOneWidget);
+    await tester.tap(inTab(find.byTooltip('Update')));
+    await settle(tester);
+    expect(sent('updateMemory').single['memoryId'], 'u1');
+    expect(find.text('Updated'), findsOneWidget);
+    await tester.tap(find.text('Undo'));
+    await settle(tester);
+    expect(
+      [
+        for (final json in sent('revertMemories').single['memories']! as List)
+          (json! as Map)['id'],
+      ],
+      ['m3', 'u1'],
+    );
   });
 
   testWidgets('search filters memories, tags and topic names, and the chips', (
@@ -619,6 +667,28 @@ void main() {
     await tester.tap(inTab(find.text('Pin')));
     await settle(tester);
     expect(sent('pinMemory').single, {'memoryId': 'm3', 'pinned': true});
+  });
+
+  testWidgets("the inbox lists in the Inbox deck's order: proposed oldest "
+      'first, then pin and merge suggestions', (tester) async {
+    final controller = await pump(tester);
+    memories = [
+      ...memories,
+      memory('m7', 'I like long walks', status: GaiaMemoryStatus.proposed),
+    ];
+    pins = [(memory: memories[2], why: 'recalled in 8 of 10 chats')];
+    merges = [(from: topics[2], into: topics[0], why: 'they share 3 memories')];
+    await open(tester, controller);
+    final tops = [
+      for (final text in [
+        'I like naps',
+        'I like long walks',
+        'Pin this? recalled in 8 of 10 chats.',
+        'Merge "Food" into "School"?',
+      ])
+        tester.getTopLeft(inTab(find.text(text))).dy,
+    ];
+    expect(tops, [...tops]..sort());
   });
 
   testWidgets("Unsorted's Sort these shows where each would go, and Accept "

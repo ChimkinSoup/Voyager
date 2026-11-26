@@ -958,6 +958,7 @@ class _MemoriesTabState extends ConsumerState<_MemoriesTab> {
     Widget row(GaiaMemory memory) => _MemoryRow(
       key: memory.id == widget.focus ? _focusKey : null,
       memory: memory,
+      replaced: gaiaReplacedMemory(memory, memories),
       tree: tree,
       moveWithin: moveWithin,
       highlighted: memory.id == widget.focus,
@@ -1438,12 +1439,17 @@ class _MemoryRow extends ConsumerWidget {
   const _MemoryRow({
     super.key,
     required this.memory,
+    this.replaced,
     required this.tree,
     required this.moveWithin,
     this.highlighted = false,
   });
 
   final GaiaMemory memory;
+
+  /// The memory this proposal would update: "Update this?"
+  /// (GAIA_MEMORY_TOPICS_HLD.md §27.3); null for a plain proposal.
+  final GaiaMemory? replaced;
   final GaiaTopicTree tree;
 
   /// The topics a move takes it out of (GAIA_MEMORY_TOPICS_HLD.md §3.2);
@@ -1544,7 +1550,11 @@ class _MemoryRow extends ConsumerWidget {
       repository,
     ).sameActive(memory.text, except: memory.id);
     if (same == null) {
-      await _save(ref, memory.copyWith(status: GaiaMemoryStatus.active));
+      // A memory of its own, even one offered as an update: Keep both.
+      await _save(
+        ref,
+        memory.copyWith(status: GaiaMemoryStatus.active, clearReplacesId: true),
+      );
     } else {
       await _save(ref, memory.copyWith(deletedAt: utcNow()));
       if (context.mounted) {
@@ -1558,12 +1568,53 @@ class _MemoryRow extends ConsumerWidget {
     );
   }
 
+  /// "Update this?" accepted (GAIA_MEMORY_TOPICS_HLD.md §27.3): [replaced]
+  /// takes this proposal's text, and a toast offers to undo it. A pin over
+  /// the budget is refused with a toast.
+  Future<void> _update(BuildContext context, WidgetRef ref) async {
+    final overlay = Overlay.of(context, rootOverlay: true);
+    final repository = ref.read(gaiaRepositoryProvider);
+    final memories = GaiaMemories(repository);
+    final ({GaiaMemory old, GaiaMemory proposal}) was;
+    try {
+      was = await memories.update(memory.id);
+    } on GaiaReadException catch (error) {
+      showVoyagerToastIn(
+        overlay,
+        message: error.message,
+        icon: PhosphorIconsRegular.warning,
+        dwell: const Duration(seconds: 4),
+      );
+      return;
+    }
+    await _setCards(
+      repository,
+      GaiaCardState.accepted,
+      memory.text,
+      updated: true,
+    );
+    showVoyagerToastIn(
+      overlay,
+      message: 'Updated: ${was.old.text}',
+      actions: [
+        VoyagerToastAction(
+          label: 'Undo',
+          onPressed: () => unawaited(() async {
+            await memories.revert(memories: [was.old, was.proposal]);
+            await _setCards(repository, GaiaCardState.open, was.proposal.text);
+          }()),
+        ),
+      ],
+    );
+  }
+
   /// This memory's card in the chat that proposed it set to [state].
   Future<void> _setCards(
     GaiaRepository repository,
     GaiaCardState state,
-    String text,
-  ) async {
+    String text, {
+    bool updated = false,
+  }) async {
     final chatId = memory.sourceChatId;
     if (chatId == null) return;
     await GaiaHost.instance.setMemoryCards(
@@ -1572,6 +1623,7 @@ class _MemoryRow extends ConsumerWidget {
       memory.id,
       state,
       text,
+      updated: updated,
     );
   }
 
@@ -1622,7 +1674,13 @@ class _MemoryRow extends ConsumerWidget {
     final suggested = memory.suggestedTopic == null
         ? null
         : gaiaSuggestedTopicLabel(memory.suggestedTopic!, tree);
+    final replaced = this.replaced;
     final (icon, label, onPressed) = switch (memory.status) {
+      GaiaMemoryStatus.proposed when replaced != null => (
+        PhosphorIconsRegular.arrowsClockwise,
+        'Update',
+        () => _update(context, ref),
+      ),
       GaiaMemoryStatus.proposed => (
         PhosphorIconsRegular.check,
         'Remember',
@@ -1647,7 +1705,21 @@ class _MemoryRow extends ConsumerWidget {
     return ListTile(
       contentPadding: EdgeInsets.zero,
       selected: highlighted,
-      title: Text(memory.text),
+      title: replaced == null
+          ? Text(memory.text)
+          // "Update this?": the text it replaces, struck through, above.
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  replaced.text,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    decoration: TextDecoration.lineThrough,
+                  ),
+                ),
+                Text(memory.text),
+              ],
+            ),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1712,6 +1784,12 @@ class _MemoryRow extends ConsumerWidget {
             icon: Icon(icon, size: 16),
             onPressed: onPressed,
           ),
+          if (replaced != null)
+            IconButton(
+              tooltip: 'Keep both',
+              icon: const Icon(PhosphorIconsRegular.check, size: 16),
+              onPressed: () => _remember(context, ref),
+            ),
           IconButton(
             tooltip: memory.status == GaiaMemoryStatus.proposed
                 ? 'Dismiss'

@@ -86,7 +86,9 @@ void main() {
     final index = await curatorList(
       'metric units waiting old dismissed gone forgotten shelved',
     );
-    expect(index, contains('- Prefers metric units [units]'));
+    // Kept ones are numbered, for the curator's "replaces" (§27.3).
+    expect(index, contains('1. Prefers metric units [units]'));
+    expect((await memories.curatorContext('metric units')).ids, ['a']);
     // None may be offered again, reworded.
     expect(index, contains('- Waiting'));
     expect(index, contains('- Old'));
@@ -110,7 +112,10 @@ void main() {
       await repository.upsertMemory(_memory('a$i', 'Kept cs246 fact $i'));
     }
     final lines = (await curatorList('cs246')).split('\n');
-    expect(lines.where((line) => line.startsWith('- Kept')), hasLength(40));
+    expect(
+      lines.where((line) => RegExp(r'^\d+\. Kept').hasMatch(line)),
+      hasLength(40),
+    );
     expect(
       lines.where((line) => line.startsWith('- Dismissed')),
       hasLength(20),
@@ -570,8 +575,192 @@ void main() {
       expect(await memories.projectOf('loose', newChat: 'p1'), isNull);
     });
   });
+
+  group('memory upkeep (§27.3)', _upkeepTests);
+}
+
+/// Memory upkeep, part 1 (GAIA_MEMORY_TOPICS_HLD.md §27.3): the curator's
+/// `replaces`, the save check's host side, and "Update this?".
+void _upkeepTests() {
+  late AppDatabase db;
+  late DriftGaiaRepository repository;
+  late GaiaMemories memories;
+
+  setUp(() {
+    db = AppDatabase.inMemory();
+    repository = DriftGaiaRepository(db);
+    memories = GaiaMemories(repository);
+  });
+
+  tearDown(() => db.close());
+
+  Future<GaiaMemory> proposal(String text, String replacesId) async {
+    final saved = await memories.save(
+      text,
+      status: GaiaMemoryStatus.proposed,
+      replacesId: replacesId,
+    );
+    return saved!;
+  }
+
+  test(
+    "a curator's update waits in the inbox, even with auto-accept on",
+    () async {
+      await repository.upsertSettings(
+        GaiaSettings.initial().copyWith(autoAcceptCurator: true),
+      );
+      await repository.upsertMemory(_memory('toronto', 'I live in Toronto'));
+      final moved = _found('I moved back to Vancouver');
+      await memories.curated('c1', 3, [
+        (
+          text: moved.text,
+          tags: moved.tags,
+          topicIds: moved.topicIds,
+          suggested: null,
+          pin: false,
+          replacesId: 'toronto',
+        ),
+        _found('Has a dog called Biscuit'),
+      ]);
+      final all = await repository.listMemories();
+      final update = all.singleWhere((m) => m.text.contains('Vancouver'));
+      expect(update.status, GaiaMemoryStatus.proposed);
+      expect(update.replacesId, 'toronto');
+      // A new fact still goes straight in.
+      final dog = all.singleWhere((m) => m.text.contains('Biscuit'));
+      expect(dog.status, GaiaMemoryStatus.active);
+      expect(dog.replacesId, isNull);
+    },
+  );
+
+  test(
+    'Update writes the new text into the old memory, keeping its id, '
+    'topics and pin; the proposal goes, and both come back on undo',
+    () async {
+      final old = _memory('toronto', 'I live in Toronto');
+      await repository.upsertMemory(
+        old.copyWith(topicIds: ['places'], pinned: true),
+      );
+      final offer = await proposal('I moved back to Vancouver', 'toronto');
+      expect(
+        gaiaReplacedMemory(offer, await repository.listMemories())?.id,
+        'toronto',
+      );
+      final was = await memories.update(offer.id);
+      final now = (await repository.getMemory('toronto'))!;
+      expect(now.text, 'I moved back to Vancouver');
+      expect(now.topicIds, ['places']);
+      expect(now.pinned, isTrue);
+      expect((await repository.getMemory(offer.id))!.isDeleted, isTrue);
+      await memories.revert(memories: [was.old, was.proposal]);
+      expect(
+        (await repository.getMemory('toronto'))!.text,
+        'I live in Toronto',
+      );
+      final back = (await repository.getMemory(offer.id))!;
+      expect(back.isDeleted, isFalse);
+      expect(back.replacesId, 'toronto');
+    },
+  );
+
+  test('Update refuses a pinned memory past the pin budget, changing '
+      'nothing', () async {
+    await repository.upsertMemory(
+      _memory('big', 'x' * 1900).copyWith(pinned: true),
+    );
+    await repository.upsertMemory(
+      _memory('city', 'I live in Toronto').copyWith(pinned: true),
+    );
+    final offer = await proposal('I live in ${'Vancouver ' * 20}', 'city');
+    await expectLater(
+      memories.update(offer.id),
+      throwsA(isA<GaiaReadException>()),
+    );
+    expect((await repository.getMemory('city'))!.text, 'I live in Toronto');
+    expect((await repository.getMemory(offer.id))!.isDeleted, isFalse);
+  });
+
+  test('Keep both remembers the proposal as its own memory; one whose '
+      'memory is gone shows as a plain proposal', () async {
+    await repository.upsertMemory(_memory('toronto', 'I live in Toronto'));
+    final offer = await proposal('I moved back to Vancouver', 'toronto');
+    await memories.decide(offer.id, accept: true, text: offer.text);
+    final kept = (await repository.getMemory(offer.id))!;
+    expect(kept.status, GaiaMemoryStatus.active);
+    expect(kept.replacesId, isNull);
+    expect((await repository.getMemory('toronto'))!.text, 'I live in Toronto');
+
+    final other = await proposal('I work at Shopify now', 'toronto');
+    await memories.archive('toronto');
+    expect(gaiaReplacedMemory(other, await repository.listMemories()), isNull);
+    await expectLater(
+      memories.update(other.id),
+      throwsA(isA<GaiaReadException>()),
+    );
+  });
+
+  test('the save check is shown the nearest active memories, and nothing '
+      'when none is near or the wording is already saved', () async {
+    await repository.upsertMemory(_memory('dog', 'Has a dog called Biscuit'));
+    await repository.upsertMemory(_memory('city', 'Lives in Toronto'));
+    expect(await memories.near('Prefers metric units'), isEmpty);
+    expect(
+      (await memories.near('Biscuit the dog turned four')).first.id,
+      'dog',
+    );
+    // Said word for word already: save skips it, so no call is made.
+    expect(await memories.near('Has a dog called  BISCUIT'), isEmpty);
+  });
+
+  test('memory_propose with the check\'s answer: same saves nothing, '
+      'replaces saves an "Update this?" proposal', () async {
+    await repository.upsertMemory(_memory('toronto', 'I live in Toronto'));
+    final same = await memories.propose('c1', {
+      'text': 'My home is Toronto',
+    }, sameId: 'toronto');
+    expect(same.memory, isNull);
+    expect(same.text, 'Already remembered: I live in Toronto');
+    final update = await memories.propose('c1', {
+      'text': 'I moved to Vancouver',
+    }, replacesId: 'toronto');
+    expect(update.memory!.replacesId, 'toronto');
+    expect(update.memory!.status, GaiaMemoryStatus.proposed);
+    expect(update.text, contains('as an update to: I live in Toronto.'));
+    await repository.upsertMemory(_memory('tutor', 'My tutor is Lucia.'));
+    final stopped = await memories.propose('c1', {
+      'text': 'My tutor is Marta',
+    }, replacesId: 'tutor');
+    expect(stopped.text, contains('update to: My tutor is Lucia. A card'));
+  });
+
+  test("/remember's update rewrites the old memory at once", () async {
+    await repository.upsertMemory(_memory('toronto', 'I live in Toronto'));
+    final was = await memories.rewrite('toronto', 'I moved to Vancouver');
+    expect(was.text, 'I live in Toronto');
+    expect(
+      (await repository.getMemory('toronto'))!.text,
+      'I moved to Vancouver',
+    );
+  });
+
+  test('replacesId syncs', () {
+    final memory = _memory(
+      'v',
+      'I moved to Vancouver',
+      status: GaiaMemoryStatus.proposed,
+    ).copyWith(replacesId: 'toronto');
+    final data = gaiaMemoryToFirestore(memory);
+    expect(mergeGaiaMemoryFromRemote(data, 'v').replacesId, 'toronto');
+    expect(gaiaMemoryFromJson(gaiaMemoryToJson(memory)).replacesId, 'toronto');
+  });
 }
 
 /// A memory the curator found, filed nowhere.
-GaiaFoundMemory _found(String text, [List<String> tags = const []]) =>
-    (text: text, tags: tags, topicIds: const [], suggested: null, pin: false);
+GaiaFoundMemory _found(String text, [List<String> tags = const []]) => (
+  text: text,
+  tags: tags,
+  topicIds: const [],
+  suggested: null,
+  pin: false,
+  replacesId: null,
+);

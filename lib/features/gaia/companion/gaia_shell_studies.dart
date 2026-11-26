@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
-import 'package:voyager/features/gaia/companion/gaia_aurora_edge.dart';
 import 'package:voyager/features/gaia/companion/gaia_button.dart';
 import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_notch.dart';
@@ -9,11 +8,11 @@ import 'package:voyager/features/gaia/companion/gaia_style.dart';
 import 'package:voyager/features/gaia/companion/gaia_tier_picker.dart';
 import 'package:voyager/features/gaia/companion/gaia_toast.dart';
 
-/// Calmer stand-ins for [GaiaGlowRing], the circling light still round the
-/// notch (the composer's account and tier capsule, its +), the right-click
-/// menu, the / palette, the search panel, the date picker and the toast.
-/// Each is drawn onto the real notch and menu through [GaiaRingLook], and
-/// none runs a ticker, as the rounded buttons don't.
+/// Calmer stand-ins for the circling light that was round the notch (the
+/// composer's account and tier capsule, its +), the right-click menu, the /
+/// palette, the search panel, the date picker and the toast. Each is drawn
+/// onto the real notch and menu through [GaiaRingLook], and none runs a
+/// ticker, as the rounded buttons don't.
 enum _Look {
   hairline(
     'Hairline',
@@ -265,7 +264,7 @@ enum _Look {
     };
     if (this != frostedMenusV2) return frost;
     // Outside the clip, so its glow spreads past the edge.
-    return _AuroraLine(
+    return GaiaAuroraLine(
       t: t * backdrop,
       radius: radius,
       accent: accent,
@@ -274,80 +273,6 @@ enum _Look {
       child: frost,
     );
   }
-}
-
-/// The text field's aurora on a shell's edge, [t] of the way lit: its loop
-/// runs only while it shows.
-class _AuroraLine extends StatefulWidget {
-  const _AuroraLine({
-    required this.t,
-    required this.radius,
-    required this.accent,
-    required this.scale,
-    required this.child,
-  });
-
-  final double t, radius, scale;
-  final Color accent;
-  final Widget child;
-
-  @override
-  State<_AuroraLine> createState() => _AuroraLineState();
-}
-
-class _AuroraLineState extends State<_AuroraLine>
-    with SingleTickerProviderStateMixin {
-  /// The aurora's loop, as long as the field's.
-  late final _spin = AnimationController(
-    vsync: this,
-    duration: const Duration(minutes: 2),
-  );
-
-  @override
-  void initState() {
-    super.initState();
-    _sync();
-  }
-
-  @override
-  void didUpdateWidget(_AuroraLine old) {
-    super.didUpdateWidget(old);
-    _sync();
-  }
-
-  void _sync() {
-    final run = widget.t > 0;
-    if (run == _spin.isAnimating) return;
-    if (run) {
-      _spin.repeat();
-    } else {
-      _spin.stop();
-    }
-  }
-
-  @override
-  void dispose() {
-    _spin.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: _spin,
-    builder: (context, child) => CustomPaint(
-      foregroundPainter: gaiaAuroraPainter(
-        t: widget.t,
-        time: _spin.value,
-        // The shell draws the grey line itself.
-        rest: Colors.transparent,
-        accent: widget.accent,
-        radius: widget.radius,
-        scale: widget.scale,
-      ),
-      child: child,
-    ),
-    child: widget.child,
-  );
 }
 
 class GaiaShellStudies extends StatefulWidget {
@@ -391,7 +316,7 @@ class _GaiaShellStudiesState extends State<GaiaShellStudies> {
         _StudyPanel(
           look: null,
           title: 'Current',
-          description: 'The circling light, for comparison.',
+          description: 'What Gaia wears now: Frosted (menus only) v2.',
           bare: _bare,
           controller: widget.controller,
         ),
