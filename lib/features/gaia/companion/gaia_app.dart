@@ -324,6 +324,7 @@ class _RunToastsState extends State<_RunToasts> {
     ({GaiaRunToast toast, Future<void> Function() undo})
   >
   _undoToasts;
+  late final StreamSubscription<GaiaRunToast> _tidyToasts;
 
   @override
   void initState() {
@@ -335,6 +336,17 @@ class _RunToastsState extends State<_RunToasts> {
     _undoToasts = widget.controller.undoToasts.listen(
       (toast) => _show(toast.toast, undo: toast.undo),
     );
+    _tidyToasts = widget.controller.tidyToasts.listen((toast) {
+      if (!mounted) return;
+      showGaiaToast(
+        context,
+        mark: toast.error ? GaiaToastMark.error : GaiaToastMark.done,
+        title: toast.title,
+        body: toast.body,
+        onTap: () => unawaited(widget.controller.openInbox()),
+        lingers: true,
+      );
+    });
   }
 
   @override
@@ -342,6 +354,7 @@ class _RunToastsState extends State<_RunToasts> {
     unawaited(_toasts.cancel());
     unawaited(_btwToasts.cancel());
     unawaited(_undoToasts.cancel());
+    unawaited(_tidyToasts.cancel());
     super.dispose();
   }
 

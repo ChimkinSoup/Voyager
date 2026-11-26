@@ -92,7 +92,8 @@ class GaiaSettingsTab extends StatelessWidget {
                     subtitle:
                         'Each message carries the app, window title and, in a '
                         'browser, the address you were on. It shows on the '
-                        'draft, where you can remove it.',
+                        'draft, where you can remove it. Off, type /window to '
+                        'attach it to one message.',
                     value: settings['windowContext'] != false,
                     onChanged: (on) => save({'windowContext': on}),
                   ),

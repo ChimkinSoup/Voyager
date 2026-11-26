@@ -119,122 +119,151 @@ class _SnippetEditorState extends State<SnippetEditor> {
     final placeholders =
         widget.showPlaceholderWarning &&
         snippetUsesPlaceholders(_replacement.text);
+    final trigger = LabeledTextField(
+      label: 'Trigger',
+      controller: _trigger,
+      focusNode: _triggerFocus,
+      dense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      // The one field in the app that must never expand a
+      // snippet — see [showSnippetsDialog].
+      snippetsAllowed: false,
+      autocorrectAllowed: false,
+      onSubmitted: (_) => _save(),
+    );
+    final replacement = LabeledTextField(
+      label: 'Replacement',
+      controller: _replacement,
+      focusNode: _replacementFocus,
+      dense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      snippetsAllowed: false,
+      autocorrectAllowed: false,
+      onChanged: (_) => setState(() {}),
+      onSubmitted: (_) => _save(),
+    );
+    final autoExpand = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        VoyagerCheckbox(
+          value: _autoExpand,
+          // No confetti in settings: the burst is the To-Do list's
+          // "you finished something", and a snippet option is a
+          // preference being set, not an accomplishment.
+          celebrateOnComplete: false,
+          onChanged: (v) => setState(() => _autoExpand = v),
+        ),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text('Expand automatically', style: theme.textTheme.bodySmall),
+        ),
+      ],
+    );
+    final wordBoundary = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        VoyagerCheckbox(
+          value: _wordBoundary,
+          celebrateOnComplete: false,
+          onChanged: (v) => setState(() => _wordBoundary = v),
+        ),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            'Only at word boundaries',
+            style: theme.textTheme.bodySmall,
+          ),
+        ),
+      ],
+    );
+    final messages = [
+      if (placeholders)
+        Padding(
+          padding: const EdgeInsets.only(top: 8, left: 4),
+          child: Text(
+            r'${…} placeholders are not supported yet — that text will '
+            'be inserted literally.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.error,
+            ),
+          ),
+        ),
+      if (widget.error != null)
+        Padding(
+          padding: const EdgeInsets.only(top: 8, left: 4),
+          child: Text(
+            widget.error!,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.error,
+            ),
+          ),
+        ),
+    ];
+    final buttons = [
+      GlassButton(
+        dense: true,
+        onPressed: widget.onCancel,
+        icon: const Icon(PhosphorIconsRegular.x),
+        tooltip: 'Cancel',
+      ),
+      const SizedBox(width: 4),
+      GlassButton(
+        dense: true,
+        onPressed: _save,
+        icon: const Icon(PhosphorIconsRegular.check),
+        tooltip: 'Save snippet',
+      ),
+    ];
     final body = Padding(
       padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SizedBox(
-                  width: 150,
-                  child: LabeledTextField(
-                    label: 'Trigger',
-                    controller: _trigger,
-                    focusNode: _triggerFocus,
-                    dense: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 12,
-                    ),
-                    // The one field in the app that must never expand a
-                    // snippet — see [showSnippetsDialog].
-                    snippetsAllowed: false,
-                    autocorrectAllowed: false,
-                    onSubmitted: (_) => _save(),
+      // Too narrow for the fields side by side (a phone): everything stacks,
+      // so no label is squeezed to a letter a line (BUG-402).
+      child: LayoutBuilder(
+        builder: (context, constraints) => constraints.maxWidth < 480
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  trigger,
+                  const SizedBox(height: 8),
+                  replacement,
+                  const SizedBox(height: 8),
+                  Align(alignment: Alignment.centerLeft, child: autoExpand),
+                  const SizedBox(height: 4),
+                  Align(alignment: Alignment.centerLeft, child: wordBoundary),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: buttons,
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: LabeledTextField(
-                    label: 'Replacement',
-                    controller: _replacement,
-                    focusNode: _replacementFocus,
-                    dense: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 12,
+                  ...messages,
+                ],
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        SizedBox(width: 150, child: trigger),
+                        const SizedBox(width: 8),
+                        Expanded(child: replacement),
+                      ],
                     ),
-                    snippetsAllowed: false,
-                    autocorrectAllowed: false,
-                    onChanged: (_) => setState(() {}),
-                    onSubmitted: (_) => _save(),
                   ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              VoyagerCheckbox(
-                value: _autoExpand,
-                // No confetti in settings: the burst is the To-Do list's
-                // "you finished something", and a snippet option is a
-                // preference being set, not an accomplishment.
-                celebrateOnComplete: false,
-                onChanged: (v) => setState(() => _autoExpand = v),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Flexible(child: autoExpand),
+                      const SizedBox(width: 16),
+                      Flexible(child: wordBoundary),
+                      const Spacer(),
+                      ...buttons,
+                    ],
+                  ),
+                  ...messages,
+                ],
               ),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  'Expand automatically',
-                  style: theme.textTheme.bodySmall,
-                ),
-              ),
-              const SizedBox(width: 16),
-              VoyagerCheckbox(
-                value: _wordBoundary,
-                celebrateOnComplete: false,
-                onChanged: (v) => setState(() => _wordBoundary = v),
-              ),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  'Only at word boundaries',
-                  style: theme.textTheme.bodySmall,
-                ),
-              ),
-              const Spacer(),
-              GlassButton(
-                dense: true,
-                onPressed: widget.onCancel,
-                icon: const Icon(PhosphorIconsRegular.x),
-                tooltip: 'Cancel',
-              ),
-              const SizedBox(width: 4),
-              GlassButton(
-                dense: true,
-                onPressed: _save,
-                icon: const Icon(PhosphorIconsRegular.check),
-                tooltip: 'Save snippet',
-              ),
-            ],
-          ),
-          if (placeholders)
-            Padding(
-              padding: const EdgeInsets.only(top: 8, left: 4),
-              child: Text(
-                r'${…} placeholders are not supported yet — that text will '
-                'be inserted literally.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.error,
-                ),
-              ),
-            ),
-          if (widget.error != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 8, left: 4),
-              child: Text(
-                widget.error!,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.error,
-                ),
-              ),
-            ),
-        ],
       ),
     );
     final form = CtrlEnterToSubmitScope(onSubmit: _save, child: body);

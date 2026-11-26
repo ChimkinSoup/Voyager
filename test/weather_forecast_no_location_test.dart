@@ -7,6 +7,7 @@ import 'package:voyager/features/shell/reveal_request.dart';
 import 'package:voyager/features/shell/weather_forecast_sheet.dart';
 
 void main() {
+  // The desktop dialog; on Android the forecast is a sheet (BUG-396).
   testWidgets('no location: a compact prompt that opens Settings at the tile', (
     tester,
   ) async {
@@ -57,5 +58,5 @@ void main() {
     expect(find.byType(Dialog), findsNothing);
     expect(find.text('settings page'), findsOne);
     expect(container.read(revealWeatherLocationRequestProvider), isTrue);
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 }

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -533,6 +534,34 @@ class VimSession {
       caretListenable.value = caretOffset;
     }
   }
+
+  /// An edit reached the field outside Insert. Vim's own writes, undo and
+  /// redo arrive the same way, inside [suppressTypingRewrites], and are left
+  /// alone; anything else is a soft keyboard, which sends text instead of
+  /// keys, so Normal mode never sees it to refuse it (BUG-410). The edit has
+  /// happened by now; following it into Insert keeps the badge and the caret
+  /// honest about what typing does. Desktop has no soft keyboard, so an edit
+  /// there is a paste or a menu action, and the mode stays.
+  void noteUserEdit() {
+    if (_disposed ||
+        typingRewritesSuppressed ||
+        mode == VimMode.insert ||
+        _hardwareKeyboardTypes) {
+      return;
+    }
+    _clearPending();
+    _cancelSearchPrompt(restoreCaret: false);
+    _insertAnchor = null;
+    _insertCommandKeys = null;
+    _setMode(VimMode.insert);
+  }
+
+  static bool get _hardwareKeyboardTypes => switch (defaultTargetPlatform) {
+    TargetPlatform.windows ||
+    TargetPlatform.macOS ||
+    TargetPlatform.linux => true,
+    _ => false,
+  };
 
   /// Undoes the select-all a field does when focus comes back to it after a
   /// window switch, putting [selection] — what Vim had before the switch —
@@ -1379,7 +1408,11 @@ class VimSession {
           // Ctrl/Cmd+Z). Esc steps the caret back, so this path matches on
           // text only — see SnippetSession.undoLastExpansion.
           final before = _text;
-          final undone = trySnippetUndo?.call() ?? false;
+          // A restore, not typing: inside [suppressTypingRewrites] like the
+          // undo below, which also keeps it from reading as a soft keyboard's
+          // edit and dropping to Insert (see [noteUserEdit]).
+          final undone =
+              suppressTypingRewrites(() => trySnippetUndo?.call()) ?? false;
           // Flutter UndoHistory asserts the restored value sticks after
           // onTriggered. Journal/dream/todo `onChanged` handlers call
           // applyListEditing, which would rewrite numbered lists mid-restore

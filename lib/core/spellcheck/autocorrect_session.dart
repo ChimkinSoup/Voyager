@@ -613,8 +613,17 @@ class AutocorrectSession {
     // no minimum length beyond the tokenizer's, and no autocorrect toggle —
     // they chose this rewrite (`FLAGGED_WORDS.md` §5.1, §5.3 step 3).
     final pair = replacementFor(lower);
+    // A boundary with no key event behind it is a soft keyboard's, and that
+    // keyboard runs its own autocorrect: its Space has already corrected a
+    // typo it knows, so a word reaching here as typed was either one it
+    // accepts or one the user picked as typed from its suggestion strip, and
+    // the two arrive identically (BUG-403). The guessing is left to it; a pair
+    // the user wrote is a rule, not a guess, and still applies.
+    final softKeyboard = typedChar == null && !_hardwareKeyboardTypes;
     if (pair == null &&
-        (!cascadeEnabled() || word.length < kMinAutocorrectLength)) {
+        (!cascadeEnabled() ||
+            word.length < kMinAutocorrectLength ||
+            softKeyboard)) {
       return;
     }
 

@@ -318,10 +318,16 @@ class _ShellNavItemState extends State<ShellNavItem> {
                           fontSize: 10,
                         ) ??
                         const TextStyle(),
-                    child: Text(
-                      widget.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    // The box keeps its fixed height, so a large system font
+                    // scale is capped here, as Material's own navigation bars
+                    // cap theirs (BUG-397).
+                    child: MediaQuery.withClampedTextScaling(
+                      maxScaleFactor: 1.3,
+                      child: Text(
+                        widget.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ),
                 ],

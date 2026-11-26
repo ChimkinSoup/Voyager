@@ -281,18 +281,21 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                         onChanged: (v) =>
                             _save(ref, settings.copyWith(vimModeEnabled: v)),
                       ),
-                      SwitchListTile(
-                        title: const Text('Caps Lock indicator'),
-                        subtitle: const Text(
-                          'Shows a mark next to the caret while Caps Lock is on and a text '
-                          'box has focus. Windows and Linux only — macOS draws its own',
+                      // Only where the indicator draws: a phone has no Caps
+                      // Lock key to show (BUG-399).
+                      if (isWindows || isLinux)
+                        SwitchListTile(
+                          title: const Text('Caps Lock indicator'),
+                          subtitle: const Text(
+                            'Shows a mark next to the caret while Caps Lock is on and a text '
+                            'box has focus. Windows and Linux only — macOS draws its own',
+                          ),
+                          value: settings.capsLockIndicatorEnabled,
+                          onChanged: (v) => _save(
+                            ref,
+                            settings.copyWith(capsLockIndicatorEnabled: v),
+                          ),
                         ),
-                        value: settings.capsLockIndicatorEnabled,
-                        onChanged: (v) => _save(
-                          ref,
-                          settings.copyWith(capsLockIndicatorEnabled: v),
-                        ),
-                      ),
                       SwitchListTile(
                         title: const Text('Autocorrect'),
                         subtitle: const Text(

@@ -327,8 +327,9 @@ class _ShellBranchContainerState extends State<ShellBranchContainer>
         ignoring: !isCurrent,
         // Tab and the arrow keys never walk into a page that isn't on
         // screen: a hidden text field would take what is typed next
-        // (BUG-215). Focus already inside a page is left alone, so returning
-        // to it finds it where it was.
+        // (BUG-215). Nor does focus coming back from a closed sheet or
+        // dialog, which would raise the keyboard for a field on a page
+        // that isn't showing (BUG-411).
         child: Focus(
           parentNode: _focusNodeFor(index)..onStage = isCurrent,
           canRequestFocus: false,
@@ -361,7 +362,13 @@ class _ShellBranchContainerState extends State<ShellBranchContainer>
 /// [skipTraversal], and a node already focused in a hidden branch still Tabs
 /// out of it.
 ///
-/// A getter over a plain field rather than [Focus.descendantsAreTraversable],
+/// They are focusable only while it is on screen, too. A route closing over
+/// the shell hands focus back to the last field focused under it, which can
+/// be on a page left since (BUG-411); [FocusNode.canRequestFocus] asks every
+/// ancestor, so that hand-back now lands nowhere. Leaving a page already
+/// drops the focus it holds (`_ShellBranchChangeFlusher`).
+///
+/// Getters over a plain field rather than [Focus.descendantsAreTraversable],
 /// and attached by hand above the branch's [Focus] rather than given to it: a
 /// [Focus] rebuilds whenever its node's flags have changed by the time the
 /// node is next notified, a frame after every switch.
@@ -373,6 +380,9 @@ class _BranchFocusNode extends FocusNode {
 
   @override
   bool get descendantsAreTraversable => onStage;
+
+  @override
+  bool get descendantsAreFocusable => onStage;
 }
 
 /// See [ShellBranchContainer.mountLater] and [ShellBranchContainer.shouldWarm].

@@ -14,6 +14,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/platform/dev_profile.dart';
+import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/dev/journal_debug_logger.dart';
 import 'package:voyager/core/layout/window_size_class.dart';
@@ -21,6 +22,7 @@ import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/widgets/compact_back_bar.dart';
 import 'package:voyager/features/shell/shell_back_interceptor.dart';
 import 'package:voyager/core/constants/journal_constants.dart';
+import 'package:voyager/core/media/widgets/media_attach.dart';
 import 'package:voyager/core/media/widgets/media_drop_target.dart';
 import 'package:voyager/core/media/widgets/media_fan_stack.dart';
 import 'package:voyager/core/media/widgets/media_paste_scope.dart';
@@ -90,6 +92,10 @@ typedef _JournalRowSignature = ({
 /// button) take ~335px and the "Mood" label another ~60, so this leaves the
 /// slider about 120px before it gets a line to itself.
 const double _journalMetadataRowMinWidth = 520;
+
+/// What the Add images button adds to those controls where it shows, on
+/// Android (BUG-407): the button and its gap.
+const double _journalAddImagesWidth = 56;
 
 /// The editor's height floor. The rows around the body take ~355px on a phone
 /// (back bar, title, the stacked mood and date lines, quote), so this keeps
@@ -2135,6 +2141,22 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     await _openEntry(deletion.entry.id);
   }
 
+  /// The entry's images by the file picker, on Android only: there is no
+  /// Ctrl+V or drag there, the ways the journal takes them on desktop
+  /// (BUG-407).
+  Future<void> _addImages(String entryId) async {
+    final overlay = Overlay.of(context, rootOverlay: true);
+    final images = await pickImageFiles();
+    if (images.isEmpty || !mounted) return;
+    await attachImagesForOwner(
+      ref,
+      overlay: overlay,
+      images: images,
+      collection: FirestoreCollections.journalEntries,
+      documentId: entryId,
+    );
+  }
+
   Future<void> _deleteEntry() async {
     final entry = _selectedEntry;
     if (entry == null) return;
@@ -3202,6 +3224,19 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                           ),
                                           const SizedBox(width: 8),
                                         ],
+                                        if (isAndroid &&
+                                            _selectedEntry != null) ...[
+                                          IconButton(
+                                            tooltip: 'Add images',
+                                            onPressed: () =>
+                                                _addImages(_selectedEntry!.id),
+                                            icon: Icon(
+                                              PhosphorIconsRegular.imageSquare,
+                                              color: accentColor,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                        ],
                                         IconButton(
                                           tooltip: 'Delete entry',
                                           onPressed: _deleteEntry,
@@ -3240,7 +3275,11 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                       // overflowed. It takes a line of its own.
                                       if (showMoodBar &&
                                           constraints.maxWidth <
-                                              _journalMetadataRowMinWidth) {
+                                              _journalMetadataRowMinWidth +
+                                                  (isAndroid &&
+                                                          _selectedEntry != null
+                                                      ? _journalAddImagesWidth
+                                                      : 0)) {
                                         return Column(
                                           children: [
                                             line(moodBar),

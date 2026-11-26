@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/spellcheck/autocorrect_engine.dart';
 import 'package:voyager/core/spellcheck/autocorrect_session.dart';
 import 'package:voyager/core/spellcheck/voyager_spell_check_service.dart';
@@ -397,7 +398,13 @@ EditableTextContextMenuBuilder _buildContextMenuBuilder({
         ? resolveSnippetTrigger(editableTextState)
         : null;
     if (hydrated == null && flaggable == null && trigger == null) {
-      return const SizedBox.shrink();
+      // Android keeps its selection toolbar (BUG-404); see
+      // [TextFieldContextMenu].
+      return isAndroid
+          ? AdaptiveTextSelectionToolbar.editableText(
+              editableTextState: editableTextState,
+            )
+          : const SizedBox.shrink();
     }
     return TextFieldContextMenu(
       editableTextState: editableTextState,

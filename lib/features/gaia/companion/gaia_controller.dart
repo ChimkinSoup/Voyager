@@ -417,7 +417,10 @@ class GaiaController extends ChangeNotifier {
       unawaited(_deleteQuietly(capture.path));
     }
     final back = _beforeCrop ?? (region == null ? null : GaiaMode.small);
-    if (back != null) return _show(back, behind: region == null && _cropBehind);
+    if (back != null) {
+      await _show(back, behind: region == null && _cropBehind);
+      return _showTidyToast();
+    }
     _window.hide();
     onScreen.value = false;
     layout = GaiaMode.small;
@@ -603,7 +606,7 @@ class GaiaController extends ChangeNotifier {
   }
 
   /// The window of the last summon, which `/window` puts back once removed
-  /// or sent.
+  /// or sent, or attaches when the setting leaves it off the draft.
   GaiaContextPart? _summonWindow;
 
   /// `/window`: the chip off the draft, or back on it.
@@ -612,8 +615,8 @@ class GaiaController extends ChangeNotifier {
     if (_summonWindow == null) {
       return _note(
         'No window to attach',
-        'Gaia was opened with no window in front, or "Say which window Gaia '
-            'was opened from" is off in Settings.',
+        'Gaia was opened with no window in front, or from an app or site '
+            'on the "Never read" list.',
       );
     }
     windowContext = _summonWindow;
@@ -1300,6 +1303,19 @@ class GaiaController extends ChangeNotifier {
       StreamController<
         ({GaiaRunToast toast, Future<void> Function() undo})
       >.broadcast();
+
+  /// A scheduled weekly sweep's toast (GAIA_MEMORY_TOPICS_HLD.md §27.4),
+  /// held until Gaia is next on screen, so it isn't missed while hidden.
+  Stream<GaiaRunToast> get tidyToasts => _tidyToasts.stream;
+  final _tidyToasts = StreamController<GaiaRunToast>.broadcast();
+  GaiaRunToast? _tidyToast;
+
+  void _showTidyToast() {
+    final toast = _tidyToast;
+    if (toast == null || !onScreen.value || cropping != null) return;
+    _tidyToast = null;
+    _tidyToasts.add(toast);
+  }
 
   /// A side question's toast (§14), which opens it when clicked.
   Stream<({GaiaRunToast toast, String btwId})> get btwToasts =>
@@ -2099,9 +2115,12 @@ class GaiaController extends ChangeNotifier {
     // The list shows it, not a review in progress.
     closeAsk();
     review = null;
-    // The list last read may be from before [id] was remembered: the tab
-    // waits for a fresh one to look for it in.
-    memoryList = null;
+    // The list last read may be from before [id] was remembered: then the
+    // tab waits for a fresh one to look for it in. One that has it shows
+    // at once, and is read again behind it.
+    if (memoryList?.memories.every((memory) => memory.id != id) ?? false) {
+      memoryList = null;
+    }
     await openPanel(tab: GaiaPanelTab.memories);
   }
 
@@ -2452,6 +2471,7 @@ class GaiaController extends ChangeNotifier {
     });
     panel.addListener(_syncStatusWatch);
     onScreen.addListener(_syncStatusWatch);
+    onScreen.addListener(_showTidyToast);
     _pipe
       ..onEvent = _onEvent
       ..onRequest = _onRequest
@@ -3284,12 +3304,13 @@ class GaiaController extends ChangeNotifier {
       case 'capture':
         unawaited(_onCapture(params));
       case 'context':
-        windowContext = switch (params['window']) {
+        _summonWindow = switch (params['window']) {
           final Map<Object?, Object?> json =>
             GaiaPart.fromJson(json.cast()) as GaiaContextPart,
           _ => null,
         };
-        _summonWindow = windowContext;
+        // With the setting off it waits for `/window`.
+        windowContext = params['attach'] != false ? _summonWindow : null;
         _summonSelection = params['selection'] as String? ?? '';
         notifyListeners();
       case 'pointed':
@@ -4153,6 +4174,9 @@ class GaiaController extends ChangeNotifier {
     final utility = _utility;
     if (utility == null) return "Gaia's utility model isn't set up.";
     final elapsed = Stopwatch()..start();
+    // Set once a plan came back: a failed plan request isn't a failed sweep,
+    // and is simply asked again next tick.
+    var started = false;
     try {
       final planned = await _pipe.request('sweepPlan', {'force': force});
       if (planned is! Map) {
@@ -4163,6 +4187,7 @@ class GaiaController extends ChangeNotifier {
         return null;
       }
       final plan = gaiaSweepPlanFromJson(planned);
+      started = true;
       final at = plan.at.toIso8601String();
       final found = <GaiaSweepFound>[];
       var calls = 0;
@@ -4257,17 +4282,62 @@ class GaiaController extends ChangeNotifier {
           '${(elapsed.elapsedMilliseconds / 1000).toStringAsFixed(1)} s'
           '${failed == 0 ? '' : '; $failed failed, so it runs again in a day'}';
       debugPrint('[gaia] memory sweep: $said');
+      if (!force) {
+        final news = [
+          if (kept > 0)
+            '$kept ${kept == 1 ? 'suggestion' : 'suggestions'} in the inbox',
+          if (placed > 0)
+            '$placed unsorted ${placed == 1 ? 'memory' : 'memories'} '
+                'with a suggested topic',
+        ];
+        _tidied(
+          'Memories tidied',
+          [
+            news.isEmpty
+                ? 'Nothing to suggest this time.'
+                : '${news.join(', and ')}.',
+            if (failed > 0) "Some calls failed, so it'll try again tomorrow.",
+          ].join(' '),
+          error: failed > 0,
+        );
+      }
       if (memoryList != null) await _loadMemories();
       return said;
     } on GaiaPipeException catch (error) {
       debugPrint('[gaia] memory sweep: $error');
+      if (started) {
+        _sweepFailedAt = DateTime.now();
+        if (!force) _tidyFailed(error.message);
+      }
       return error.message;
     } catch (error) {
       // Run from the idle timer unawaited: a bad answer is said, not thrown.
       debugPrint('[gaia] memory sweep failed: $error');
+      if (started) {
+        _sweepFailedAt = DateTime.now();
+        if (!force) _tidyFailed('Something went wrong');
+      }
       return 'The sweep failed: $error';
     }
   }
+
+  /// A scheduled sweep's outcome, for its toast once Gaia is on screen.
+  void _tidied(String title, String body, {required bool error}) {
+    _tidyToast = (
+      chatId: '',
+      title: title,
+      body: body,
+      error: error,
+      question: false,
+    );
+    _showTidyToast();
+  }
+
+  void _tidyFailed(String why) => _tidied(
+    "Memory tidy didn't finish",
+    "${why.endsWith('.') ? why : '$why.'} It'll try again tomorrow.",
+    error: true,
+  );
 
   /// A notification clicked, or a chat picked on the Gaia page.
   Future<void> openChat(String chatId, {String? btwId}) async {

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/gestures.dart'
     show PointerDeviceKind, kSecondaryMouseButton;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderAnimatedOpacity;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
@@ -93,6 +94,7 @@ void main() {
   Future<GaiaController> pump(
     WidgetTester tester, {
     GaiaUtility? utility,
+    GaiaSettings? settings,
   }) async {
     tester.view.physicalSize = const Size(1200, 1400);
     tester.view.devicePixelRatio = 1;
@@ -152,7 +154,7 @@ void main() {
               'aborted': false,
               'accent': 0xFF7C9EFF,
               'deviceId': 'laptop',
-              'settings': GaiaSettings.initial().toJson(),
+              'settings': (settings ?? GaiaSettings.initial()).toJson(),
               'inbox': 120,
             };
           case 'chats':
@@ -822,9 +824,29 @@ void main() {
     expect(inTab(find.text('Suggested:')), findsOneWidget);
   });
 
-  testWidgets('Tidy memories weekly is off at first, and saved when turned '
-      'on', (tester) async {
+  testWidgets('Tidy memories weekly is on at first, and saved when turned '
+      'off', (tester) async {
     final controller = await pump(tester);
+    await open(tester, controller);
+    final tile = find.ancestor(
+      of: find.text('Tidy memories weekly'),
+      matching: find.byType(GaiaPanelSwitch),
+    );
+    expect(tester.widget<GaiaPanelSwitch>(tile).value, isTrue);
+    await tester.tap(inTab(find.text('Tidy memories weekly')));
+    await settle(tester);
+    expect(
+      sent('putSettings').single['changes'] ?? sent('putSettings').single,
+      {'tidyMemories': false},
+    );
+  });
+
+  testWidgets('Tidy memories weekly turned on is saved with this device',
+      (tester) async {
+    final controller = await pump(
+      tester,
+      settings: GaiaSettings.initial().copyWith(tidyMemories: false),
+    );
     await open(tester, controller);
     final tile = find.ancestor(
       of: find.text('Tidy memories weekly'),
@@ -835,7 +857,7 @@ void main() {
     await settle(tester);
     expect(
       sent('putSettings').single['changes'] ?? sent('putSettings').single,
-      allOf(containsPair('tidyMemories', true), contains('tidyMemoriesDevice')),
+      {'tidyMemories': true, 'tidyMemoriesDevice': 'laptop'},
     );
   });
 
@@ -905,6 +927,83 @@ void main() {
     );
   });
 
+  testWidgets('a reveal far down glides into place: the jumps that find '
+      'its card stay hidden', (tester) async {
+    final controller = await pump(tester);
+    memories = [
+      memory('old', 'The oldest thing I told Gaia'),
+      for (var i = 0; i < 300; i++) memory('f$i', 'Filler memory number $i'),
+    ];
+    await open(tester, controller);
+    await tester.runAsync(() async => controller.closePanel());
+    await settle(tester);
+    await tester.runAsync(() => controller.openMemory('old'));
+    final fade = inTab(find.byType(AnimatedOpacity)).first;
+    double? last;
+    var shownFrames = 0;
+    for (var i = 0; i < 120; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      final shown =
+          tester.renderObject<RenderAnimatedOpacity>(fade).opacity.value > 0;
+      final position = tester
+          .state<ScrollableState>(inTab(find.byType(Scrollable)).first)
+          .position;
+      if (!shown) {
+        expect(shownFrames, 0, reason: 'hidden again after showing');
+        continue;
+      }
+      shownFrames++;
+      if (last != null) {
+        final step = position.pixels - last;
+        expect(step, greaterThanOrEqualTo(0));
+        expect(step, lessThan(position.viewportDimension / 2));
+      }
+      last = position.pixels;
+    }
+    expect(shownFrames, greaterThan(20));
+    expect(
+      inTab(find.text('The oldest thing I told Gaia')).hitTestable(),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a reveal lands on its memory wherever it is in the list, '
+      'among cards of every height and section', (tester) async {
+    final controller = await pump(tester);
+    memories = [
+      for (var i = 0; i < 127; i++)
+        memory(
+          'k$i',
+          'Memory $i ${List.filled(1 + (i * 7) % 23, 'word').join(' ')}',
+          status: i % 17 == 3
+              ? GaiaMemoryStatus.proposed
+              : i % 13 == 5
+              ? GaiaMemoryStatus.archived
+              : GaiaMemoryStatus.active,
+          pinned: i % 29 == 7,
+          topicIds: [if (i.isEven) 't2', if (i % 3 == 0) 't3'],
+          tags: [if (i % 4 == 0) 'tag$i'],
+          sourceChatId: i.isOdd ? 'c1' : null,
+        ),
+    ];
+    await open(tester, controller);
+    for (final id in ['k0', 'k3', 'k5', 'k20', 'k60', 'k64', 'k90', 'k126']) {
+      await tester.runAsync(() async => controller.closePanel());
+      await settle(tester);
+      await tester.runAsync(() => controller.openMemory(id));
+      for (var i = 0; i < 100; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await settle(tester);
+      final text = memories.singleWhere((memory) => memory.id == id).text;
+      expect(
+        inTab(find.text(text)).hitTestable(),
+        findsOneWidget,
+        reason: '$id not in view',
+      );
+    }
+  });
+
   testWidgets('the inbox chip opens Memories at its inbox, from inside a '
       'topic with a search typed', (tester) async {
     final controller = await pump(tester);
@@ -958,6 +1057,25 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.text('Not found'), findsNothing);
     expect(inTab(find.text('Remembered just now')), findsOneWidget);
+  });
+
+  testWidgets('a recall chip for a memory the tab already has shows it at '
+      'once, and reads the list again behind it', (tester) async {
+    final controller = await pump(tester);
+    await open(tester, controller);
+    await tester.runAsync(() async => controller.closePanel());
+    await settle(tester);
+    final reads = sent('memories').length;
+    final held = Completer<void>();
+    memoriesHeld = held.future;
+    await tester.runAsync(() => controller.openMemory('m6'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(inTab(find.text('Pack sunscreen')), findsOneWidget);
+    expect(sent('memories'), hasLength(reads + 1));
+    held.complete();
+    await settle(tester);
+    expect(tester.takeException(), isNull);
+    expect(inTab(find.text('Pack sunscreen')), findsOneWidget);
   });
 
   testWidgets('the memories event reads it again only while it shows', (

@@ -2904,7 +2904,7 @@ class GaiaSettings extends SoftDeletable {
     this.splitGaiaRight = false,
     this.userName = '',
     this.memoryAlertAt = kGaiaDefaultMemoryAlertAt,
-    this.tidyMemories = false,
+    this.tidyMemories = true,
     this.tidyMemoriesDevice = '',
   }) : super(id: singletonId);
 
@@ -2995,7 +2995,8 @@ class GaiaSettings extends SoftDeletable {
   final bool tidyMemories;
 
   /// The device [tidyMemories] was turned on on, the one that sweeps: the
-  /// setting syncs, the sweep's state and suggestions don't.
+  /// setting syncs, the sweep's state and suggestions don't. Empty while on
+  /// by default, until a desktop claims it after its startup pull.
   final String tidyMemoriesDevice;
 
   /// [tier]'s agent; null when the tier has none, or its agent was removed.

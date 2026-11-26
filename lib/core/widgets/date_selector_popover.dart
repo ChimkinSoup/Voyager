@@ -634,8 +634,10 @@ class _DateSelectorPopoverState extends ConsumerState<DateSelectorPopover>
       focusNode: _focusNode,
       onKeyEvent: (node, event) {
         // Esc goes on to the popover's route, which closes without a pick
-        // as a click outside does.
-        if (event.logicalKey == LogicalKeyboardKey.escape) {
+        // as a click outside does. So does Android's Back: claimed here, it
+        // never reached the navigator and the popover stayed open (BUG-412).
+        if (event.logicalKey == LogicalKeyboardKey.escape ||
+            event.logicalKey == LogicalKeyboardKey.goBack) {
           return KeyEventResult.ignored;
         }
         _handleKeyEvent(event);

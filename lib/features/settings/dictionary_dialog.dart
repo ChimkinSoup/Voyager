@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/layout/hover_inset.dart';
+import 'package:voyager/core/layout/window_size_class.dart';
 import 'package:voyager/core/spellcheck/dictionary_search.dart';
 import 'package:voyager/core/spellcheck/flagged_word_rules.dart';
 import 'package:voyager/core/spellcheck/word_token.dart';
@@ -367,8 +368,23 @@ class _DictionaryDialogState extends ConsumerState<_DictionaryDialog> {
         !flagged.contains(word) &&
         (bundled.contains(word) || custom.contains(word));
     final canAdd = ready && !_saving && word.isNotEmpty && !known;
+    // A phone: the content scrolls as a whole, so with the keyboard up (which
+    // the dialog shrinks above) the list and the row being edited stay
+    // reachable, and the inset gives the rows the width they need (BUG-406).
+    final compact = context.isCompactWidth;
+    final results = !ready
+        ? const Center(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: CircularProgressIndicator(),
+            ),
+          )
+        : _buildResults(theme, bundled, custom, flaggedPairs, compact);
 
     return AlertDialog(
+      insetPadding: compact
+          ? const EdgeInsets.symmetric(horizontal: 12, vertical: 24)
+          : null,
       // The body is inset by [kHoverRowInset] except for its word rows, so
       // their hover fill can reach the dialog's padding while their words
       // line up with the title and the field.
@@ -376,101 +392,102 @@ class _DictionaryDialogState extends ConsumerState<_DictionaryDialog> {
         padding: EdgeInsets.symmetric(horizontal: kHoverRowInset),
         child: Text('Dictionary'),
       ),
-      content: SizedBox(
-        width: 520,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
-              child: Text(
-                'Words you add here are accepted by the spell checker everywhere '
-                'in the app, and words you flag are marked everywhere. Search to '
-                'see whether a word is already known.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
-              child: IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(
-                      child: LabeledTextField(
-                        label: '',
-                        showLabel: false,
-                        hintText: 'Search or add a word',
-                        controller: _controller,
-                        focusNode: _focusNode,
-                        dense: true,
-                        // Typing a word that isn't in the dictionary yet is the
-                        // whole point of this field, so it must not be a fight
-                        // with squiggles or an expanding snippet. (Single-line
-                        // fields are already exempt from spellcheck.)
-                        snippetsAllowed: false,
-                        autocorrectAllowed: false,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 15,
-                          vertical: 8,
-                        ),
-                        onSubmitted: (_) => _add(bundled, custom, flagged),
-                        // Left to its default Enter takes the focus out of the
-                        // field, so a word turned away could not be fixed from
-                        // the keyboard (BUG-026).
-                        onEditingComplete: () {},
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    GlassButton(
-                      dense: true,
-                      onPressed: canAdd
-                          ? () => _add(bundled, custom, flagged)
-                          : null,
-                      icon: const Icon(PhosphorIconsRegular.plus),
-                      tooltip: known && word.isNotEmpty
-                          ? '"$word" is already known'
-                          : 'Add word',
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            if (_error != null || _notice != null) ...[
-              const SizedBox(height: 8),
+      content: _scrollsIfCompact(
+        compact,
+        SizedBox(
+          width: 520,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
                 child: Text(
-                  _error ?? _notice!,
+                  'Words you add here are accepted by the spell checker everywhere '
+                  'in the app, and words you flag are marked everywhere. Search to '
+                  'see whether a word is already known.',
                   style: theme.textTheme.bodySmall?.copyWith(
-                    color: _error != null
-                        ? theme.colorScheme.error
-                        : theme.colorScheme.onSurfaceVariant,
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
               ),
-            ],
-            const SizedBox(height: 16),
-            // Flexible so the list gives up height in a short window rather
-            // than pushing the dialog past its bottom edge.
-            Flexible(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 320),
-                child: !ready
-                    ? const Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(24),
-                          child: CircularProgressIndicator(),
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
+                child: IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: LabeledTextField(
+                          label: '',
+                          showLabel: false,
+                          hintText: 'Search or add a word',
+                          controller: _controller,
+                          focusNode: _focusNode,
+                          dense: true,
+                          // Typing a word that isn't in the dictionary yet is the
+                          // whole point of this field, so it must not be a fight
+                          // with squiggles or an expanding snippet. (Single-line
+                          // fields are already exempt from spellcheck.)
+                          snippetsAllowed: false,
+                          autocorrectAllowed: false,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 15,
+                            vertical: 8,
+                          ),
+                          onSubmitted: (_) => _add(bundled, custom, flagged),
+                          // Left to its default Enter takes the focus out of the
+                          // field, so a word turned away could not be fixed from
+                          // the keyboard (BUG-026).
+                          onEditingComplete: () {},
                         ),
-                      )
-                    : _buildResults(theme, bundled, custom, flaggedPairs),
+                      ),
+                      const SizedBox(width: 8),
+                      GlassButton(
+                        dense: true,
+                        onPressed: canAdd
+                            ? () => _add(bundled, custom, flagged)
+                            : null,
+                        icon: const Icon(PhosphorIconsRegular.plus),
+                        tooltip: known && word.isNotEmpty
+                            ? '"$word" is already known'
+                            : 'Add word',
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ),
-          ],
+              if (_error != null || _notice != null) ...[
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: kHoverRowInset,
+                  ),
+                  child: Text(
+                    _error ?? _notice!,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: _error != null
+                          ? theme.colorScheme.error
+                          : theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 16),
+              if (compact)
+                results
+              else
+                // Flexible so the list gives up height in a short window rather
+                // than pushing the dialog past its bottom edge.
+                Flexible(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 320),
+                    child: results,
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
       actions: [
@@ -488,6 +505,7 @@ class _DictionaryDialogState extends ConsumerState<_DictionaryDialog> {
     Set<String> bundled,
     Set<String> custom,
     Map<String, String?> flaggedPairs,
+    bool compact,
   ) {
     final result = _result;
     final customCount = result.custom.length;
@@ -516,6 +534,10 @@ class _DictionaryDialogState extends ConsumerState<_DictionaryDialog> {
     return ListView.builder(
       controller: _scrollController,
       shrinkWrap: true,
+      // Not the status bar's: the list is inside a dialog.
+      padding: EdgeInsets.zero,
+      // On a phone the dialog's content scrolls as a whole.
+      physics: compact ? const NeverScrollableScrollPhysics() : null,
       itemCount: customCount + flaggedCount + bundledCount + hintRows,
       itemBuilder: (context, index) {
         if (index < customCount) {
@@ -609,6 +631,12 @@ class _DictionaryDialogState extends ConsumerState<_DictionaryDialog> {
     );
   }
 }
+
+/// The dialog's content, scrolling on a phone. Not the dialog's own
+/// `scrollable`, which measures the content's intrinsic height, and a
+/// [ListView] can't be measured that way.
+Widget _scrollsIfCompact(bool compact, Widget content) =>
+    compact ? SingleChildScrollView(child: content) : content;
 
 /// One of the user's own words: renameable, removable.
 class _CustomWordRow extends StatelessWidget {
@@ -720,17 +748,18 @@ class _FlaggedWordRow extends StatelessWidget {
       contentPadding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
       // Same affordance as a custom row: the whole row opens the editor.
       onTap: onEdit,
-      title: Row(
+      // Wrapped rather than cut short: on a phone the rule had ~70 dp beside
+      // the label, and "selfi…" said neither the word nor its replacement
+      // (BUG-406). The label drops to the next line when it doesn't fit.
+      title: Wrap(
+        spacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          Flexible(
-            child: Text(
-              // The arrow is the rule, so it is only drawn when there is one.
-              replacement == null ? word : '$word → $replacement',
-              style: theme.textTheme.bodyMedium,
-              overflow: TextOverflow.ellipsis,
-            ),
+          Text(
+            // The arrow is the rule, so it is only drawn when there is one.
+            replacement == null ? word : '$word → $replacement',
+            style: theme.textTheme.bodyMedium,
           ),
-          const SizedBox(width: 8),
           Text(
             'Flagged',
             style: theme.textTheme.labelSmall?.copyWith(color: faint),

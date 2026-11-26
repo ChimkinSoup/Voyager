@@ -4171,6 +4171,7 @@ Entry format:
 - Actual: no menu appears. Long-press on a journal card just opens the entry; on a task row it opens the edit panel (tablet) or does nothing visible (phone) (`m2-tab-task-long.png`, `m2-journal-longpress.png`, `m2-todo-longpress2.png`). `ContextMenuRegion` (`context_menu.dart:169`) opens only on `onSecondaryTapUp`, i.e. a mouse right-click; it has no `onLongPress`. So every action that lives only in such a menu is unreachable by touch. Confirmed for: To-Do rows (`todo_page.dart:4407-4468`: Star, Mark complete, **Send to bottom, Due today / tomorrow / Pick a date / Reset due date, Move task to, Delete task**; the task edit panel has no delete button, so a task can't be deleted on the phone at all, and a swipe on a row doesn't delete it either), Journal cards (`journal_page.dart:2856-2875`: **Statistics, Change Journal**, Delete; Delete is also the editor's trash icon), Dreams cards (See statistics, Delete). About 30 files use `ContextMenuRegion` (Study cards, LeetCode, Workout, Finance, Rankings, Calendar day grid, Search, the inbox, Photos, Settings palette …); each page phase should check which of its actions have another route.
 - Expected: a long-press opens the same menu on touch (or every row offers a visible "⋯" `ContextMenuButton`), as MOBILE_TEST_PLAN.md D4 requires ("no hover-only or right-click-only action left without a touch equivalent").
 - Notes: Settings' palette help text still tells phone users to "right-click one to replace every use of it" (noted in M1 for M21). Not fixed (audit rule).
+- Notes (fixed 2026-11-26, uncommitted): `ContextMenuRegion` (`context_menu.dart`) also opens its menu on a long press from touch or a stylus, with the platform's long-press feedback; a mouse is unchanged. A submenu parent opens its flyout on a tap, since touch has no hover. All ~30 regions get this except one inside a `ReorderableDelayedDragStartListener` (Rankings rows, where a long press lifts the row to reorder): that keeps its drag and still has no touch route to its menu. Test: `mobile_touch_layout_bug395_402_test.dart` "BUG-395 …" (touch opens the menu and its items act, a submenu opens on a tap, a held mouse doesn't open it, a reorderable row keeps its drag); the first two fail on the old code. On the phone (OnePlus 12R, debug build of `52b8cb90` + uncommitted work, qa-130, 2026-11-26): long-press "M2 task 15" showed Star, Mark as completed, Send to bottom, Due today/tomorrow, Pick a date, Move task to ›, Delete task (`fx395-todo-long.png`); "Move task to" opened its list on a tap (`fx395-todo-submenu.png`); Delete task → "Delete task?" → Delete removed it (24 → 23, Undo toast). Long-press on a journal card showed Statistics / Change Journal / Delete without opening the entry, and Statistics opened the stats dialog (`fx395-journal-long.png`, `fx395-journal-stats.png`). Dreams cards use the same region (not re-checked on the phone). **Fixed and verified.**
 
 ### BUG-396 [M2] The forecast at 361 dp is a centred dialog, not a phone sheet, and its day cards truncate and overflow
 - Severity: Minor
@@ -4179,6 +4180,7 @@ Entry format:
 - Actual: the forecast opens as a centred dialog with a close ✕ (`m2-forecast.png`). A drag down does nothing; Back and ✕ close it. In the five day cards the weekday is cut to "Tu…", "W…", "Th…", the high/low wraps onto two lines and the rain chance is cut ("100" without its %, "0%" half hidden), and the selected card logs `A RenderFlex overflowed by 1.00 pixels on the bottom` with the debug band over it (`m2-forecast-thu.png`). Picking a day redraws the chart as it should.
 - Expected: MOBILE_TEST_PLAN.md M2: "the forecast sheet opens as a phone sheet … the sheet drags down to close", with day cards that fit 361 dp.
 - Notes: today's chart shows only the evening hours (the rest of the day is past), which looks empty at first glance. Not fixed (audit rule).
+- Notes (fixed 2026-11-26, uncommitted): on Android `showWeatherForecastSheet` opens a `showVoyagerSheet` bottom sheet with the standard grab handle, which drags down to close; desktop keeps the dialog. Each day card's content sits in a `FittedBox(scaleDown)` and drops the month below 72 dp wide ("Thu 26"), so nothing is cut and nothing overflows. Test: `mobile_touch_layout_bug395_402_test.dart` "BUG-396 …" (a sheet with a handle, no overflow at 361 dp, a fling closes it); fails on the old code. `weather_forecast_no_location_test.dart` now runs on Windows, since it checks the dialog. On the phone (debug build of `52b8cb90` + uncommitted work, qa-130, 2026-11-26): the forecast opened as a sheet with a handle and all five cards read in full, e.g. "Thu 26 / 6° / 4° / 100%" (`fx396-forecast.png`); the run log had no overflow; a drag down closed it (`fx396-after-drag.png`). **Fixed and verified.**
 
 ### BUG-397 [M2] At font scale 2.0 every bottom-bar label overflows
 - Severity: Minor
@@ -4187,6 +4189,7 @@ Entry format:
 - Actual: all five items log `A RenderFlex overflowed by 1.00 pixels on the bottom` (one 3.0 px) and draw the debug band along the bar; the labels are cut to "Jou", "Drea…", "Cale…", and Journal's selection outline is clipped (`m2-font2-journal.png`). The bar keeps its fixed `shellNavItemHeight` while the label grows.
 - Expected: the bar grows with the text or the labels scale down/ellipsize without overflowing. At 1.3 it fits (`m2-font13.png`); the More sheet at 2.0 is fine (it scrolls).
 - Notes: Not fixed (audit rule).
+- Notes (fixed 2026-11-26, uncommitted): `ShellNavItem` (the bottom bar's and the rail's) caps its label's text scale at 1.3, as Material's own navigation bars do; the item keeps its fixed height. Test: `mobile_touch_layout_bug395_402_test.dart` "BUG-397 …" (361 dp, scale 2.0, no overflow); fails on the old code. On the phone (debug build of `52b8cb90` + uncommitted work, qa-130, 2026-11-26) at `font_scale 2.0`: Journal, Dreams, To-Do, Calendar and More all whole, and no overflow logged (`fx397-font2.png`); font scale set back to 1.0. **Fixed and verified.**
 
 ### BUG-398 [M2] The bottom bar stays on screen above the soft keyboard and covers the controls under a focused field
 - Severity: Minor
@@ -4195,6 +4198,7 @@ Entry format:
 - Actual: the compact shell keeps `ShellBottomNav` laid out above the keyboard, taking ~160 px of the ~1,100 px left. The field scrolls into view but the "Save location" button right under it sits behind the bar and can't be tapped until the keyboard is closed (`m2-weather-saved.png`); in To-Do only three tasks stay visible above the composer (`m2-todo-seeded.png`). The keyboard's ✓ did save the location, so there was a way out here.
 - Expected: the bar hides while the keyboard is up (the usual Android pattern), so the space above the keyboard belongs to the page and nothing the user needs is hidden (MOBILE_TEST_PLAN.md D3 "soft keyboard open").
 - Notes: seen in M0 too (`m0-kbd.png`); it adds to BUG-385, where the journal body collapses with the keyboard up. Not fixed (audit rule).
+- Notes (fixed 2026-11-26, uncommitted): `ShellBottomNav` moved from the bottom of the compact shell's column into the Scaffold's `bottomNavigationBar` slot (`app_shell.dart`), so the body resizes above the keyboard and the keyboard covers the bar. No widget test (it needs the full `AppShell`). On the phone (debug build of `52b8cb90` + uncommitted work, qa-130, 2026-11-26): with a journal body focused and Gboard up, the bar is behind the keyboard and the editor runs down to the keyboard, body text and caret in view (`fx398-kbd-journal.png`). **Fixed and verified.**
 
 ### BUG-399 [M2] Settings on Android shows a "Caps Lock indicator" switch that does nothing there
 - Severity: Cosmetic
@@ -4203,6 +4207,7 @@ Entry format:
 - Actual: "Caps Lock indicator — Shows a mark next to the caret while Caps Lock is on … Windows and Linux only" is listed and can be toggled on the phone (`settings_page.dart`, not gated by platform), while the hotkeys right below it are replaced by "Global hotkeys: Available on Windows only".
 - Expected: hidden on Android like the other desktop-only settings (MOBILE_TEST_PLAN.md M2 "desktop-only pieces absent").
 - Notes: no Start with Windows, folder backups or heat watch appear (checked: Editing and Data tabs). Not fixed (audit rule).
+- Notes (fixed 2026-11-26, uncommitted): the switch shows only on Windows and Linux (`settings_page.dart`), where the indicator draws. On the phone (debug build of `52b8cb90` + uncommitted work, qa-130, 2026-11-26): Settings → Editing reads Vim keybindings, Autocorrect, Text snippets (`fx399-editing.png`). **Fixed and verified.**
 
 ### BUG-400 [M2] The finance transaction editor on Android has no grab handle and can't be dragged down to close, unlike VOYAGER_SHEET_DISMISS_HLD's Android rule
 - Severity: Minor
@@ -4211,6 +4216,7 @@ Entry format:
 - Actual: no grab pill is drawn and the drag does nothing (`m2-fin-drag2.png`). Back and ✕ close it; the typed amount was kept and shown again on reopening (`m2-fin-reopen.png`), so nothing was lost.
 - Expected: VOYAGER_SHEET_DISMISS_HLD.md classes Finance transaction as an `editor` and says "Drag stays on for Android … if drag remains on, keep or add a real handle so the gesture stays discoverable" (MOBILE_TEST_PLAN.md M2 "every sheet shows a grab handle and drags down to close on Android").
 - Notes: the More sheet does have a handle and drags closed. The LeetCode track form, Study card editor/import and workout target editor (the HLD's other editors) weren't reached in M2; their pages' phases (M13, M16, M17) should check them. Not fixed (audit rule).
+- Notes (fixed 2026-11-26, uncommitted): the transaction editor opens as `VoyagerSheetKind.editor` (drag on Android only, VOYAGER_SHEET_DISMISS_HLD.md §5) instead of `enableDrag: false`, with a `VoyagerSheetHandle` above the form on Android, outside the form's scroll view (`finance_transaction_modal.dart`). Desktop is unchanged: a dialog with no handle. The subscription editor, the HLD's other finance editor, still has `enableDrag: false` and no handle; not changed here. No widget test. On the phone (debug build of `52b8cb90` + uncommitted work, qa-130, 2026-11-26): the sheet shows the handle (`fx400-txn-open.png`); with the keyboard closed a drag down from the title row closed it, and with the keyboard up a drag from the handle did (from the title row the form scrolls instead); the typed 12 came back as 12.00 on reopening (`fx400-kbd-closed.png`). Found while checking: BUG-411, BUG-412. **Fixed and verified.**
 
 <!-- Last ID: BUG-400. -->
 
@@ -4221,6 +4227,7 @@ Entry format:
 - Actual: nothing expands with either key (`qqa ` stays). Gboard commits the space as text, not as a key event, so the snippet layer never sees an expand key. A hardware Tab (`input keyevent 61`) does expand it and advances tabstops, so the snippet itself works.
 - Expected: SNIPPET.md §7 / the plan: the Space expand key works by soft keyboard.
 - Notes: auto-expanding snippets do expand on Gboard input (caret on `$0` as §4 says); tabstops can't advance without Tab (documented v1 limit, SNIPPET.md §9). Not fixed (audit rule).
+- Notes (fixed 2026-11-26, uncommitted): `SnippetSession` also expands a manual trigger when the text change is a typed space right after it, taking the space with it as the key path does. After a hardware Space that already missed, it asks the same question of the same text and misses again. Tests: `snippet_expansion_test.dart` group "a soft keyboard's Space, which arrives as text (BUG-401)" (a Gboard-style commit, a space typed alone, not with Tab as the expand key, not a pasted space on desktop); the first two fail on the old code. On the phone (debug build of `52b8cb90` + uncommitted work, qa-130, 2026-11-26), with Space as the expand key, tapping Gboard's own q, q, a and space turned `land qqa` into `land Quick answer` with the caret after it (`fx401-expanded.png`). Expand key set back to Tab afterwards. **Fixed and verified.**
 
 ### BUG-402 [M3] The Text snippets dialog is unusable at phone width: the new-snippet row is crushed and the dialog overflows with the keyboard up
 - Severity: Major
@@ -4229,6 +4236,7 @@ Entry format:
 - Actual: at 361 dp the "Expand key" text wraps to a narrow column ("automati / cally"); the add row's checkbox labels render one letter per line ("E x p a n d a u t", "O n l y a t w o r d b"), the Replacement field is ~3 characters wide, Trigger/Replacement are cut at the top. With the keyboard up: "BOTTOM OVERFLOWED BY 118 PIXELS" and the fields are hidden (`m3-snip-add-std.png`, `m3-snip-add-std-nokbd.png`); at 360×640 dp 301 px (`m3-snip-add-360.png`). Saved rows truncate the replacement ("Quic…"). Typing blind and saving still stored the snippet.
 - Expected: the dialog lays out as a phone sheet/scrolling form; nothing the user needs is hidden under the keyboard.
 - Notes: the long-press Add snippet quick editor fits (its "Expand auto matically" label also breaks mid-word). (2026-11-25) At font scale 2.0 the dialog overflows by 1146 px and the Expand key label breaks one letter per line (`m3b-snip-f2.png`); at tablet size (800 dp) it lays out correctly. Not fixed (audit rule).
+- Notes (fixed 2026-11-26, uncommitted): at compact width the dialog's inset is 12 dp and its content scrolls as a whole (not through `AlertDialog.scrollable`, which measures the content's intrinsic height), Expand key's Tab/Space sits on its own row, and the list no longer picks up the status bar's padding. `SnippetEditor` stacks its fields, checkboxes and buttons below 480 dp wide, which also fixes the quick-add editor's "Expand auto matically". Desktop sizes are unchanged. Tests: `mobile_touch_layout_bug395_402_test.dart` "BUG-402 …" (labels not squeezed, Replacement wider than 200 dp, no overflow with a 330 dp keyboard or at font scale 2.0); all three fail on the old code. On the phone (debug build of `52b8cb90` + uncommitted work, qa-130, 2026-11-26): the dialog fits (`fx402-padding.png`); Add snippet with Gboard up shrinks it above the keyboard with Trigger in view, and a scroll shows Replacement, both checkboxes and Cancel/Save (`fx402-add-kbd.png`, `fx402-add-kbd-scrolled.png`); no overflow logged. **Fixed and verified.**
 
 ### BUG-403 [M3] App autocorrect rewrites a word the user picked verbatim from Gboard's suggestion strip
 - Severity: Minor
@@ -4237,6 +4245,8 @@ Entry format:
 - Actual: the app corrects the picked word: `with`, `angry`. With the app's Autocorrect off both stay as picked, so it is the app (`_wasTyped` waves IME commits through on Android).
 - Expected: a word the user explicitly chose from the IME is not "corrected" (MOBILE_TEST_PLAN.md M3).
 - Notes: a soft Backspace right after does revert and suppress (`angry ` → `hangry`). Gboard corrects typos it knows itself (`wtih ` → `with`), once, no double correction. Not fixed (audit rule).
+- Notes (cause, 2026-11-26): a listener on the field's controller showed Gboard sends no composing range in this field, and picking the literal "wtih" from the strip arrives as one space inserted after the word, with no key event: exactly what typing a space looks like. Gboard's own Space corrected `wtih` itself, sent as one replacement of the word and the space. So the app can't tell "picked as typed" from "typed a space", and on a soft keyboard its cascade only reaches words the keyboard chose to leave alone.
+- Notes (fixed 2026-11-26, uncommitted): `AutocorrectSession` skips the speculative cascade at a boundary with no key event behind it on a platform without a hardware keyboard: the soft keyboard owns autocorrect there. A stored flagged-word pair still applies, and a hardware keyboard on the phone still gets the cascade. Trade-off: on a soft keyboard the app no longer corrects a typo the keyboard itself lets through. Tests: `autocorrect_session_test.dart` group "a soft keyboard, which sends no key events (BUG-403)"; the first case fails on the old code. On the phone (debug build of `52b8cb90` + uncommitted work, qa-130, 2026-11-26): `wtih` then the strip's literal "wtih" left `wtih end` (before the fix, the same steps turned it into `with`). **Fixed and verified.**
 
 ### BUG-404 [M3] Prose fields on Android have no Cut / Copy / Paste / Select all: long-press and double-tap show only the app's word menu
 - Severity: Minor
@@ -4245,6 +4255,7 @@ Entry format:
 - Actual: the word is selected and the app's menu shows (suggestions / Add to dictionary / Flag as misspelling… / Add snippet), never the selection toolbar. The only routes are Gboard's clipboard chip and its Text editing panel (Cut, Copy, Paste, Select all all work there). After Gboard's Copy the app's menu stays open as a stale one-item "Flag as misspelling…" card over the text.
 - Expected: the standard selection toolbar (MOBILE_TEST_PLAN.md M3 "Selection"), with the word actions added to it. Same root as BUG-389 (login fields).
 - Notes: Not fixed (audit rule).
+- Notes (fixed 2026-11-26, uncommitted): on Android the field's menu is the platform selection toolbar (`AdaptiveTextSelectionToolbar.buttonItems` in `text_field_context_menu.dart`), with the word actions (suggestions, Add to dictionary / Stop flagging, Flag as misspelling…, Add snippet) after Cut/Copy/Paste/Share/Select all and ahead of other apps' "process text" actions; a word with no actions still gets the plain toolbar (`spell_check_field_support.dart`). Desktop is unchanged. Tests: `snippet_quick_add_test.dart` "on Android a long press …" (two cases); both fail on the old code. The existing column-order case now runs on Windows. On the phone (debug build of `52b8cb90` + uncommitted work, qa-130, 2026-11-26): long-press on "phone" showed Cut, Copy, Share, Select all and ⋮ (`fx404-longpress.png`); on the misspelled "antihswer" the ⋮ list starts with Add to dictionary, Add snippet, then the other apps' actions (read through the VM and not screenshotted, since that list names the phone's installed apps). **Fixed and verified.**
 
 ### BUG-405 [M3] Ctrl+Z doesn't undo an auto-expanded snippet typed through Gboard
 - Severity: Minor
@@ -4253,6 +4264,7 @@ Entry format:
 - Actual: nothing changes, twice; Ctrl+Z right after typing words does undo (one character per step, since taps are >500 ms apart) and Ctrl+Shift+Z redoes. With the caret moved Home, Ctrl+Z neither undid nor moved the caret (inconclusive; recheck against `99bd8d07`).
 - Expected: one Undo restores the trigger (SNIPPET.md §5). The soft keyboard has no undo route at all apart from Gboard's undo chip after its own autocorrect.
 - Notes: Not fixed (audit rule).
+- Notes (2026-11-26, not an app defect): a key-event probe showed that `input keycombination 113 54` (also with `-t 400`) never delivers a chord: Gboard sits in between and the app gets Ctrl down, Ctrl up, then Z without Ctrl. When the Z didn't reach the app at all, Android undid Gboard's own last commit, which is the one-character-per-step undo M3 saw after typing words. Called directly right after a Gboard-typed `zzt` expansion, the snippet session's undo (what a real Ctrl+Z calls) restored `zzt` in one step. No code change. A real hardware keyboard stays in §6b (Juno). **Closed: harness artefact.**
 
 ### BUG-406 [M3] The Dictionary dialog doesn't fit a phone with the keyboard up, and flagged words are cut to a few letters
 - Severity: Minor
@@ -4261,6 +4273,7 @@ Entry format:
 - Actual: flagged rows show "selfi…" and "the…" (the `word → replacement` text gets ~70 dp beside the "Flagged" chip), so neither the word nor its replacement can be read at any phone size (`m3b-dict.png`, `m3b-dict-360.png`). With the keyboard up at 361 dp the list shows two rows, and the focused "Replace … with" field is cut in half at the list's bottom edge and not scrolled into view (`m3b-dict-flagedit2.png`). At 360×640 dp with the keyboard up: "BOTTOM OVERFLOWED BY 84 PIXELS" across the description, Done drawn over the + button, no list at all (`m3b-dict-360k.png`; error log: RenderFlex overflowed by 14 px). At font scale 2.0 one row shows, and it scrolls.
 - Expected: the full flagged word and replacement are visible (wrap or a second line), the focused field scrolls into view, and nothing overflows with the keyboard up.
 - Notes: add (search field + ✓ IME action or +), rename (pencil → ✓) and remove (trash, no confirm, as DICTIONARY.md says) all work by touch. Tablet size (800 dp) is fine. Same family as BUG-402. Not fixed (audit rule).
+- Notes (fixed 2026-11-26, uncommitted): at compact width the dialog's inset is 12 dp and its content scrolls as a whole (the list stops scrolling on its own and no longer picks up the status bar's padding), the same treatment as BUG-402. A flagged row's `word → replacement` wraps instead of being cut, and the "Flagged" label drops to the next line when it doesn't fit. Desktop sizes are unchanged. Tests: `mobile_touch_bug406_412_test.dart` "BUG-406 …" (no truncated rule at 361 dp; at 360×640 with a 300 dp keyboard nothing overflows and the opened replacement field sits above the keyboard); both fail on the old code. On the phone (debug build of `52b8cb90` + uncommitted work, qa-130): "selfie → selfies" and "thew → chew" read in full (`fx406-dict.png`); the pencil's "Replace … with" field sits whole above Gboard (`fx406-flagedit.png`); at 360×640 dp with the keyboard up the dialog scrolls, no overflow (`fx406-360k.png`). **Fixed and verified.**
 
 ### BUG-407 [M3] Journal and Dream journal have no way to add an image on Android
 - Severity: Major
@@ -4269,6 +4282,7 @@ Entry format:
 - Actual: the journal body (and the Dreams editor) take images only by Ctrl+V or drag-and-drop (`_withImages` → `MediaPasteScope` + `MediaDropTarget`, `journal_page.dart:4029`); there is no picker button. On the soft keyboard there is no Ctrl+V, Gboard's clipboard chip pastes text only, and Gboard greys out its GIF and sticker tabs because no field declares `contentInsertionConfiguration` (`m3b-gboard-emoji2.png`). Even hardware Ctrl+V doesn't paste on this phone (see M3 notes).
 - Expected: MEDIA.md: every surface takes images on Android: the file picker, or rich-content insertion from the keyboard. To-Do, Study and Rankings have the "Add images" picker strip, which works (below).
 - Notes: by contrast To-Do's "Add images" opened the system picker, two images attached, both reached `media_assets_table` as `uploaded`, and a 34.4 MB PNG was refused with "Image is too large (34.4 MB). The limit is 20 MB." Not fixed (audit rule).
+- Notes (fixed 2026-11-26, uncommitted; Juno chose both routes): on Android the journal and dream editors have an "Add images" button beside Delete that opens the file picker (a held "New dream" is written first, as for a paste), and every image-capable body (`MediaPasteScope.fieldTakesBoth`: journal, dreams, Search's entry dialog) declares `contentInsertionConfiguration` for png/jpeg/webp/heic, so Gboard's clipboard images and stickers attach to the gallery. GIF stays out (MEDIA.md non-goal). MEDIA.md's surface table updated. The journal's metadata row stacks 56 dp sooner on Android to make room; the dream date pill ellipsizes there instead of overflowing. Tests: `mobile_touch_bug406_412_test.dart` "BUG-407 …" (the body offers image insert without GIF and an inserted image becomes a reference; a field beside a gallery offers none). On the phone: the journal row fits at 361 dp (`fx407-journal-row.png`, the date shortens to "Nov 24, 2026 at…"); the picker attached a test image to "M1 qa130 entry" (`fx407-journal-attached.png`) and to a new dream (`fx407-dream-row.png`); `dumpsys input_method` shows `contentMimeTypes=[image/png, image/jpeg, image/webp, image/heic]` on the body; Gboard's sticker tab is enabled (GIF greyed) and an Emoji Kitchen sticker landed in the fan ("2 images"), text untouched. **Fixed and verified.**
 
 ### BUG-408 [M3] An attached image can't be removed by touch: "Remove image" shows on mouse hover only
 - Severity: Major
@@ -4277,6 +4291,7 @@ Entry format:
 - Actual: tap and long-press both open the lightbox; the lightbox offers Zoom out / Zoom in / Copy image / Save as… / Close, but no Remove. The thumbnail's ✕ is built only `if (_hovered)` (`_ThumbnailState`, `media_gallery_strip.dart`), and a finger never hovers. The picture stays on the task.
 - Expected: MOBILE_TEST_PLAN.md D4: no hover-only action without a touch route; M3 "Remove asks first".
 - Notes: affects every `MediaGalleryStrip` (To-Do, Study cards, Rankings). Same pattern as BUG-395 (right-click only). Not fixed (audit rule).
+- Notes (fixed 2026-11-26, uncommitted): a `MediaGalleryStrip`'s lightbox now has Remove (trash), which asks first ("Remove image … kept for 30 days") and then detaches with the strip's undo toast; the thumbnail's hover ✕ is unchanged on desktop. Covers To-Do, Study cards and Rankings. Test: `mobile_touch_bug406_412_test.dart` "BUG-408 …" (no ✕ without hover; lightbox Remove → confirm → reference gone); fails on the old code. On the phone: "M2 task 22" → tap thumbnail → trash → Remove: the strip drops to one image and "Image removed / Undo" shows; Undo put it back (lightbox back to 2 / 2). The toast sits over the lightbox toolbar for its few seconds. **Fixed and verified.**
 
 ### BUG-409 [M3] The image lightbox's toolbar sits under the status bar, so its buttons barely respond to taps
 - Severity: Minor
@@ -4285,6 +4300,7 @@ Entry format:
 - Actual: the buttons are centred at y≈110 px, inside the status bar (the zoom/copy/save/close icons draw over the system icons, `m3b-lightbox.png`). Taps there do nothing (Close and Zoom in both ignored); a tap at y=158, the strip of the button below the status bar, closes it. Back and a horizontal swipe (1 / 2 → 2 / 2) work.
 - Expected: the toolbar is laid out inside `MediaQuery.padding.top`.
 - Notes: not rechecked at the default 560 dpi. Pinch and double-tap zoom couldn't be tested (adb input is one pointer, and the guarded taps are too slow for a double tap): §6b. Not fixed (audit rule).
+- Notes (fixed 2026-11-26, uncommitted): the toolbar sits at 16 dp below `MediaQuery.padding.top`. Test: `mobile_touch_bug406_412_test.dart` "BUG-409 …" (Zoom in and Close below a 40 dp top inset); fails on the old code. On the phone at the default 560 dpi the buttons centre at y≈280 px, below the 140 px status bar (`fx409-lightbox.png`); Zoom in and Close respond to taps at their centres. **Fixed and verified.**
 
 ### BUG-410 [M3] With Vim on, Normal mode doesn't stop the soft keyboard from typing, and Backspace there moves instead of deleting
 - Severity: Minor
@@ -4293,3 +4309,46 @@ Entry format:
 - Actual: in Normal mode Gboard's x is inserted as text and Enter adds a newline, while the badge still reads NORMAL; Backspace moves the caret two places left and deletes nothing. Letter key events from adb are inserted too (`dd` → "dd", `o` → "o"); only Esc and Enter reach Vim. Leaving the field and tapping back in returns to Insert.
 - Expected: VIM.md: Normal mode doesn't insert, or a soft-keyboard user never ends up in Normal mode with no way to see why typing behaves oddly.
 - Notes: a soft-keyboard-only user can't enter Normal mode (Gboard has no Esc), so this needs a hardware Esc first. `input keyevent` goes through Gboard's composer, so whether a real Bluetooth keyboard's letters reach Vim is in §6b (Juno). Not fixed (audit rule).
+- Notes (fixed 2026-11-26, uncommitted): an edit that reaches a Vim field's `onChanged` outside Insert, and wasn't written by Vim (its writes, undo and redo run inside `suppressTypingRewrites`; a snippet undo from `u` now does too), drops the session to Insert: a soft keyboard sends text, not keys, so Normal mode can't refuse it, but the badge and block caret no longer claim Normal while typing works. Backspace in Normal stays a left motion, as VIM.md documents; on the phone it moved one place (not two). Test: `mobile_touch_bug406_412_test.dart` "BUG-410 …" (Normal `x` stays Normal; an IME value update drops to Insert); fails on the old code. On the phone (Vim on by eval, "M3 vim" entry): Esc → Normal; Gboard x → inserted and mode reads Insert, badge gone; Gboard Enter in Normal → newline and Insert. Test text restored and Vim switched back off. **Fixed and verified.**
+
+### BUG-411 [fix pass] Closing a sheet hands focus back to a text field on a hidden page, and the keyboard opens over the current one
+- Severity: Minor
+- Found: 2026-11-26, while verifying BUG-400 (OnePlus 12R, Android 16, 361×794 dp, Gboard; debug build of `52b8cb90` + uncommitted work, qa-130, 2026-11-26)
+- Steps: Journal → open an entry, tap the body (keyboard up), Back (keyboard down; the body keeps focus). More → Finance → + (Log transaction), then close it with ✕, or drag it down.
+- Actual: Gboard opens over the Finance page (`fx400-after-x.png`). The primary focus is the journal body on the hidden Journal branch: `vm.ps1 field` reads its text. Same with ✕ and with a drag, so it isn't tied to how the sheet closes.
+- Expected: leaving a page drops focus from its fields, so closing a sheet on Finance leaves nothing focused and no keyboard up.
+- Notes: the sheet route restores the focus it found when it opened, which was still the Journal field. Not fixed (audit rule).
+- Notes (fixed 2026-11-26, uncommitted): an off-screen shell branch's descendants can no longer take focus (`_BranchFocusNode.descendantsAreFocusable`), so a route closing over the shell can't hand focus back into a page left since; the page you're on is unaffected. Test: `mobile_touch_bug406_412_test.dart` "BUG-411 …" (field focused, dialog opened, page switched, dialog closed → field not focused); fails on the old code. On the phone, the report's steps with ✕ and with a drag-down: Gboard stays down and `vm.ps1 field` reads NOFIELD both times. **Fixed and verified.**
+
+### BUG-412 [fix pass] Back doesn't close the transaction editor's date popover
+- Severity: Minor
+- Found: 2026-11-26, while verifying BUG-400 (OnePlus 12R, Android 16, 361×794 dp, Gboard; debug build of `52b8cb90` + uncommitted work, qa-130, 2026-11-26)
+- Steps: Finance → + (Log transaction) → close the keyboard → tap the Date row's "Today" → the date popover opens. Press Back.
+- Actual: the popover stays open (`fx400-state.png`). A tap beside it closes it.
+- Expected: Back closes the top popover first (MOBILE_TEST_PLAN.md D4: "it closes the top sheet, dialog, menu or sub-view first").
+- Notes: seen once; other date popovers not checked. Not fixed (audit rule).
+- Notes (fixed 2026-11-26, uncommitted): the date picker's key handler claimed every key, Android's Back (`LogicalKeyboardKey.goBack`) included, so the embedder never turned it into a route pop. It now lets Back through, as it does Esc. This is `DateSelectorPopover`, so every date popover gets it. Test: `mobile_touch_bug406_412_test.dart` "BUG-412 …" (the handler ignores goBack; a route pop closes the popover); fails on the old code. On the phone: Back closes the popover and leaves the sheet open. Closing the popover then hands focus back to the amount field and raises the keyboard (BUG-413), so a second Back is spent on the keyboard. **Fixed and verified.**
+
+### BUG-413 [fix pass] Closing a popover in the transaction editor raises the keyboard again
+- Severity: Minor
+- Found: 2026-11-26, while verifying BUG-412 (OnePlus 12R, Android 16, 361×794 dp, Gboard; debug build of `52b8cb90` + uncommitted work, qa-130)
+- Steps: Finance → + (Log transaction) → Back (keyboard down; the amount field keeps focus) → tap the Date row's "Today" → close the popover with Back or a tap beside it.
+- Actual: Gboard comes back up: the popover route hands focus back to the amount field, which raises the keyboard. With Back, a second Back goes to hiding it before a third closes the sheet.
+- Expected: closing a popover leaves the keyboard as it was before the popover opened.
+- Notes: same family as BUG-411 (a route restoring focus raises the keyboard). Not fixed (audit rule).
+
+### BUG-414 [fix pass] With the keyboard up, a journal body with images scrolls its text out of view
+- Severity: Minor
+- Found: 2026-11-26, while verifying BUG-407 (OnePlus 12R, Android 16, 361×794 dp, Gboard; debug build of `52b8cb90` + uncommitted work, qa-130)
+- Steps: a one-line journal entry with an image in its fan ("M1 qa130 entry"); tap the body.
+- Actual: the body shrinks above Gboard to ~150 dp and the field scrolls so the only line is above the box: it shows the fan and empty space (`fx407-body-kbd.png`). A downward drag in the box brings the line back (`fx407-body-kbd2.png`). Likely the caret reveal plus the scroll-past-end room the fan reserves (`MediaFanStack.tallest + 8`).
+- Expected: the line being edited stays in view.
+- Notes: older than BUG-407's fix, but images on the phone journal were only reachable once it landed. Not fixed (audit rule).
+
+### BUG-415 [fix pass] The phone's status strip overflows by 11 px at 360×640 dp
+- Severity: Cosmetic
+- Found: 2026-11-26, while verifying BUG-406 at `wm size 720x1280` / `wm density 320` (OnePlus 12R; debug build of `52b8cb90` + uncommitted work, qa-130)
+- Steps: switch the phone to 360×640 dp with the Dictionary dialog open.
+- Actual: "A RenderFlex overflowed by 11 pixels on the right" from `_CompactStatusStrip`'s Row (`app_shell.dart:280`; constraints w ≤ 189.7), logged once in the run log and `voyager_errors.log`.
+- Expected: the strip fits at 360 dp.
+- Notes: seen once, during the size switch; not checked whether it persists at that size. Not fixed (audit rule).

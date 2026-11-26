@@ -374,12 +374,14 @@ class _Main {
       // The weekly sweep (GAIA_MEMORY_TOPICS_HLD.md §27.4), as GaiaHost
       // answers it.
       case 'sweepPlan':
+        if (refuseSweepPlan) throw GaiaPipeException('refused');
         final plan = await memories.sweepPlan(
           DateTime.now().toUtc(),
           force: params['force'] == true,
         );
         return plan == null ? null : gaiaSweepPlanToJson(plan);
       case 'sweepFound':
+        if (refuseSweep) throw GaiaPipeException('refused');
         return memories.addSuggestions([
           for (final found in params['suggestions']! as List)
             ?gaiaMemorySuggestionFromJson({
@@ -674,6 +676,8 @@ class _Main {
   /// Whether `setChapter` is refused.
   var refuseChapter = false;
   var refuseTemporary = false;
+  var refuseSweep = false;
+  var refuseSweepPlan = false;
 
   /// Each `detachImage`'s reference, in order.
   final detached = <String>[];
@@ -1020,6 +1024,136 @@ void main() {
         greaterThan(1),
       );
       expect(utility.usages.where((u) => u == 'memory sweep'), hasLength(1));
+    });
+
+    test('a scheduled sweep holds its toast until Gaia is on screen, and '
+        "Sweep now doesn't toast", () async {
+      main.settings = GaiaSettings.initial()
+          .copyWith(tidyMemories: true, tidyMemoriesDevice: 'laptop')
+          .toJson();
+      final at = DateTime.utc(2026, 11, 1);
+      for (final (id, text) in [
+        ('a', 'I live in Toronto'),
+        ('b', 'Toronto is home'),
+      ]) {
+        await main.repository.upsertMemory(
+          GaiaMemory(
+            id: id,
+            text: text,
+            status: GaiaMemoryStatus.active,
+            createdAt: at,
+            updatedAt: at,
+          ),
+        );
+      }
+      final utility = FakeUtilityRunner(
+        (job) => job.startsWith('You tidy')
+            ? '[{"kind": "same", "n": [1, 2], "text": "I live in Toronto."}]'
+            : '[]',
+      );
+      await startCompanion(
+        utility: GaiaUtility(utility),
+        curateAfter: const Duration(milliseconds: 50),
+      );
+      addTearDown(() => main.pipe.notify('settings', {'tidyMemories': false}));
+      final toasts = <GaiaRunToast>[];
+      final listening = controller.tidyToasts.listen(toasts.add);
+      addTearDown(listening.cancel);
+      expect(controller.onScreen.value, isFalse);
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      await settle();
+      expect(utility.usages.where((u) => u == 'memory sweep'), hasLength(1));
+      expect(toasts, isEmpty);
+
+      controller.onScreen.value = true;
+      await settle();
+      expect(toasts, hasLength(1));
+      expect(toasts.single.title, 'Memories tidied');
+      expect(toasts.single.body, '1 suggestion in the inbox.');
+      expect(toasts.single.error, isFalse);
+      // Shown once only.
+      controller.onScreen.value = false;
+      controller.onScreen.value = true;
+      await settle();
+      expect(toasts, hasLength(1));
+
+      await controller.sweepMemories(force: true);
+      await settle();
+      expect(toasts, hasLength(1));
+    });
+
+    test('a scheduled sweep that fails says so in its toast', () async {
+      main.settings = GaiaSettings.initial()
+          .copyWith(tidyMemories: true, tidyMemoriesDevice: 'laptop')
+          .toJson();
+      final at = DateTime.utc(2026, 11, 1);
+      for (final (id, text) in [
+        ('a', 'I live in Toronto'),
+        ('b', 'Toronto is home'),
+      ]) {
+        await main.repository.upsertMemory(
+          GaiaMemory(
+            id: id,
+            text: text,
+            status: GaiaMemoryStatus.active,
+            createdAt: at,
+            updatedAt: at,
+          ),
+        );
+      }
+      main.refuseSweep = true;
+      final utility = FakeUtilityRunner(
+        (job) => job.startsWith('You tidy')
+            ? '[{"kind": "same", "n": [1, 2], "text": "I live in Toronto."}]'
+            : '[]',
+      );
+      await startCompanion(
+        utility: GaiaUtility(utility),
+        curateAfter: const Duration(milliseconds: 50),
+      );
+      addTearDown(() => main.pipe.notify('settings', {'tidyMemories': false}));
+      final toasts = <GaiaRunToast>[];
+      final listening = controller.tidyToasts.listen(toasts.add);
+      addTearDown(listening.cancel);
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      await settle();
+      controller.onScreen.value = true;
+      await settle();
+      expect(toasts, hasLength(1));
+      expect(toasts.single.title, "Memory tidy didn't finish");
+      expect(toasts.single.body, startsWith('refused'));
+      expect(toasts.single.body, endsWith("It'll try again tomorrow."));
+      expect(toasts.single.error, isTrue);
+
+      // The idle ticks wait a day before trying again.
+      final asked = main.requests.where((r) => r == 'sweepPlan').length;
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      await settle();
+      expect(main.requests.where((r) => r == 'sweepPlan'), hasLength(asked));
+    });
+
+    test("a sweep plan that can't be had isn't a failed sweep: no toast, and "
+        'the next tick asks again', () async {
+      main.settings = GaiaSettings.initial()
+          .copyWith(tidyMemories: true, tidyMemoriesDevice: 'laptop')
+          .toJson();
+      main.refuseSweepPlan = true;
+      await startCompanion(
+        utility: GaiaUtility(FakeUtilityRunner((_) => '[]')),
+        curateAfter: const Duration(milliseconds: 50),
+      );
+      addTearDown(() => main.pipe.notify('settings', {'tidyMemories': false}));
+      final toasts = <GaiaRunToast>[];
+      final listening = controller.tidyToasts.listen(toasts.add);
+      addTearDown(listening.cancel);
+      controller.onScreen.value = true;
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      await settle();
+      expect(toasts, isEmpty);
+      expect(
+        main.requests.where((r) => r == 'sweepPlan').length,
+        greaterThan(1),
+      );
     });
 
     test('Tidy memories weekly turned on on another device sweeps there, not '
@@ -2802,6 +2936,24 @@ void main() {
         question.parts.whereType<GaiaContextPart>().single.url,
         chrome.url,
       );
+    });
+
+    test('with the setting off it stays off the draft until /window', () async {
+      main.companion.onEvent!('context', {
+        'window': chrome.toJson(),
+        'attach': false,
+        'selection': null,
+      });
+      await settle();
+      expect(controller.windowContext, isNull);
+
+      await controller.runBuiltin(GaiaBuiltin.window);
+      expect(controller.windowContext?.label, chrome.label);
+
+      runner.turns.addAll(claudeFixtureTurns('tool_call_two_turns.jsonl'));
+      await controller.send('Summarise this');
+      await settle();
+      expect(runner.sent.single.prompt, '${chrome.preamble}\n\nSummarise this');
     });
 
     group('/this (§15.5)', () {

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/layout/hover_inset.dart';
+import 'package:voyager/core/layout/window_size_class.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/snippet_editor.dart';
@@ -118,8 +119,84 @@ class _SnippetsDialogState extends ConsumerState<_SnippetsDialog> {
     final muted = theme.textTheme.bodySmall?.copyWith(
       color: theme.colorScheme.onSurfaceVariant,
     );
+    // A phone: the content scrolls, so with the keyboard up (which the
+    // dialog shrinks above) or a large font nothing is cut off, and the
+    // inset gives the form the width it needs (BUG-402).
+    final compact = context.isCompactWidth;
+    final expandKey = SegmentedButton<SnippetExpandKey>(
+      segments: const [
+        ButtonSegment(value: SnippetExpandKey.tab, label: Text('Tab')),
+        ButtonSegment(value: SnippetExpandKey.space, label: Text('Space')),
+      ],
+      selected: {settings.snippetExpandKey},
+      showSelectedIcon: false,
+      onSelectionChanged: (sel) => ref
+          .read(settingsProvider.notifier)
+          .saveSettings(
+            settings.copyWith(snippetExpandKey: sel.first, updatedAt: utcNow()),
+          ),
+    );
+    final list = settings.snippets.isEmpty && _editingId != _newRowId
+        ? Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Text(
+              "You haven't written any snippets yet.",
+              textAlign: TextAlign.center,
+              style: muted,
+            ),
+          )
+        : ListView.builder(
+            shrinkWrap: true,
+            // Not the status bar's: the list is inside a dialog.
+            padding: EdgeInsets.zero,
+            // On a phone the dialog's content scrolls as a whole.
+            physics: compact ? const NeverScrollableScrollPhysics() : null,
+            itemCount:
+                settings.snippets.length + (_editingId == _newRowId ? 1 : 0),
+            itemBuilder: (context, index) {
+              if (index == settings.snippets.length) {
+                return SnippetEditor(
+                  key: const ValueKey('snippet-new'),
+                  original: null,
+                  error: _editError,
+                  onSave: (draft) => _saveRow(settings, null, draft),
+                  onCancel: () => setState(() {
+                    _editingId = null;
+                    _editError = null;
+                  }),
+                );
+              }
+              final snippet = settings.snippets[index];
+              if (snippet.id == _editingId) {
+                return SnippetEditor(
+                  // Keyed on the record so opening a different row
+                  // seeds fresh controllers from its text rather
+                  // than reusing the previous row's.
+                  key: ValueKey('snippet-${snippet.id}'),
+                  original: snippet,
+                  error: _editError,
+                  onSave: (draft) => _saveRow(settings, snippet, draft),
+                  onCancel: () => setState(() {
+                    _editingId = null;
+                    _editError = null;
+                  }),
+                );
+              }
+              return _SnippetRow(
+                snippet: snippet,
+                onEdit: () => setState(() {
+                  _editingId = snippet.id;
+                  _editError = null;
+                }),
+                onRemove: () => _remove(settings, snippet),
+              );
+            },
+          );
 
     return AlertDialog(
+      insetPadding: compact
+          ? const EdgeInsets.symmetric(horizontal: 12, vertical: 24)
+          : null,
       // The body is inset by [kHoverRowInset] except for its rows, so their
       // hover fill can reach the dialog's padding while their labels line up
       // with the title and the text.
@@ -127,150 +204,94 @@ class _SnippetsDialogState extends ConsumerState<_SnippetsDialog> {
         padding: EdgeInsets.symmetric(horizontal: kHoverRowInset),
         child: Text('Text snippets'),
       ),
-      content: SizedBox(
-        width: 640,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
-              child: Text(
-                'Type a trigger in any text box and it expands. Use \$0, \$1 … '
-                'in the replacement to mark where the caret should stop — Tab '
-                'moves between them. Write \\\$0 for a literal "\$0".',
-                style: muted,
+      content: _scrollsIfCompact(
+        compact,
+        SizedBox(
+          width: 640,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
+                child: Text(
+                  'Type a trigger in any text box and it expands. Use \$0, \$1 … '
+                  'in the replacement to mark where the caret should stop — Tab '
+                  'moves between them. Write \\\$0 for a literal "\$0".',
+                  style: muted,
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            SwitchListTile(
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: kHoverRowInset,
-              ),
-              dense: true,
-              title: const Text('Enable snippets'),
-              value: settings.snippetsEnabled,
-              onChanged: (v) => ref
-                  .read(settingsProvider.notifier)
-                  .saveSettings(
-                    settings.copyWith(snippetsEnabled: v, updatedAt: utcNow()),
-                  ),
-            ),
-            ListTile(
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: kHoverRowInset,
-              ),
-              dense: true,
-              title: const Text('Expand key'),
-              subtitle: Text(
-                'Expands snippets that are not set to expand automatically',
-                style: muted,
-              ),
-              trailing: SegmentedButton<SnippetExpandKey>(
-                segments: const [
-                  ButtonSegment(
-                    value: SnippetExpandKey.tab,
-                    label: Text('Tab'),
-                  ),
-                  ButtonSegment(
-                    value: SnippetExpandKey.space,
-                    label: Text('Space'),
-                  ),
-                ],
-                selected: {settings.snippetExpandKey},
-                showSelectedIcon: false,
-                onSelectionChanged: (sel) => ref
+              const SizedBox(height: 12),
+              SwitchListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: kHoverRowInset,
+                ),
+                dense: true,
+                title: const Text('Enable snippets'),
+                value: settings.snippetsEnabled,
+                onChanged: (v) => ref
                     .read(settingsProvider.notifier)
                     .saveSettings(
                       settings.copyWith(
-                        snippetExpandKey: sel.first,
+                        snippetsEnabled: v,
                         updatedAt: utcNow(),
                       ),
                     ),
               ),
-            ),
-            const Divider(height: 24),
-            // Flexible so the list gives up height in a short window rather
-            // than pushing the dialog past its bottom edge.
-            Flexible(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 340),
-                child: settings.snippets.isEmpty && _editingId != _newRowId
-                    ? Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 24),
-                        child: Text(
-                          "You haven't written any snippets yet.",
-                          textAlign: TextAlign.center,
-                          style: muted,
-                        ),
-                      )
-                    : ListView.builder(
-                        shrinkWrap: true,
-                        itemCount:
-                            settings.snippets.length +
-                            (_editingId == _newRowId ? 1 : 0),
-                        itemBuilder: (context, index) {
-                          if (index == settings.snippets.length) {
-                            return SnippetEditor(
-                              key: const ValueKey('snippet-new'),
-                              original: null,
-                              error: _editError,
-                              onSave: (draft) =>
-                                  _saveRow(settings, null, draft),
-                              onCancel: () => setState(() {
-                                _editingId = null;
-                                _editError = null;
-                              }),
-                            );
-                          }
-                          final snippet = settings.snippets[index];
-                          if (snippet.id == _editingId) {
-                            return SnippetEditor(
-                              // Keyed on the record so opening a different row
-                              // seeds fresh controllers from its text rather
-                              // than reusing the previous row's.
-                              key: ValueKey('snippet-${snippet.id}'),
-                              original: snippet,
-                              error: _editError,
-                              onSave: (draft) =>
-                                  _saveRow(settings, snippet, draft),
-                              onCancel: () => setState(() {
-                                _editingId = null;
-                                _editError = null;
-                              }),
-                            );
-                          }
-                          return _SnippetRow(
-                            snippet: snippet,
-                            onEdit: () => setState(() {
-                              _editingId = snippet.id;
-                              _editError = null;
-                            }),
-                            onRemove: () => _remove(settings, snippet),
-                          );
-                        },
-                      ),
+              ListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: kHoverRowInset,
+                ),
+                dense: true,
+                title: const Text('Expand key'),
+                subtitle: Text(
+                  'Expands snippets that are not set to expand automatically',
+                  style: muted,
+                ),
+                trailing: compact ? null : expandKey,
               ),
-            ),
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: GlassButton(
-                  dense: true,
-                  onPressed: _editingId == _newRowId
-                      ? null
-                      : () => setState(() {
-                          _editingId = _newRowId;
-                          _editError = null;
-                        }),
-                  icon: const Icon(PhosphorIconsRegular.plus),
-                  label: 'Add snippet',
+              if (compact)
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: kHoverRowInset,
+                  ),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: expandKey,
+                  ),
+                ),
+              const Divider(height: 24),
+              if (compact)
+                list
+              else
+                // Flexible so the list gives up height in a short window rather
+                // than pushing the dialog past its bottom edge.
+                Flexible(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 340),
+                    child: list,
+                  ),
+                ),
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: kHoverRowInset),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: GlassButton(
+                    dense: true,
+                    onPressed: _editingId == _newRowId
+                        ? null
+                        : () => setState(() {
+                            _editingId = _newRowId;
+                            _editError = null;
+                          }),
+                    icon: const Icon(PhosphorIconsRegular.plus),
+                    label: 'Add snippet',
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
       actions: [
@@ -283,6 +304,12 @@ class _SnippetsDialogState extends ConsumerState<_SnippetsDialog> {
     );
   }
 }
+
+/// The dialog's content, scrolling on a phone. Not the dialog's own
+/// `scrollable`, which measures the content's intrinsic height, and the
+/// [SnippetEditor]'s layout can't be measured that way.
+Widget _scrollsIfCompact(bool compact, Widget content) =>
+    compact ? SingleChildScrollView(child: content) : content;
 
 /// One snippet as it reads in the list: `trigger → replacement`, with the two
 /// flags as short badges rather than words, so a dozen rows stay scannable.

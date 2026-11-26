@@ -92,13 +92,7 @@ class AppShell extends ConsumerWidget {
             Scaffold(
               backgroundColor: Colors.transparent,
               body: context.isCompactWidth
-                  ? _CompactShell(
-                      selectedIndex: index,
-                      accent: accent,
-                      orderedDestinations: orderedDestinations,
-                      onDestinationSelected: navigationShell.goBranch,
-                      child: content,
-                    )
+                  ? _CompactShell(accent: accent, child: content)
                   : _ExpandedShell(
                       selectedIndex: index,
                       accent: accent,
@@ -106,6 +100,17 @@ class AppShell extends ConsumerWidget {
                       onDestinationSelected: navigationShell.goBranch,
                       child: content,
                     ),
+              // In the Scaffold's own slot rather than under the body, so the
+              // soft keyboard covers the bar instead of pushing it up over
+              // the page: the room above the keyboard is the page's (BUG-398).
+              bottomNavigationBar: context.isCompactWidth
+                  ? ShellBottomNav(
+                      selectedIndex: index,
+                      accent: accent,
+                      onDestinationSelected: navigationShell.goBranch,
+                      orderedDestinations: orderedDestinations,
+                    )
+                  : null,
             ),
             // Above the page content and outside the branch containers, so a
             // live workout's island stays put no matter which section is on
@@ -238,24 +243,16 @@ class _ExpandedShell extends StatelessWidget {
   }
 }
 
-/// The phone composition: one pane, a status strip above it, navigation below.
+/// The phone composition: one pane with a status strip above it. The
+/// navigation below it is the Scaffold's [ShellBottomNav].
 ///
 /// The rail's shoulder items — clock, weather, sync activity, notifications —
 /// move to the top strip rather than disappearing. They are shell-level
 /// information on both shells; only their axis changes.
 class _CompactShell extends StatelessWidget {
-  const _CompactShell({
-    required this.selectedIndex,
-    required this.accent,
-    required this.orderedDestinations,
-    required this.onDestinationSelected,
-    required this.child,
-  });
+  const _CompactShell({required this.accent, required this.child});
 
-  final int selectedIndex;
   final Color accent;
-  final List<OrderedDestination> orderedDestinations;
-  final ValueChanged<int> onDestinationSelected;
   final Widget child;
 
   @override
@@ -264,12 +261,6 @@ class _CompactShell extends StatelessWidget {
       children: [
         SafeArea(bottom: false, child: _CompactStatusStrip(accent: accent)),
         Expanded(child: SafeArea(top: false, bottom: false, child: child)),
-        ShellBottomNav(
-          selectedIndex: selectedIndex,
-          accent: accent,
-          onDestinationSelected: onDestinationSelected,
-          orderedDestinations: orderedDestinations,
-        ),
       ],
     );
   }

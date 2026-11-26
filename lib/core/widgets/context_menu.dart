@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -53,7 +54,9 @@ class ContextMenuItem {
 }
 
 /// Wraps [child] so that right-clicking anywhere inside it opens a context
-/// menu anchored to the pointer position.
+/// menu anchored to the pointer position. On a touch screen a long press opens
+/// the same menu (BUG-395) — except under a [ReorderableDelayedDragStartListener],
+/// whose long press lifts the row into a drag.
 ///
 /// The menu is inserted directly into the nearest [Overlay] — it does NOT
 /// use [showMenu] or the Navigator, so it cannot cause the modal-barrier focus
@@ -165,12 +168,36 @@ class ContextMenuRegionState extends State<ContextMenuRegion> {
     super.dispose();
   }
 
+  static const _touchDevices = {
+    PointerDeviceKind.touch,
+    PointerDeviceKind.stylus,
+    PointerDeviceKind.invertedStylus,
+  };
+
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    final region = GestureDetector(
       onSecondaryTapUp: (details) => openMenuAt(details.globalPosition),
       behavior: HitTestBehavior.translucent,
       child: widget.child,
+    );
+    // This recognizer sits deeper than the listener's and so would win the
+    // long press from it, and the row could no longer be reordered.
+    if (context
+            .findAncestorWidgetOfExactType<
+              ReorderableDelayedDragStartListener
+            >() !=
+        null) {
+      return region;
+    }
+    return GestureDetector(
+      supportedDevices: _touchDevices,
+      onLongPressStart: (details) {
+        Feedback.forLongPress(context);
+        openMenuAt(details.globalPosition);
+      },
+      behavior: HitTestBehavior.translucent,
+      child: region,
     );
   }
 }
@@ -484,8 +511,19 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
 
   void _handleItemTap(ContextMenuItem item) {
     if (!item.enabled) return;
-    // Submenu parents don't act on tap; the flyout is already shown on hover.
-    if (item.hasChildren) return;
+    // A submenu parent's flyout is already open under a mouse, which hovered
+    // it; a touch has no hover, so the tap opens it.
+    if (item.hasChildren) {
+      final index = widget.items.indexOf(item);
+      if (index < 0 || _openSubmenuIndex == index) return;
+      setState(() {
+        _hoveredIndex = index;
+        _openSubmenuIndex = index;
+        _hoveredSubIndex = null;
+        _submenuAnchor = _rectForKey(_keyFor(index));
+      });
+      return;
+    }
     if (item.onTap == null) return;
     _dismiss(); // Remove overlay immediately.
     // Microtask so the overlay teardown finishes before the action runs.

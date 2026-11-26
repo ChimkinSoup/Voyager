@@ -40,7 +40,8 @@ enum GaiaToastMark {
 /// shell, as its menus have, around a [mark], a [title] and a [body]. One at
 /// a time, so a new one replaces the last. It goes after a few seconds
 /// unless the cursor is on it; a click dismisses it, after [onTap]. With
-/// [onUndo], it has an Undo button, which dismisses it too.
+/// [onUndo], it has an Undo button, which dismisses it too. [lingers] keeps
+/// it up half as long again.
 void showGaiaToast(
   BuildContext context, {
   required String title,
@@ -48,6 +49,7 @@ void showGaiaToast(
   required GaiaToastMark mark,
   VoidCallback? onTap,
   VoidCallback? onUndo,
+  bool lingers = false,
 }) {
   _current?.remove();
   late final OverlayEntry entry;
@@ -58,6 +60,7 @@ void showGaiaToast(
       mark: mark,
       onTap: onTap,
       onUndo: onUndo,
+      lingers: lingers,
       onGone: () {
         if (_current != entry) return;
         _current = null;
@@ -76,6 +79,7 @@ class _GaiaToast extends StatefulWidget {
     required this.mark,
     required this.onTap,
     required this.onUndo,
+    required this.lingers,
     required this.onGone,
   });
 
@@ -84,6 +88,7 @@ class _GaiaToast extends StatefulWidget {
   final GaiaToastMark mark;
   final VoidCallback? onTap;
   final VoidCallback? onUndo;
+  final bool lingers;
   final VoidCallback onGone;
 
   @override
@@ -111,8 +116,10 @@ class _GaiaToastState extends State<_GaiaToast> with TickerProviderStateMixin {
     super.initState();
     _ticker = createTicker(_tick)..start();
     _shown.forward();
-    _dwellTimer = Timer(_dwellFor(widget.body), _dismiss);
+    _dwellTimer = Timer(_dwell, _dismiss);
   }
+
+  Duration get _dwell => _dwellFor(widget.body) * (widget.lingers ? 1.5 : 1);
 
   @override
   void dispose() {
@@ -157,7 +164,7 @@ class _GaiaToastState extends State<_GaiaToast> with TickerProviderStateMixin {
               onExit: (_) {
                 setState(() => _hovered = false);
                 if (!_leaving) {
-                  _dwellTimer = Timer(_dwellFor(widget.body), _dismiss);
+                  _dwellTimer = Timer(_dwell, _dismiss);
                 }
               },
               child: GestureDetector(

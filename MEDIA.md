@@ -71,13 +71,15 @@ Nothing about an image's placement is written into the parent's prose: a
 
 | Surface | Placement | Paste / DnD | File picker |
 |---|---|---|---|
-| Journal body | Fan in the body's bottom-right corner | Yes | No |
+| Journal body | Fan in the body's bottom-right corner | Yes | Android only: the editor's "Add images" button (BUG-407) |
 | Journal title | Text only | Text only; image-only clipboard → no-op | — |
 | Search result's entry dialog | Same fan, same entry | Yes | No |
 | Todo main task | Gallery strip on edit panel | Onto strip / panel (not into notes) | Yes |
 | Todo notes / title / subtasks | No images | Text only; image-only → no-op | — |
 | Study card front / back | Gallery per face (`front` / `back` facet) | Yes when that side’s field focused | Yes |
 | Rankings (future) | Gallery | Onto gallery | Yes |
+
+On Android, where there is no Ctrl+V for an image, every image-capable body (the journal, dreams, and the Search page's entry dialog) also takes images inserted by the keyboard — Gboard's clipboard images and stickers — through `contentInsertionConfiguration` (PNG, JPEG, WebP, HEIC; no GIF). The dream editor has the same Android-only "Add images" button as the journal.
 
 ### Clipboard rules
 

@@ -497,9 +497,18 @@ class GaiaHost {
   }
 
   /// The startup pull is done: from now on every project keeps a memory
-  /// topic (GAIA_MEMORY_TOPICS_HLD.md §7, §8), once the store is attached.
-  void startupPulled() =>
-      unawaited(_attached.future.then((_) => _memories?.keepProjectTopics()));
+  /// topic (GAIA_MEMORY_TOPICS_HLD.md §7, §8), once the store is attached,
+  /// and Tidy memories weekly, on by default, gets a desktop (§27.7).
+  void startupPulled() => unawaited(
+    _attached.future
+        .then((store) {
+          _memories?.keepProjectTopics();
+          return store.claimTidyMemories();
+        })
+        .catchError(
+          (Object error) => debugPrint('[gaia] tidy not claimed: $error'),
+        ),
+  );
 
   /// Signed out: project topics wait for the next account's startup pull.
   void signedOut() => _memories?.stopProjectTopics();
@@ -717,14 +726,14 @@ class GaiaHost {
     if (excluded(window, uia.url)) {
       return _sendOrLaunch('context', {'window': null, 'selection': null});
     }
+    // Sent even with the setting off, for `/window` to attach by hand.
     _sendOrLaunch('context', {
-      'window': _settings.windowContext
-          ? GaiaContextPart(
-              app: window.app,
-              title: window.title,
-              url: uia.url,
-            ).toJson()
-          : null,
+      'window': GaiaContextPart(
+        app: window.app,
+        title: window.title,
+        url: uia.url,
+      ).toJson(),
+      'attach': _settings.windowContext,
       'selection': uia.selection,
     });
   }

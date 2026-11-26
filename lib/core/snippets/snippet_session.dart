@@ -213,7 +213,7 @@ class SnippetSession {
   /// notification that detected it (that would re-enter [EditableTextState]
   /// mid-dispatch), so it is deferred by a microtask — which still lands before
   /// the next frame, so the bare trigger is never painted.
-  ({Snippet snippet, TextEditingValue at})? _pending;
+  ({Snippet snippet, TextEditingValue at, int consumed})? _pending;
 
   /// The state to put back if the user undoes the expansion that just happened,
   /// and the expanded value that proves nothing has changed since. See
@@ -486,6 +486,24 @@ class SnippetSession {
       }
     }
 
+    // A soft keyboard's Space never reaches [handleKey]: it arrives as a
+    // committed character. So a manual trigger it ends expands here, taking
+    // the space with it as the key does (BUG-401). After a hardware Space that
+    // missed, this asks the same question of the same text and misses again.
+    if (_expandKey == SnippetExpandKey.space &&
+        _index.hasManual &&
+        _isTypedChar(previous, value, typed)) {
+      final caret = value.selection.baseOffset - 1;
+      final snippet = value.text.codeUnitAt(caret) == 0x20
+          ? _index.matchManual(value.text, caret)
+          : null;
+      if (snippet != null &&
+          _isSingleInsertAt(previous.text, value.text, caret)) {
+        _queueExpand(snippet, value, consumed: 1);
+        return;
+      }
+    }
+
     if (_stack.isNotEmpty) _pruneForCaret(value.selection);
   }
 
@@ -500,8 +518,15 @@ class SnippetSession {
     TextEditingValue previous,
     TextEditingValue value,
     String? typed,
+  ) => _index.hasAuto && _isTypedChar(previous, value, typed);
+
+  /// [_shouldConsiderAuto]'s shape test, without the question of whether
+  /// there are auto snippets to match.
+  bool _isTypedChar(
+    TextEditingValue previous,
+    TextEditingValue value,
+    String? typed,
   ) {
-    if (!_index.hasAuto) return false;
     if (value.text.length != previous.text.length + 1) return false;
     final selection = value.selection;
     final was = previous.selection;
@@ -576,8 +601,10 @@ class SnippetSession {
     return true;
   }
 
-  void _queueExpand(Snippet snippet, TextEditingValue at) {
-    _pending = (snippet: snippet, at: at);
+  /// [consumed] is how many characters after the trigger go with it: the
+  /// soft keyboard's Space, which was already typed when the trigger matched.
+  void _queueExpand(Snippet snippet, TextEditingValue at, {int consumed = 0}) {
+    _pending = (snippet: snippet, at: at, consumed: consumed);
     scheduleMicrotask(() {
       final pending = _pending;
       _pending = null;
@@ -589,7 +616,11 @@ class SnippetSession {
           value.selection != pending.at.selection) {
         return;
       }
-      _expand(pending.snippet, value.selection.baseOffset);
+      _expand(
+        pending.snippet,
+        value.selection.baseOffset - pending.consumed,
+        consumed: pending.consumed,
+      );
     });
   }
 
@@ -599,14 +630,15 @@ class SnippetSession {
 
   /// Replaces the trigger ending at [caret] with its parsed replacement and,
   /// when there is more than one tabstop, pushes a session for the rest.
-  void _expand(Snippet snippet, int caret) {
+  void _expand(Snippet snippet, int caret, {int consumed = 0}) {
     final before = textController.value;
     final text = before.text;
     final start = caret - snippet.trigger.length;
-    if (start < 0 || caret > text.length) return;
+    final end = caret + consumed;
+    if (start < 0 || end > text.length) return;
 
     final parsed = parseSnippetReplacement(snippet.replacement);
-    final next = text.replaceRange(start, caret, parsed.text);
+    final next = text.replaceRange(start, end, parsed.text);
     final stops = <int>[
       for (final stop in parsed.tabstops) start + stop.offset,
     ];
@@ -622,7 +654,7 @@ class SnippetSession {
 
     // Outer sessions are still live and their offsets were measured against the
     // pre-expansion text — a nested expansion happens *inside* one of them.
-    _shiftFrames(start, caret - start, parsed.text.length);
+    _shiftFrames(start, end - start, parsed.text.length);
 
     _applyValue(after);
     _lastExpansion = (before: before, after: after);

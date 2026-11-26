@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/spellcheck/autocorrect_session.dart';
 import 'package:voyager/core/spellcheck/word_token.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
@@ -241,6 +242,25 @@ class _TextFieldContextMenuState extends ConsumerState<TextFieldContextMenu> {
         ),
     ];
 
+    // A touch screen shows its own selection toolbar on a long press or a
+    // double tap, the only route there to Cut, Copy, Paste and Select all:
+    // the word actions join it rather than replace it (BUG-404).
+    // Ahead of the other apps' "process text" actions (Translate, Ask …),
+    // the only custom items in the platform's list, which can run to a dozen.
+    if (isAndroid) {
+      final platform = widget.editableTextState.contextMenuButtonItems;
+      bool other(ContextMenuButtonItem b) =>
+          b.type == ContextMenuButtonType.custom;
+      return AdaptiveTextSelectionToolbar.buttonItems(
+        anchors: widget.editableTextState.contextMenuAnchors,
+        buttonItems: [
+          ...platform.where((b) => !other(b)),
+          for (final item in items)
+            ContextMenuButtonItem(label: item.label, onPressed: item.onTap),
+          ...platform.where(other),
+        ],
+      );
+    }
     return CustomSingleChildLayout(
       delegate: _TextFieldContextMenuLayoutDelegate(
         anchor: anchor,

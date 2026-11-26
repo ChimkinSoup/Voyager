@@ -110,7 +110,10 @@ class _AssetImage implements LightboxImage {
   Future<({Uint8List bytes, MediaImageFormat? format})?> read() async {
     final bytes = await service.bytesFor(asset);
     if (bytes == null) return null;
-    return (bytes: bytes, format: MediaImageFormat.fromMimeType(asset.mimeType));
+    return (
+      bytes: bytes,
+      format: MediaImageFormat.fromMimeType(asset.mimeType),
+    );
   }
 
   @override
@@ -667,7 +670,9 @@ class _MediaLightboxState extends State<_MediaLightbox> {
                 },
               ),
               Positioned(
-                top: 16,
+                // Below the status bar: on a phone the system draws its icons
+                // over the top inset and keeps the taps there (BUG-409).
+                top: 16 + MediaQuery.paddingOf(context).top,
                 right: 16,
                 child: _LightboxActions(
                   onZoomIn: () => _zoomBy(1.4),

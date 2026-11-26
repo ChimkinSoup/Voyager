@@ -340,7 +340,11 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
         // An address isn't a word: the keyboard mustn't correct it (BUG-388).
         autocorrect: widget.keyboardType != TextInputType.emailAddress,
         autofillHints: widget.autofillHints,
-        onChanged: widget.onChanged,
+        onChanged: (text) {
+          // Only typing reaches here, never Vim's own edits (BUG-410).
+          vim.session?.noteUserEdit();
+          widget.onChanged?.call(text);
+        },
         onSubmitted: widget.onSubmitted,
         onEditingComplete: widget.onEditingComplete,
         textAlignVertical: widget.expands || (widget.maxLines ?? 1) > 1

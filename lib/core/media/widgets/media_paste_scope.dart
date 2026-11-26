@@ -8,6 +8,15 @@ import 'package:voyager/core/media/widgets/media_attach.dart';
 import 'package:voyager/core/text/prose_paste.dart';
 import 'package:voyager/domain/models/media_models.dart';
 
+/// What a soft keyboard may insert into an image-capable field: the formats
+/// ingest takes. No GIF (MEDIA.md, non-goals).
+const kMediaInsertMimeTypes = [
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/heic',
+];
+
 /// Where one Ctrl+V ends up.
 enum MediaPasteRoute {
   /// Into the editor's image gallery.
@@ -220,6 +229,31 @@ class _MediaPasteScopeState extends ConsumerState<MediaPasteScope> {
     }
   }
 
+  /// An image a soft keyboard inserted into a field here: Gboard's clipboard
+  /// or a sticker. Android has no Ctrl+V for the image half of a paste, so
+  /// this is the keyboard's way in (BUG-407).
+  Future<void> _insertContent(KeyboardInsertedContent content) async {
+    final bytes = content.data;
+    var documentId = widget.documentId;
+    if (bytes == null || documentId == null || _busy) return;
+    final overlay = Overlay.of(context, rootOverlay: true);
+    _busy = true;
+    try {
+      documentId = await widget.onBeforeAttach?.call() ?? documentId;
+      if (!mounted) return;
+      await attachImagesForOwner(
+        ref,
+        overlay: overlay,
+        images: [bytes],
+        collection: widget.collection,
+        documentId: documentId,
+        facet: widget.facet,
+      );
+    } finally {
+      _busy = false;
+    }
+  }
+
   /// Reads the clipboard's image and attaches it to this scope's owner.
   Future<void> _attachFromClipboard(OverlayState overlay) async {
     var documentId = widget.documentId;
@@ -249,6 +283,7 @@ class _MediaPasteScopeState extends ConsumerState<MediaPasteScope> {
   Widget build(BuildContext context) {
     return MediaPasteOwnerScope(
       pasteImage: _pasteImage,
+      insertContent: widget.fieldTakesBoth ? _insertContent : null,
       child: Shortcuts(
         shortcuts: const {
           SingleActivator(LogicalKeyboardKey.keyV, control: true):
@@ -292,12 +327,18 @@ class MediaPasteOwnerScope extends InheritedWidget {
   const MediaPasteOwnerScope({
     super.key,
     required this.pasteImage,
+    this.insertContent,
     required super.child,
   });
 
   /// Attaches the clipboard's image, if any, to the enclosing scope's gallery
   /// — by the same rules as a paste the scope handles itself.
   final Future<void> Function() pasteImage;
+
+  /// Attaches an image a soft keyboard inserted, where the fields here are
+  /// image-capable ([MediaPasteScope.fieldTakesBoth]); null elsewhere, so the
+  /// keyboard offers no image insert there.
+  final Future<void> Function(KeyboardInsertedContent content)? insertContent;
 
   static MediaPasteOwnerScope? maybeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<MediaPasteOwnerScope>();

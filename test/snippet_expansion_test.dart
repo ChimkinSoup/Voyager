@@ -427,6 +427,97 @@ void main() {
       expect(controller.text, 'X');
     });
 
+    group('a soft keyboard\'s Space, which arrives as text (BUG-401)', () {
+      testWidgets('committed with the word it ends expands, eating it', (
+        tester,
+      ) async {
+        await pumpField(
+          tester,
+          snippets: [snippet('qqa', 'Quick answer', auto: false)],
+          expandKey: SnippetExpandKey.space,
+          text: 'x qqa',
+        );
+        // Gboard: the word is composing, and Space commits it with the space.
+        final state = _fieldState(tester);
+        state.updateEditingValue(
+          const TextEditingValue(
+            text: 'x qqa',
+            selection: TextSelection.collapsed(offset: 5),
+            composing: TextRange(start: 2, end: 5),
+          ),
+        );
+        await tester.pump();
+        state.updateEditingValue(
+          const TextEditingValue(
+            text: 'x qqa ',
+            selection: TextSelection.collapsed(offset: 6),
+          ),
+        );
+        await tester.pump();
+        expect(controller.text, 'x Quick answer');
+        expect(controller.selection.baseOffset, 14);
+      });
+
+      testWidgets('typed on its own after the trigger expands too', (
+        tester,
+      ) async {
+        await pumpField(
+          tester,
+          snippets: [snippet('qqa', 'Quick answer', auto: false)],
+          expandKey: SnippetExpandKey.space,
+          text: 'qqa tail',
+        );
+        controller.selection = const TextSelection.collapsed(offset: 3);
+        await tester.pump();
+        _fieldState(tester).updateEditingValue(
+          const TextEditingValue(
+            text: 'qqa  tail',
+            selection: TextSelection.collapsed(offset: 4),
+          ),
+        );
+        await tester.pump();
+        expect(controller.text, 'Quick answer tail');
+      });
+
+      testWidgets('not when Tab is the expand key', (tester) async {
+        await pumpField(
+          tester,
+          snippets: [snippet('qqa', 'Quick answer', auto: false)],
+          text: 'qqa',
+        );
+        _fieldState(tester).updateEditingValue(
+          const TextEditingValue(
+            text: 'qqa ',
+            selection: TextSelection.collapsed(offset: 4),
+          ),
+        );
+        await tester.pump();
+        expect(controller.text, 'qqa ');
+      });
+
+      testWidgets('a pasted space does not, on desktop', (tester) async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+        try {
+          await pumpField(
+            tester,
+            snippets: [snippet('qqa', 'Quick answer', auto: false)],
+            expandKey: SnippetExpandKey.space,
+            text: 'qqa',
+          );
+          _fieldState(tester).updateEditingValue(
+            const TextEditingValue(
+              text: 'qqa ',
+              selection: TextSelection.collapsed(offset: 4),
+            ),
+          );
+          await tester.pump();
+          expect(controller.text, 'qqa ');
+        } finally {
+          debugDefaultTargetPlatformOverride = null;
+        }
+      });
+    });
+
     group('on a list line (BUG-027)', () {
       /// The list-aware fields' own Tab handler, as the journal installs it on
       /// the field's focus node — below the snippet layer.
@@ -848,35 +939,29 @@ void main() {
       expect(focusNode.hasFocus, isTrue);
     });
 
-    testWidgets(
-      'a key that changed no text cannot vouch for a later write',
-      (tester) async {
-        await pumpField(
-          tester,
-          vimEnabled: true,
-          snippets: [snippet('ea', 'X')],
-        );
-        await type(tester, 'e');
-        await press(tester, LogicalKeyboardKey.escape);
-        // `a` enters Insert without typing anything, so the token it records is
-        // spent by the selection-only notification that follows it.
-        await press(tester, _keyFor('a'));
+    testWidgets('a key that changed no text cannot vouch for a later write', (
+      tester,
+    ) async {
+      await pumpField(tester, vimEnabled: true, snippets: [snippet('ea', 'X')]);
+      await type(tester, 'e');
+      await press(tester, LogicalKeyboardKey.escape);
+      // `a` enters Insert without typing anything, so the token it records is
+      // spent by the selection-only notification that follows it.
+      await press(tester, _keyFor('a'));
 
-        // A write the user did not make: a sync pull, a redo, a CRDT merge. It
-        // happens to insert the same character the last key press produced, and
-        // used to be treated as typing on the strength of that stale token.
-        controller.value = const TextEditingValue(
-          text: 'ea',
-          selection: TextSelection.collapsed(offset: 2),
-        );
-        await tester.pump();
-        expect(controller.text, 'ea');
-        // Desktop only: where there is no soft keyboard, a character with no key
-        // event behind it is by definition not typing — which is the whole point
-        // of the token. See [_hardwareKeyboardTypes].
-      },
-      variant: TargetPlatformVariant.only(TargetPlatform.windows),
-    );
+      // A write the user did not make: a sync pull, a redo, a CRDT merge. It
+      // happens to insert the same character the last key press produced, and
+      // used to be treated as typing on the strength of that stale token.
+      controller.value = const TextEditingValue(
+        text: 'ea',
+        selection: TextSelection.collapsed(offset: 2),
+      );
+      await tester.pump();
+      expect(controller.text, 'ea');
+      // Desktop only: where there is no soft keyboard, a character with no key
+      // event behind it is by definition not typing — which is the whole point
+      // of the token. See [_hardwareKeyboardTypes].
+    }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
     testWidgets('Tab in Visual mode leaves the range alone', (tester) async {
       await pumpField(

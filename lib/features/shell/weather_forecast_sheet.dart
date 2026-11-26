@@ -4,8 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/glass_surface.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/core/widgets/weather_icon.dart';
 import 'package:voyager/domain/models/weather_models.dart';
@@ -16,49 +18,81 @@ import 'package:voyager/features/shell/weather_chart_transition_warmup.dart';
 import 'package:voyager/features/shell/weather_forecast_chart.dart';
 import 'package:voyager/features/shell/weather_forecast_chart_transition.dart';
 
+/// A centred dialog on desktop; on Android a bottom sheet with a grab handle
+/// that drags down to close (BUG-396).
 Future<void> showWeatherForecastSheet(BuildContext context) {
+  if (isAndroid) {
+    return showVoyagerSheet<void>(
+      context: context,
+      builder: (context) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const VoyagerSheetHandle(),
+            Flexible(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 560),
+                child: const _ForecastContent(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
   return showVoyagerDialog<void>(
     context: context,
     builder: (context) => const _WeatherForecastDialog(),
   );
 }
 
-class _WeatherForecastDialog extends ConsumerWidget {
+class _WeatherForecastDialog extends StatelessWidget {
   const _WeatherForecastDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 680, maxHeight: 620),
+        child: const Padding(
+          padding: EdgeInsets.all(20),
+          child: _ForecastContent(),
+        ),
+      ),
+    );
+  }
+}
+
+class _ForecastContent extends ConsumerWidget {
+  const _ForecastContent();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final forecastAsync = ref.watch(weatherForecastProvider.settled);
     final cachedForecast = forecastAsync.value;
 
-    return Dialog(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 680, maxHeight: 620),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: forecastAsync.when(
-            loading: () {
-              if (cachedForecast != null) {
-                return _ForecastBody(forecast: cachedForecast);
-              }
-              return const Center(child: CircularProgressIndicator());
-            },
-            error: (error, _) {
-              if (cachedForecast != null) {
-                return _ForecastBody(forecast: cachedForecast);
-              }
-              return _ForecastError(
-                message: _forecastErrorMessage(error),
-                onRetry: () => ref.invalidate(weatherForecastProvider),
-              );
-            },
-            data: (forecast) {
-              if (forecast == null) return const _NoLocationPrompt();
-              return _ForecastBody(forecast: forecast);
-            },
-          ),
-        ),
-      ),
+    return forecastAsync.when(
+      loading: () {
+        if (cachedForecast != null) {
+          return _ForecastBody(forecast: cachedForecast);
+        }
+        return const Center(child: CircularProgressIndicator());
+      },
+      error: (error, _) {
+        if (cachedForecast != null) {
+          return _ForecastBody(forecast: cachedForecast);
+        }
+        return _ForecastError(
+          message: _forecastErrorMessage(error),
+          onRetry: () => ref.invalidate(weatherForecastProvider),
+        );
+      },
+      data: (forecast) {
+        if (forecast == null) return const _NoLocationPrompt();
+        return _ForecastBody(forecast: forecast);
+      },
     );
   }
 }
@@ -406,31 +440,41 @@ class _DailyCard extends StatelessWidget {
           ),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  dayFormat.format(day.date),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelSmall,
+            // On a phone a card is ~45 dp wide: the date drops its month, and
+            // what still doesn't fit (a large font) shrinks rather than being
+            // cut or overflowing (BUG-396).
+            child: LayoutBuilder(
+              builder: (context, constraints) => FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      (constraints.maxWidth < 72
+                              ? DateFormat('EEE d')
+                              : dayFormat)
+                          .format(day.date),
+                      maxLines: 1,
+                      style: theme.textTheme.labelSmall,
+                    ),
+                    const SizedBox(height: 4),
+                    WeatherIcon(day.icon, size: 22),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${day.highC.round()}° / ${day.lowC.round()}°',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                    Text(
+                      '${day.maxRainChancePercent}%',
+                      maxLines: 1,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 4),
-                WeatherIcon(day.icon, size: 22),
-                const SizedBox(height: 4),
-                Text(
-                  '${day.highC.round()}° / ${day.lowC.round()}°',
-                  style: theme.textTheme.bodySmall,
-                ),
-                Text(
-                  '${day.maxRainChancePercent}%',
-                  maxLines: 1,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),

@@ -133,6 +133,16 @@ class _MediaGalleryStripState extends ConsumerState<MediaGalleryStrip> {
       confirmLabel: 'Remove',
     );
     if (!confirmed) return;
+    await _detach(reference, container: container, overlay: overlay);
+  }
+
+  /// Takes [reference] off this owner, with the undo toast. Asked first by the
+  /// caller: [_remove] for the thumbnail's ✕, the lightbox for its own Remove.
+  Future<void> _detach(
+    MediaReference reference, {
+    required ProviderContainer container,
+    required OverlayState overlay,
+  }) async {
     final media = container.read(mediaServiceProvider);
     await softDeleteWithUndo(
       overlay: overlay,
@@ -163,10 +173,21 @@ class _MediaGalleryStripState extends ConsumerState<MediaGalleryStrip> {
   }
 
   void _openLightbox(int index) {
+    final container = ProviderScope.containerOf(context, listen: false);
+    final overlay = Overlay.of(context, rootOverlay: true);
     showMediaLightbox(
       context,
       assets: _assets,
       initialIndex: index,
+      // The thumbnail's ✕ shows on mouse hover only, so on a touch screen the
+      // lightbox is where an image comes off (BUG-408). It asks first.
+      onRemove: (asset) async {
+        final reference = _references
+            .where((it) => it.mediaId == asset.id)
+            .firstOrNull;
+        if (reference == null) return;
+        await _detach(reference, container: container, overlay: overlay);
+      },
       reload: () async {
         await _reload();
         return _assets;

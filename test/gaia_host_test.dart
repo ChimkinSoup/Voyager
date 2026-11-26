@@ -3217,6 +3217,7 @@ void main() {
             'title': 'Pull requests',
             'url': 'github.com/pulls',
           },
+          'attach': true,
           'selection': 'some code',
         });
       });
@@ -3463,7 +3464,7 @@ void main() {
       });
     });
 
-    test('turned off, the window stays out but the selection still comes', () {
+    test('turned off, the window still comes but not to attach', () {
       run(show: true, (async, host) {
         connect(async);
         listen();
@@ -3475,7 +3476,16 @@ void main() {
         uia = (url: 'github.com', selection: 'x');
         host.onHotkey(GaiaHotkey.small);
         async.flushMicrotasks();
-        expect(lastContext, {'window': null, 'selection': 'x'});
+        expect(lastContext, {
+          'window': {
+            'type': 'context',
+            'app': 'Google Chrome',
+            'title': 'Pull requests',
+            'url': 'github.com',
+          },
+          'attach': false,
+          'selection': 'x',
+        });
       });
     });
 

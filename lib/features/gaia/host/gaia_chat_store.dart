@@ -781,6 +781,19 @@ class GaiaChatStore {
     await _repository.upsertSettings(settings.patched(changes));
   });
 
+  /// Tidy memories weekly is on by default with no device to sweep on
+  /// (GAIA_MEMORY_TOPICS_HLD.md §27.7 item 3): this desktop takes it. Run
+  /// after the startup pull, so an account that turned it off has said so.
+  Future<void> claimTidyMemories() => _serial(() async {
+    final settings = await _repository.getSettings();
+    if (!settings.tidyMemories || settings.tidyMemoriesDevice.isNotEmpty) {
+      return;
+    }
+    await _repository.upsertSettings(
+      settings.copyWith(tidyMemoriesDevice: deviceId),
+    );
+  });
+
   /// Proposed memories waiting in the inbox (GAIA_SETTINGS_HLD.md §5.5).
   Future<int> inboxCount() async =>
       gaiaInboxCount(await _repository.listMemories());

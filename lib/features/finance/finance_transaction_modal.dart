@@ -85,19 +85,41 @@ Future<void> showFinanceTransactionModal(
   // dismissed — which can happen while a save is still in flight, when the
   // invalidate still has to land or the ledger keeps showing pre-write data.
   final container = ProviderScope.containerOf(context, listen: false);
+  // An editor (VOYAGER_SHEET_DISMISS_HLD.md §5): a dialog on desktop, a
+  // sheet on Android that drags down to close, with the handle that says so
+  // (BUG-400). Its draft outlives a drag-dismiss as it does Back.
   await showVoyagerModal<void>(
     context: context,
-    enableDrag: false,
-    builder: (ctx) => ProviderScope(
-      parent: container,
-      child: _TransactionModal(
-        container: container,
-        existing: existing,
-        draft: draft,
-        onSaved: onSaved,
-        onDraft: onDraft,
+    kind: VoyagerSheetKind.editor,
+    builder: (ctx) => _withSheetHandle(
+      ProviderScope(
+        parent: container,
+        child: _TransactionModal(
+          container: container,
+          existing: existing,
+          draft: draft,
+          onSaved: onSaved,
+          onDraft: onDraft,
+        ),
       ),
     ),
+  );
+}
+
+/// [form] under a grab handle where the editor sheet drags, outside the form's
+/// scroll view so a drag on it always moves the sheet.
+Widget _withSheetHandle(Widget form) {
+  if (!voyagerSheetDrags(VoyagerSheetKind.editor)) return form;
+  return Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      const Padding(
+        padding: EdgeInsets.only(top: 12),
+        child: VoyagerSheetHandle(),
+      ),
+      Flexible(child: form),
+    ],
   );
 }
 

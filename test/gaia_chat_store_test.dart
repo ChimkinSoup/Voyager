@@ -774,6 +774,38 @@ void main() {
     expect(found.map((m) => m.id), ['kept', 'steps declined partway']);
   });
 
+  // Tidy memories weekly is on by default, and the first desktop past its
+  // startup pull sweeps (GAIA_MEMORY_TOPICS_HLD.md §27.7 item 3).
+  group('claimTidyMemories', () {
+    test('a new install is on, and this desktop takes the sweep', () async {
+      expect(GaiaSettings.initial().tidyMemories, isTrue);
+      expect(GaiaSettings.initial().tidyMemoriesDevice, isEmpty);
+      await store.claimTidyMemories();
+      final settings = await repository.getSettings();
+      expect(settings.tidyMemories, isTrue);
+      expect(settings.tidyMemoriesDevice, 'laptop');
+      expect(uploads, contains('gaia_settings/gaia'));
+    });
+
+    test('an account that turned it off stays off', () async {
+      await repository.upsertSettings(
+        GaiaSettings.initial().copyWith(tidyMemories: false),
+      );
+      await store.claimTidyMemories();
+      final settings = await repository.getSettings();
+      expect(settings.tidyMemories, isFalse);
+      expect(settings.tidyMemoriesDevice, isEmpty);
+    });
+
+    test('another desktop that sweeps keeps it', () async {
+      await repository.upsertSettings(
+        GaiaSettings.initial().copyWith(tidyMemoriesDevice: 'desktop'),
+      );
+      await store.claimTidyMemories();
+      expect((await repository.getSettings()).tidyMemoriesDevice, 'desktop');
+    });
+  });
+
   test('a question is told apart from a statement', () {
     expect(gaiaEndsWithQuestion('Done.\n\nShould I push?'), isTrue);
     expect(gaiaEndsWithQuestion('Want me to **merge it?**'), isTrue);

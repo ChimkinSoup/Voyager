@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:voyager/core/media/widgets/media_paste_scope.dart';
 import 'package:voyager/core/text/merge_aware_undo.dart';
 import 'package:voyager/core/tags/tag_suggestions.dart';
 import 'package:voyager/core/text/list_text_editing.dart';
@@ -185,8 +186,7 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
   @override
   void didUpdateWidget(covariant TagHighlightedTextField oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.document != widget.document &&
-        _scrollController.hasClients) {
+    if (oldWidget.document != widget.document && _scrollController.hasClients) {
       _scrollController.jumpTo(0);
     }
     if (oldWidget.undoController != widget.undoController) {
@@ -277,6 +277,20 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
   ) => controller == null
       ? field
       : MergeAwareUndoScope(controller: controller, child: field);
+
+  /// Built once per callback rather than per build, so the field's input
+  /// configuration doesn't look changed on every rebuild.
+  ContentInsertionConfiguration? _insertion;
+
+  ContentInsertionConfiguration? _contentInsertion(BuildContext context) {
+    final insert = MediaPasteOwnerScope.maybeOf(context)?.insertContent;
+    if (insert == null) return _insertion = null;
+    if (_insertion?.onContentInserted == insert) return _insertion;
+    return _insertion = ContentInsertionConfiguration(
+      allowedMimeTypes: kMediaInsertMimeTypes,
+      onContentInserted: insert,
+    );
+  }
 
   Widget _buildField(BuildContext context, VimFieldBinding vim) {
     final theme = Theme.of(context);
@@ -395,6 +409,9 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
           // paragraph itself rather than through the controller — see
           // [misspellingAtCursor].
           spellCheckConfiguration: const SpellCheckConfiguration.disabled(),
+          // An image from the keyboard (Gboard's clipboard, a sticker) goes to
+          // the gallery around this field, where it takes one (BUG-407).
+          contentInsertionConfiguration: _contentInsertion(context),
           controller: _controller,
           focusNode: widget.focusNode,
           readOnly: widget.readOnly,
@@ -420,7 +437,11 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
           // padding, so a scrolled body reads up to the border; the stack below
           // clips it there instead.
           clipBehavior: spellcheckOn ? Clip.none : Clip.hardEdge,
-          onChanged: widget.onChanged,
+          onChanged: (text) {
+            // Only typing reaches here, never Vim's own edits (BUG-410).
+            vim.session?.noteUserEdit();
+            widget.onChanged?.call(text);
+          },
           decoration: decoration,
         ),
       ),

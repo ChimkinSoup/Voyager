@@ -767,6 +767,50 @@ void main() {
     });
   });
 
+  group('a soft keyboard, which sends no key events (BUG-403)', () {
+    /// What Gboard sends: each character as a committed editing value, with
+    /// no key event, whether it was a key or a pick from the suggestion strip.
+    Future<void> softType(WidgetTester tester, String input) async {
+      final state = _fieldState(tester);
+      for (final ch in input.split('')) {
+        final value = controller.value;
+        final caret = value.selection.baseOffset;
+        state.updateEditingValue(
+          TextEditingValue(
+            text: value.text.replaceRange(caret, caret, ch),
+            selection: TextSelection.collapsed(offset: caret + 1),
+          ),
+        );
+        await tester.pump();
+      }
+    }
+
+    _mobileWidgets('leaves the word as typed: the keyboard corrects its own', (
+      tester,
+    ) async {
+      await pumpField(tester);
+      await softType(tester, 'hello wtih ');
+      expect(controller.text, 'hello wtih ');
+    });
+
+    _mobileWidgets('still applies a pair the user wrote', (tester) async {
+      service
+        ..updateDictionary({'neve', 'never', 'nerve'})
+        ..updateFlaggedWords({'neve': 'never'});
+      await pumpField(tester);
+      await softType(tester, 'neve ');
+      expect(controller.text, 'never ');
+    });
+
+    _mobileWidgets('a hardware keyboard on the phone still corrects', (
+      tester,
+    ) async {
+      await pumpField(tester);
+      await type(tester, 'hello wtih ');
+      expect(controller.text, 'hello with ');
+    });
+  });
+
   // `FLAGGED_WORDS.md` §5: a flagged word is unknown, and a flag that stores a
   // replacement is a rule the user wrote rather than a guess the cascade made.
   group('flagged words', () {

@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/media/widgets/media_attach.dart';
 import 'package:voyager/core/media/widgets/media_drop_target.dart';
 import 'package:voyager/core/media/widgets/media_fan_stack.dart';
 import 'package:voyager/core/media/widgets/media_paste_scope.dart';
@@ -19,6 +20,7 @@ import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/sync/text_delta_injector.dart';
 import 'package:voyager/core/layout/window_size_class.dart';
 import 'package:voyager/core/motion/motion.dart';
+import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/tags/tag_suggestions.dart';
 import 'package:voyager/core/text/list_text_editing.dart';
 import 'package:voyager/core/text/merge_aware_undo.dart';
@@ -762,6 +764,23 @@ class _DreamJournalPageState extends ConsumerState<_DreamJournalView> {
     _titleFocusNode.requestFocus();
   }
 
+  /// The dream's images by the file picker, on Android only, as in the
+  /// journal (BUG-407). A held "New dream" is written once there is an image.
+  Future<void> _addImages(String entryId) async {
+    final overlay = Overlay.of(context, rootOverlay: true);
+    final images = await pickImageFiles();
+    if (images.isEmpty || !mounted) return;
+    final documentId = await _promoteForImage(entryId);
+    if (!mounted) return;
+    await attachImagesForOwner(
+      ref,
+      overlay: overlay,
+      images: images,
+      collection: FirestoreCollections.dreamEntries,
+      documentId: documentId,
+    );
+  }
+
   Future<void> _deleteEntry(DreamEntry entry) async {
     // Captured while this widget is certainly mounted: the toast that offers
     // the undo outlives the row it deleted, and a `WidgetRef` would not.
@@ -1468,6 +1487,18 @@ class _DreamJournalPageState extends ConsumerState<_DreamJournalView> {
     }
 
     final local = entry.entryDate.toLocal();
+    final datePill = Builder(
+      builder: (buttonContext) => SelectorPill(
+        dense: false,
+        ellipsize: isAndroid,
+        isActive: _isDatePickerOpen,
+        label:
+            '${MaterialLocalizations.of(context).formatShortDate(local)}'
+            ' at ${formatTime12Hour(local)}',
+        accentColor: accent,
+        onTap: () => unawaited(_changeEntryDate(buttonContext)),
+      ),
+    );
     // A soft keyboard or a landscape phone leaves less height than the rows
     // above the body need, and the body's Expanded collapsed to nothing
     // (BUG-385). Below the floor the editor scrolls instead, so the header
@@ -1517,19 +1548,28 @@ class _DreamJournalPageState extends ConsumerState<_DreamJournalView> {
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    Builder(
-                      builder: (buttonContext) => SelectorPill(
-                        dense: false,
-                        ellipsize: false,
-                        isActive: _isDatePickerOpen,
-                        label:
-                            '${MaterialLocalizations.of(context).formatShortDate(local)}'
-                            ' at ${formatTime12Hour(local)}',
-                        accentColor: accent,
-                        onTap: () => unawaited(_changeEntryDate(buttonContext)),
+                    if (isAndroid)
+                      // With Add images beside it the pill gives up width
+                      // before the row overflows a narrow window.
+                      Expanded(
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: datePill,
+                        ),
+                      )
+                    else ...[
+                      datePill,
+                      const Spacer(),
+                    ],
+                    if (isAndroid)
+                      IconButton(
+                        tooltip: 'Add images',
+                        onPressed: () => unawaited(_addImages(entry.id)),
+                        icon: Icon(
+                          PhosphorIconsRegular.imageSquare,
+                          color: accent,
+                        ),
                       ),
-                    ),
-                    const Spacer(),
                     IconButton(
                       tooltip: 'Delete dream',
                       onPressed: () => unawaited(_deleteEntry(entry)),

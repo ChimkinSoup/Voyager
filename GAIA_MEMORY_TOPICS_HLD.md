@@ -5,7 +5,7 @@ live checks of §15.4, §16.4 and §17.4 were run on 2026-11-16 (§18): all pass
 those that need the phone, a week of real chats, more §11 bursts, or Phase 4 (§19). Stage 2
 (Phase 3) is **on by default since 2026-11-17** (§25.1); the debug-menu switch now only turns
 it off. The first §11 burst is in §11; the
-threshold isn't settled (§18.3). Decisions after the live pass are in §18.4: stage 1 is a
+threshold was settled by §11's week of real chats (below). Decisions after the live pass are in §18.4: stage 1 is a
 candidate list only, and without stage 2 recall is left to `memory_search`. **Phase 4 (the
 Memories tab tree) built 2026-11-16** (§20): tested, and checked live off-screen except for
 drags and what §20.5 lists. **Phase 5 (placement on capture, suggested topics, the curator's
@@ -21,17 +21,22 @@ phone's; BUG-382 (Sort these' Accept also makes a memory's older offer) found, a
 filing in a project chat, a real Codex turn calling `memory_search` with `topic`, Sort these'
 × on one of two chips, and the phone for every phase. All passed. BUG-383 (the phone's first
 reveal from a recall chip doesn't scroll) found, and fixed in `e0c94843`. BUG-378 was closed
-as a harness problem, not the app's. **Still open:** §11's week of real chats, which tunes
-stage 2's later-message trigger rather than deciding whether it's on. §11's clean bursts were
-skipped. **A second later-message trigger, rare words in the user's message, and a
-`memory_search` nudge in the system prompt were added 2026-11-17 (§26)** after a real chat
+as a harness problem, not the app's. **§11's week of real chats was read on 2026-11-26** (47
+chats, 208 messages): stage 2 stays on for later messages and the threshold stays as it is
+(decided by Juno). §11's clean bursts were skipped. **A second later-message trigger, rare
+words in the user's message, and a `memory_search` nudge in the system prompt were added 2026-11-17 (§26)** after a real chat
 missed a memory. **Phases 7-8 (memory upkeep: a check as memories are saved, and a weekly
 sweep whose findings go to the inbox) drafted 2026-11-24 (§27); its open
 decisions settled the same day (§27.7).** **Phase 7 built 2026-11-25 (§28) and passed its
-live pass the same day (§29)**, except Codex's `memory_propose` call, unchecked while
-gaiaqa's Codex login is dead. One bug found there (a doubled full stop) was fixed. Corrections
+live pass the same day (§29).** Codex's `memory_propose` call was skipped: Gaia won't support
+Codex going forward. One bug found there (a doubled full stop) was fixed. Corrections
 worded unlike the old fact are missed by the save check; the sweep is meant to catch them.
-**Phase 8 (the sweep) not built.** Drafted 2026-11-15. This replaces the memory index in GAIA_HLD.md §11 and
+**Phase 8 built 2026-11-25 (§30) and passed its live pass the same day (§31).** Seven bugs
+were found and fixed, then rechecked live (§31.6, §31.7). **Tidy memories weekly is on by
+default since 2026-11-26** (§27.7 item 3): a new install's first desktop claims the sweep after
+its startup pull, and existing accounts keep what they have stored. **No checks are left open.**
+
+Drafted 2026-11-15. This replaces the memory index in GAIA_HLD.md §11 and
 the project memories in GAIA_PROJECTS_HLD.md §6, and it changes one decision in §3.3 of that doc
 (§7 here).
 
@@ -454,8 +459,21 @@ memories across 20 topics, debug build of the working tree; details in §18):
   well under the 2.6-4.2 s §17.2 item 7 expected. Beside the router on a first message, each
   on its own process: router 581 ms, recall 1,405 ms; the message waited for recall. During a
   slow patch on the service (19:02-19:07) 3 of 20 passes hit the timeout and stage 1 was used.
-- **Still to do:** how often stage 2 runs across a week of Juno's chats. The two more bursts
-  were skipped (above).
+- **A week of Juno's chats, 2026-11-17 to 11-25** (`recall.log` in the real profile, 9 days):
+  47 chats, 208 messages. Use was uneven: 155 of the messages were on Nov 17-20 and 23 on
+  Nov 21-24, but that's enough to read how often stage 2 runs.
+  - **First messages:** stage 2 ran on 28 of 47. The other 19 had no candidates.
+    9 of the 27 that answered picked something, and 1 timed out and fell back to stage 1.
+  - **Later messages:** stage 2 ran on 27 of 161 (17%). **25 of the 27 fired on rare words**
+    (§26) and only 2 on strength over 0.5, so the 0.5 threshold almost never triggers on its
+    own. 6 of the 27 picked something, and 21 picked nothing.
+  - **Tokens:** 88,741 in all, about 4.2 Standard-tier turns over the 9 days, or half a turn a
+    day. Later-message passes were 50,899 of that (about 1,900 a pass), about 0.27 turns a day.
+  - **What the log can't say:** whether the picks helped, or whether a memory was missed. It
+    holds counts, not message text.
+  - **Decided 2026-11-26 (Juno):** keep stage 2 on later messages and leave the threshold.
+    It costs little. Most later passes pick nothing, so asking for 3 rare words instead of 2
+    would cut empty passes, but one missed memory costs more than a 1,900-token Haiku pass.
 
 ## 12. Out of scope
 
@@ -2137,7 +2155,10 @@ Write the numbers into this section, then decide the setting's default.
 2. **`/remember` applies an update straight away**, with the "Updated: <old text>" toast and
    Undo, because you asked for it by name.
 3. **The sweep's default waits on its cost.** Phase 8 is built with **Tidy memories weekly**
-   off. §27.6's measurement is run first, and whether it ships on is decided from those
+   off. **Decided 2026-11-26 from §31.5: on by default.** `GaiaSettings` starts with it on and
+   no device, and `GaiaChatStore.claimTidyMemories` gives it to the first desktop past its
+   startup pull (`GaiaHost.startupPulled`), so a new desktop on an account that turned it off
+   pulls that first. Existing accounts keep their stored value (`false` unless turned on). §27.6's measurement is run first, and whether it ships on is decided from those
    numbers. The measurement doesn't need a week of use. **Sweep now** on the seeded `gaiaqa`
    profile runs a first, full sweep (the most a sweep costs) right after the build. Editing a
    few memories and running it again gives a typical weekly sweep. Utility calls already log
@@ -2299,9 +2320,9 @@ Dummy mode was turned off for the run and back on after.
   D dismissed. Ctrl+Z undid each one exactly. With the old memory archived, the same proposal
   showed as a plain "In the inbox" card. It went back to "Update this?" once unarchived.
 
-**Not run:** Codex. gaiaqa's Codex login is dead ("refresh token was already used"), and a
-fix needs `codex login` by hand. `memory_propose` goes through the same host path for both
-agents, so the Claude runs above cover the save check. The Codex tool call itself is unchecked.
+**Skipped:** Codex (decided by Juno, 2026-11-26: Gaia won't support Codex going forward). gaiaqa's
+Codex login was dead anyway ("refresh token was already used"). `memory_propose` goes through
+the same host path for both agents, so the Claude runs above cover the save check.
 
 **The save check's cost:** 12 saves made 11 calls. The one with nothing near (Koodo, below)
 made none. Every verdict was right: 3 `same`, 6 `replaces`, 2 `new`. Per call: 2 input,
@@ -2599,6 +2620,7 @@ was merged. All 13 placements fit.
 **Recommendation (Juno to decide):** a week costs about one to two turns. The one costly sweep
 is the first, about 9 turns, and it runs once per desktop. That argues for shipping Tidy
 memories weekly **on**. Fix bugs 1, 2 and 6 first, since every card shows the `why`.
+**Decided 2026-11-26: on by default** (§27.7 item 3), after the fixes in §31.6.
 
 **Left on qa-128:** the 45 seeded and added memories are in the trash. The 6 existing memories
 the run edited are back to their text. The Gym and Food topics are deleted; Money went in the

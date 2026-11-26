@@ -183,7 +183,55 @@ void main() {
         tester.getCenter(find.text('Add snippet')).dy,
         greaterThan(tester.getCenter(find.text('Add to dictionary')).dy),
       );
-    });
+      // The desktop menu's column; Android's toolbar is a row (BUG-404).
+    }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+    testWidgets(
+      'on Android a long press keeps Cut, Copy and Select all, and adds the '
+      'word actions after them (BUG-404)',
+      (tester) async {
+        await pumpField(
+          tester,
+          text: 'helo there',
+          maxLines: 3,
+          dictionary: const {'hello', 'there'},
+        );
+        final origin = tester.getTopLeft(find.byType(EditableText));
+        final size = tester.getSize(find.byType(EditableText));
+        await tester.longPressAt(origin + Offset(8, size.height / 2));
+        await tester.pumpAndSettle();
+
+        expect(controller.selection.textInside(controller.text), 'helo');
+        for (final label in ['Cut', 'Copy', 'Select all']) {
+          expect(find.text(label), findsOneWidget, reason: label);
+        }
+        expect(find.text('hello'), findsOneWidget); // the correction
+        expect(find.text('Add to dictionary'), findsOneWidget);
+        expect(find.text('Add snippet'), findsOneWidget);
+        // Along the one toolbar row: the standard items first.
+        expect(
+          tester.getCenter(find.text('Copy')).dx,
+          lessThan(tester.getCenter(find.text('hello')).dx),
+        );
+      },
+      variant: TargetPlatformVariant.only(TargetPlatform.android),
+    );
+
+    testWidgets(
+      'on Android a long press on a word with no actions still shows the '
+      'selection toolbar (BUG-404)',
+      (tester) async {
+        await pumpField(tester, snippetsAllowed: false);
+        final origin = tester.getTopLeft(find.byType(EditableText));
+        final size = tester.getSize(find.byType(EditableText));
+        await tester.longPressAt(origin + Offset(8, size.height / 2));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Copy'), findsOneWidget);
+        expect(find.text('Select all'), findsOneWidget);
+      },
+      variant: TargetPlatformVariant.only(TargetPlatform.android),
+    );
 
     testWidgets('whitespace under the pointer is not a trigger', (
       tester,

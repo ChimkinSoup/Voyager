@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderAbstractViewport;
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
@@ -23,6 +24,9 @@ import 'package:voyager/features/gaia/host/gaia_memories.dart';
 /// The topic in view for memories in no topic (GAIA_MEMORY_TOPICS_HLD.md
 /// §3.1).
 const _unsorted = '';
+
+/// A reveal's glide into place, over the last two screens.
+const _revealGlide = Duration(milliseconds: 450);
 
 /// What's dragged on the tab: a memory's card onto a topic, or a topic's
 /// chip onto another or onto All memories, for the root.
@@ -109,6 +113,10 @@ class _GaiaMemoriesTabState extends State<GaiaMemoriesTab> {
   /// changes.
   String? _highlighted;
   final _highlightKey = GlobalKey();
+
+  /// Whether a reveal is still looking for its card, stepping down the
+  /// list: hidden meanwhile, so what shows is one glide, not the jumps.
+  var _locating = false;
 
   /// The topic chip being renamed in place, and the new topic being named
   /// in the strip.
@@ -243,33 +251,65 @@ class _GaiaMemoriesTabState extends State<GaiaMemoriesTab> {
     _topic = null;
     _clearForReveal();
     _highlighted = id;
+    _locating = true;
     if (memory.status == GaiaMemoryStatus.archived) _showArchived = true;
     if (memory.status == GaiaMemoryStatus.proposed) _showInbox = true;
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToHighlight(0));
   }
 
   /// Scrolls to the highlighted card. The lists build their cards lazily, so
-  /// one far down isn't built yet: the tab steps down a screen at a time
-  /// until it is.
+  /// one far down isn't built yet: the tab steps down a screen at a time,
+  /// hidden, until it is, then shows two screens above it and glides there.
   void _scrollToHighlight(int steps) {
-    if (!mounted || _highlighted == null) return;
+    if (!mounted) return;
+    if (_highlighted == null) {
+      _located();
+      return;
+    }
     final card = _highlightKey.currentContext;
     if (card != null) {
+      _located();
+      if (steps == 0) {
+        unawaited(
+          Scrollable.ensureVisible(
+            card,
+            alignment: 0.3,
+            duration: GaiaMotion.quick,
+          ),
+        );
+        return;
+      }
+      final box = card.findRenderObject()! as RenderBox;
+      final position = Scrollable.of(card).position;
+      final target = RenderAbstractViewport.of(box)
+          .getOffsetToReveal(box, 0.3)
+          .offset
+          .clamp(position.minScrollExtent, position.maxScrollExtent);
+      position.jumpTo(
+        (target - position.viewportDimension * 2).clamp(
+          position.minScrollExtent,
+          target,
+        ),
+      );
       unawaited(
-        Scrollable.ensureVisible(
-          card,
-          alignment: 0.3,
-          duration: GaiaMotion.quick,
+        position.animateTo(
+          target,
+          duration: _revealGlide,
+          curve: GaiaMotion.travel,
         ),
       );
       return;
     }
     final search = _searchKey.currentContext;
-    if (search == null || steps > 200) return;
+    if (search == null || steps > 200) {
+      _located();
+      return;
+    }
     final position = Scrollable.of(search).position;
     if (steps == 0) {
       position.jumpTo(0);
     } else if (position.pixels >= position.maxScrollExtent) {
+      _located();
       return;
     } else {
       position.jumpTo(
@@ -282,6 +322,11 @@ class _GaiaMemoriesTabState extends State<GaiaMemoriesTab> {
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _scrollToHighlight(steps + 1),
     );
+  }
+
+  /// The tab shown again once a reveal is done looking.
+  void _located() {
+    if (_locating) setState(() => _locating = false);
   }
 
   @override
@@ -422,8 +467,10 @@ class _GaiaMemoriesTabState extends State<GaiaMemoriesTab> {
     final tidyOn = settings['tidyMemories'] == true;
     final tidyHere =
         tidyOn && settings['tidyMemoriesDevice'] == _controller.deviceId;
-    final tidyElsewhere = tidyOn && !tidyHere;
-    return CallbackShortcuts(
+    // On by default with no device yet isn't another computer's (§27.7).
+    final tidyElsewhere =
+        tidyOn && !tidyHere && settings['tidyMemoriesDevice'] != '';
+    final tab = CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.keyF, control: true):
             _searchFocus.requestFocus,
@@ -474,7 +521,9 @@ class _GaiaMemoriesTabState extends State<GaiaMemoriesTab> {
                     'waits in the inbox here.'
                     '${tidyElsewhere ? ' On for another computer; turning it '
                               'on here moves it.' : ''}',
-                value: tidyHere,
+                value:
+                    tidyHere ||
+                    (tidyOn && settings['tidyMemoriesDevice'] == ''),
                 onChanged: (value) => unawaited(
                   _run(
                     () => _controller.putSettings({
@@ -698,6 +747,12 @@ class _GaiaMemoriesTabState extends State<GaiaMemoriesTab> {
           ],
         ),
       ),
+    );
+    return AnimatedOpacity(
+      // Hidden at once, and shown with a fade where the glide starts.
+      opacity: _locating ? 0 : 1,
+      duration: _locating ? Duration.zero : GaiaMotion.quick,
+      child: IgnorePointer(ignoring: _locating, child: tab),
     );
   }
 
@@ -1699,6 +1754,12 @@ class _MemoryCard extends StatefulWidget {
 
 class _MemoryCardState extends State<_MemoryCard> {
   var _hovered = false;
+
+  /// Whether it's been hovered: its hover actions are built from then on,
+  /// so they can fade out. Until then a gap holds their place, since the
+  /// buttons are most of what a card costs to build, and a reveal far down
+  /// the list builds every card above it.
+  var _everHovered = false;
   var _suggesting = false;
 
   /// The text and tags being edited in place; null when not editing.
@@ -2153,6 +2214,82 @@ class _MemoryCardState extends State<_MemoryCard> {
         }, failed: 'Not remembered'),
       ),
     };
+    final actions = <Widget>[
+      // Unsorted with nothing offered: the utility model can
+      // file it.
+      if (unsorted && memory.suggestedTopic == null && widget.sorted == null)
+        GaiaButton(
+          tooltip: _suggesting ? 'Suggesting…' : 'Suggest topics',
+          icon: Icons.auto_awesome,
+          size: 24,
+          iconSize: 16,
+          onPressed: _suggesting ? null : _suggest,
+        ),
+      if (memory.status == GaiaMemoryStatus.active || memory.pinned)
+        GaiaButton(
+          tooltip: memory.pinned ? 'Unpin' : 'Pin to every chat',
+          icon: memory.pinned ? Icons.push_pin : Icons.push_pin_outlined,
+          size: 24,
+          iconSize: 16,
+          onPressed: () => unawaited(
+            widget.write('pinMemory', {
+              'memoryId': memory.id,
+              'pinned': !memory.pinned,
+            }, failed: 'Not pinned'),
+          ),
+        ),
+      if (memory.status != GaiaMemoryStatus.archived)
+        GaiaButton(
+          tooltip: 'Ask Gaia',
+          icon: Icons.forum_outlined,
+          size: 24,
+          iconSize: 16,
+          onPressed: _askGaia,
+        ),
+      GaiaButton(
+        tooltip: primaryLabel,
+        icon: primaryIcon,
+        size: 24,
+        iconSize: 16,
+        onPressed: () => unawaited(primary()),
+      ),
+      if (replaced != null)
+        GaiaButton(
+          tooltip: 'Keep both',
+          icon: Icons.check,
+          size: 24,
+          iconSize: 16,
+          onPressed: () => unawaited(
+            widget.run(
+              () => controller.rememberMemory(memory),
+              "Couldn't remember it",
+            ),
+          ),
+        ),
+      GaiaButton(
+        tooltip: proposed ? 'Dismiss' : 'Delete',
+        icon: proposed ? Icons.close : Icons.delete_outline,
+        size: 24,
+        iconSize: 16,
+        onPressed: () => unawaited(_delete()),
+      ),
+      Builder(
+        builder: (context) => GaiaButton(
+          tooltip: 'More',
+          icon: Icons.more_horiz,
+          size: 24,
+          iconSize: 16,
+          onPressed: () {
+            final box = context.findRenderObject()! as RenderBox;
+            showGaiaMenu(
+              context,
+              box.localToGlobal(Offset(0, box.size.height)),
+              _menu(),
+            );
+          },
+        ),
+      ),
+    ];
     final faded = memory.status == GaiaMemoryStatus.archived;
     final body = AnimatedContainer(
       duration: GaiaMotion.quick,
@@ -2285,101 +2422,23 @@ class _MemoryCardState extends State<_MemoryCard> {
             ),
           ),
           const SizedBox(width: 6),
-          AnimatedOpacity(
-            duration: GaiaMotion.quick,
-            opacity: shown ? 1 : 0,
-            child: IgnorePointer(
-              ignoring: !shown,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Unsorted with nothing offered: the utility model can
-                  // file it.
-                  if (unsorted &&
-                      memory.suggestedTopic == null &&
-                      widget.sorted == null)
-                    GaiaButton(
-                      tooltip: _suggesting ? 'Suggesting…' : 'Suggest topics',
-                      icon: Icons.auto_awesome,
-                      size: 24,
-                      iconSize: 16,
-                      onPressed: _suggesting ? null : _suggest,
-                    ),
-                  if (memory.status == GaiaMemoryStatus.active || memory.pinned)
-                    GaiaButton(
-                      tooltip: memory.pinned ? 'Unpin' : 'Pin to every chat',
-                      icon: memory.pinned
-                          ? Icons.push_pin
-                          : Icons.push_pin_outlined,
-                      size: 24,
-                      iconSize: 16,
-                      onPressed: () => unawaited(
-                        widget.write('pinMemory', {
-                          'memoryId': memory.id,
-                          'pinned': !memory.pinned,
-                        }, failed: 'Not pinned'),
-                      ),
-                    ),
-                  if (memory.status != GaiaMemoryStatus.archived)
-                    GaiaButton(
-                      tooltip: 'Ask Gaia',
-                      icon: Icons.forum_outlined,
-                      size: 24,
-                      iconSize: 16,
-                      onPressed: _askGaia,
-                    ),
-                  GaiaButton(
-                    tooltip: primaryLabel,
-                    icon: primaryIcon,
-                    size: 24,
-                    iconSize: 16,
-                    onPressed: () => unawaited(primary()),
-                  ),
-                  if (replaced != null)
-                    GaiaButton(
-                      tooltip: 'Keep both',
-                      icon: Icons.check,
-                      size: 24,
-                      iconSize: 16,
-                      onPressed: () => unawaited(
-                        widget.run(
-                          () => controller.rememberMemory(memory),
-                          "Couldn't remember it",
-                        ),
-                      ),
-                    ),
-                  GaiaButton(
-                    tooltip: proposed ? 'Dismiss' : 'Delete',
-                    icon: proposed ? Icons.close : Icons.delete_outline,
-                    size: 24,
-                    iconSize: 16,
-                    onPressed: () => unawaited(_delete()),
-                  ),
-                  Builder(
-                    builder: (context) => GaiaButton(
-                      tooltip: 'More',
-                      icon: Icons.more_horiz,
-                      size: 24,
-                      iconSize: 16,
-                      onPressed: () {
-                        final box = context.findRenderObject()! as RenderBox;
-                        showGaiaMenu(
-                          context,
-                          box.localToGlobal(Offset(0, box.size.height)),
-                          _menu(),
-                        );
-                      },
-                    ),
-                  ),
-                ],
+          if (_everHovered)
+            AnimatedOpacity(
+              duration: GaiaMotion.quick,
+              opacity: shown ? 1 : 0,
+              child: IgnorePointer(
+                ignoring: !shown,
+                child: Row(mainAxisSize: MainAxisSize.min, children: actions),
               ),
-            ),
-          ),
+            )
+          else
+            // Each icon-only button is as wide as its size.
+            SizedBox(width: actions.length * 24.0),
         ],
       ),
     );
     final card = MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
+      onEnter: (_) => setState(() => _hovered = _everHovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: GestureDetector(
         onSecondaryTapUp: editing != null

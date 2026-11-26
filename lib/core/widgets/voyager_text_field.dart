@@ -361,7 +361,11 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
         cursorWidth: vim.overlayCaretWidth,
         undoController: vim.undoController,
         autofocus: widget.autofocus,
-        onChanged: widget.onChanged,
+        onChanged: (text) {
+          // Only typing reaches here, never Vim's own edits (BUG-410).
+          vim.session?.noteUserEdit();
+          widget.onChanged?.call(text);
+        },
         onSubmitted: widget.onSubmitted,
         keyboardType: widget.keyboardType,
         textInputAction: widget.textInputAction,
