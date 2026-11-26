@@ -1384,6 +1384,7 @@ class GaiaController extends ChangeNotifier {
 
   /// The main instance's device, whose native sessions this companion runs.
   var _deviceId = '';
+  String get deviceId => _deviceId;
 
   /// Whether a run that finishes while Gaia is hidden raises a toast (§14).
   var _notifyOnDone = true;
@@ -2639,6 +2640,11 @@ class GaiaController extends ChangeNotifier {
     }
     _usageDirs = dirs;
     _settingsApplied = true;
+    // Swept on the device it was turned on on (§27.5).
+    _keepSweeping(
+      settings['tidyMemories'] == true &&
+          settings['tidyMemoriesDevice'] == _deviceId,
+    );
     // An account added, or moved to another folder, while the Setup tab
     // shows: its login is checked as it appears.
     if (panel.open && panel.tab == GaiaPanelTab.setup && !checkingSetup) {
@@ -3826,6 +3832,7 @@ class GaiaController extends ChangeNotifier {
       if (listed is! Map) return;
       memoryList = gaiaMemoryListFromJson(listed);
       _keepSorted();
+      _takePlaces();
       notifyListeners();
     } on GaiaPipeException catch (error) {
       debugPrint('[gaia] memories not read: $error');
@@ -3929,7 +3936,10 @@ class GaiaController extends ChangeNotifier {
     if (memorySorting) return;
     final left = [
       for (final memory in memories)
-        if (!memorySorted.containsKey(memory.id)) memory,
+        // One left unsorted isn't asked about again (§27.5).
+        if (!memorySorted.containsKey(memory.id) &&
+            !(memoryList?.leftUnsorted.contains(memory.id) ?? false))
+          memory,
     ];
     memorySorting = true;
     memorySortError = null;
@@ -4019,6 +4029,244 @@ class GaiaController extends ChangeNotifier {
       for (final MapEntry(:key, :value) in memorySorted.entries)
         if (unsorted.contains(key)) key: value,
     };
+  }
+
+  /// The sweep's stored placements (GAIA_MEMORY_TOPICS_HLD.md §27.4), shown
+  /// as Sort these' own, each once: one dropped here isn't brought back.
+  final _placesTaken = <String>{};
+
+  void _takePlaces() {
+    final list = memoryList;
+    if (list == null) return;
+    final fresh = <String, GaiaPlacement>{};
+    for (final suggestion in list.suggestions) {
+      if (suggestion.kind != GaiaSuggestionKind.place ||
+          suggestion.placement == null ||
+          !_placesTaken.add(suggestion.id)) {
+        continue;
+      }
+      final id = suggestion.memoryIds.single;
+      if (!memorySorted.containsKey(id)) fresh[id] = suggestion.placement!;
+    }
+    if (fresh.isNotEmpty) memorySorted = {...memorySorted, ...fresh};
+  }
+
+  /// Leave unsorted (§27.5): memory [id]'s suggestion dropped, and the
+  /// choice remembered, so Sort these and the sweep don't ask again.
+  Future<void> leaveUnsorted(String id) async {
+    final placement = memorySorted[id];
+    changeSorted(id);
+    try {
+      await writeMemories('leaveUnsorted', {'memoryId': id});
+    } on GaiaPipeException {
+      if (placement != null) changeSorted(id, placement);
+      rethrow;
+    }
+  }
+
+  /// [leaveUnsorted] undone: [placement], its suggestion, shown again.
+  Future<void> undoLeaveUnsorted(String id, GaiaPlacement? placement) async {
+    await writeMemories('undoLeaveUnsorted', {'memoryId': id});
+    if (placement != null) changeSorted(id, placement);
+  }
+
+  /// The sweep's [suggestion] decided (§27.4): [accept]ed, with [text] for a
+  /// merge's edited text, [keep]ing one of two that disagree, or neither,
+  /// kept apart. Its undo: what it changed put back, and the suggestion
+  /// with it. Throws a [GaiaPipeException] saying why it couldn't.
+  Future<Future<void> Function()> decideSuggestion(
+    GaiaMemorySuggestion suggestion, {
+    bool accept = false,
+    String? keep,
+    String? text,
+  }) async {
+    final decided =
+        await writeMemories('decideSuggestion', {
+              'id': suggestion.id,
+              if (accept) 'accept': true,
+              'keep': ?keep,
+              'text': ?text,
+            })
+            as Map;
+    final memories = [
+      for (final memory in decided['memories'] as List)
+        gaiaMemoryFromJson(memory as Map),
+    ];
+    final topics = [
+      for (final topic in decided['topics'] as List)
+        gaiaMemoryTopicFromJson(topic as Map),
+    ];
+    return () async {
+      if (memories.isNotEmpty || topics.isNotEmpty) {
+        await _pipe.request('revertMemories', {
+          'memories': [for (final memory in memories) gaiaMemoryToJson(memory)],
+          'topics': [for (final topic in topics) gaiaMemoryTopicToJson(topic)],
+        });
+      }
+      await writeMemories('restoreSuggestion', {
+        'suggestion': decided['suggestion'],
+      });
+    };
+  }
+
+  /// The weekly sweep running (GAIA_MEMORY_TOPICS_HLD.md §27.4); null when
+  /// none is.
+  Future<String?>? memorySweep;
+
+  /// The weekly sweep, unless one is running: what it did, said, or null
+  /// when it wasn't due or nothing had changed since the last. [force] is
+  /// the debug menu's Sweep now, which doesn't wait for the week.
+  Future<String?> sweepMemories({bool force = false}) =>
+      memorySweep ??= _sweep(force).whenComplete(() => memorySweep = null);
+
+  /// Ticks while Tidy memories weekly is on: the sweep is asked for once
+  /// nothing has run here for [_curateAfter], the curator's wait (§27.4);
+  /// the main instance says whether a week has passed.
+  Timer? _sweepTimer;
+  var _lastTurnAt = DateTime.now();
+
+  /// When a sweep here last had a call fail: the idle ticks wait
+  /// [_sweepRetryAfter] from it, so a call that keeps failing isn't paid
+  /// for again every tick.
+  DateTime? _sweepFailedAt;
+  static const _sweepRetryAfter = Duration(hours: 24);
+
+  void _keepSweeping(bool on) {
+    if (!on) {
+      _sweepTimer?.cancel();
+      _sweepTimer = null;
+      return;
+    }
+    _sweepTimer ??= Timer.periodic(_curateAfter, (_) {
+      if (_running.isNotEmpty ||
+          debug.dummyMode ||
+          DateTime.now().difference(_lastTurnAt) < _curateAfter ||
+          (_sweepFailedAt != null &&
+              DateTime.now().difference(_sweepFailedAt!) < _sweepRetryAfter)) {
+        return;
+      }
+      unawaited(sweepMemories());
+    });
+  }
+
+  Future<String?> _sweep(bool force) async {
+    final utility = _utility;
+    if (utility == null) return "Gaia's utility model isn't set up.";
+    final elapsed = Stopwatch()..start();
+    try {
+      final planned = await _pipe.request('sweepPlan', {'force': force});
+      if (planned is! Map) {
+        // Asked each idle tick: said only for Sweep now.
+        if (force) {
+          debugPrint('[gaia] memory sweep: nothing changed since the last');
+        }
+        return null;
+      }
+      final plan = gaiaSweepPlanFromJson(planned);
+      final at = plan.at.toIso8601String();
+      final found = <GaiaSweepFound>[];
+      var calls = 0;
+      var failed = 0;
+      // The topics go with the first call, or alone with no group.
+      final groups = plan.groups.isEmpty
+          ? const [<GaiaSweepLine>[]]
+          : plan.groups;
+      for (final (i, lines) in groups.indexed) {
+        final topics = i == 0 && plan.topics.isNotEmpty ? plan.topics : null;
+        if (lines.isEmpty && topics == null) continue;
+        calls++;
+        final got = await utility.sweep(lines, plan.at, topics: topics);
+        if (got == null) {
+          failed++;
+        } else {
+          found.addAll(got);
+        }
+      }
+      final kept = found.isEmpty
+          ? 0
+          : await _pipe.request('sweepFound', {
+                  'at': at,
+                  'suggestions': [
+                    for (final f in found)
+                      {
+                        'kind': f.kind.name,
+                        'memoryIds': f.memoryIds,
+                        'topicIds': f.topicIds,
+                        'text': f.text,
+                        'why': f.why,
+                      },
+                  ],
+                })
+                as int;
+      // Unsorted memories placed after the groups, but none this sweep
+      // offers to merge or says disagree: those wait for the next.
+      final unsorted = [
+        for (final memory
+            in await _pipe.request('sweepUnsorted', {
+                  'at': at,
+                  'except': [
+                    for (final f in found)
+                      if (f.kind == GaiaSuggestionKind.same ||
+                          f.kind == GaiaSuggestionKind.conflict)
+                        ...f.memoryIds,
+                  ],
+                })
+                as List)
+          if (memory case {'id': final String id, 'text': final String text})
+            (id: id, text: text),
+      ];
+      var placed = 0;
+      if (unsorted.isNotEmpty) {
+        final topics = gaiaTopicLinesFromJson(
+          await _pipe.request('memoryTopics'),
+        );
+        for (var from = 0; from < unsorted.length; from += kGaiaSortBatch) {
+          calls++;
+          final placements = await utility.placeMany(
+            unsorted.sublist(from, min(from + kGaiaSortBatch, unsorted.length)),
+            topics,
+            usage: 'memory sweep sort',
+          );
+          if (placements == null) {
+            failed++;
+            continue;
+          }
+          if (placements.isEmpty) continue;
+          placed +=
+              await _pipe.request('sweepPlaced', {
+                    'at': at,
+                    'placements': {
+                      for (final MapEntry(:key, :value) in placements.entries)
+                        key: gaiaPlacementToJson(value),
+                    },
+                  })
+                  as int;
+        }
+      }
+      // A call that failed leaves the sweep due, so the next idle stretch
+      // tries again; what was found stays, and isn't suggested twice.
+      if (failed == 0) {
+        await _pipe.request('sweepDone', {'at': at});
+        _sweepFailedAt = null;
+      } else {
+        _sweepFailedAt = DateTime.now();
+      }
+      final said =
+          '$kept suggested and $placed placed, from $calls calls '
+          '(${plan.groups.length} groups) in '
+          '${(elapsed.elapsedMilliseconds / 1000).toStringAsFixed(1)} s'
+          '${failed == 0 ? '' : '; $failed failed, so it runs again in a day'}';
+      debugPrint('[gaia] memory sweep: $said');
+      if (memoryList != null) await _loadMemories();
+      return said;
+    } on GaiaPipeException catch (error) {
+      debugPrint('[gaia] memory sweep: $error');
+      return error.message;
+    } catch (error) {
+      // Run from the idle timer unawaited: a bad answer is said, not thrown.
+      debugPrint('[gaia] memory sweep failed: $error');
+      return 'The sweep failed: $error';
+    }
   }
 
   /// A notification clicked, or a chat picked on the Gaia page.
@@ -7041,6 +7289,7 @@ class GaiaController extends ChangeNotifier {
         remote?.chatId ??
         (about == null ? _uuid.v4() : currentChatId!);
     _running.add(chatId);
+    _lastTurnAt = DateTime.now();
     // Read once it's idle again.
     _curateSoon.remove(chatId)?.cancel();
     // Numbered on from the chat's images, so no two of its messages have
@@ -8385,6 +8634,7 @@ class GaiaController extends ChangeNotifier {
     } finally {
       _stopping.remove(chatId);
       _running.remove(chatId);
+      _lastTurnAt = DateTime.now();
       _turnTools.remove(chatId);
       persistSoon?.cancel();
       _lastPersist.remove(reply.id);

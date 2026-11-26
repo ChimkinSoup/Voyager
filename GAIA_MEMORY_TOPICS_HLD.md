@@ -1905,7 +1905,7 @@ reply before it. The memory had no topic, so the system prompt's topic list didn
 ## 27. Memory upkeep: checks as memories are saved, and a weekly sweep (drafted 2026-11-24)
 
 Drafted 2026-11-24, after Juno asked whether a utility model should tidy the memories now and
-then. Phases 7 and 8 (§10). Phase 7 is built (§28); Phase 8 isn't.
+then. Phases 7 and 8 (§10). Phase 7 is built (§28), and Phase 8 (§30).
 
 ### 27.1 Why
 
@@ -1988,7 +1988,9 @@ new fact and its nearest few. Wording only picks which memories it's shown.
 after the last sweep. "Idle" uses the same wait as the curator (`gaia_controller.dart:69`).
 It runs only if a memory or topic changed since the last sweep. The first sweep covers
 everything. The time of the last sweep is local, like the recall history. A setting,
-**Tidy memories weekly**, turns it on. It's off until §27.6's cost is measured, then decided
+**Tidy memories weekly**, turns it on. It syncs, with the device it was turned on on, and only that
+device sweeps; turning it on on another moves it there. A sweep with a call that failed tries
+again a day later, not at the next idle tick. It's off until §27.6's cost is measured, then decided
 (§27.7). The debug menu gets **Sweep now** for checks.
 
 **What it reads:** one group per topic that holds a memory changed since the last sweep
@@ -2036,7 +2038,8 @@ keeps Sort these' parser and tests, and neither job crowds the other in one prom
   new to Unsorted or were edited since, since the rest were already asked about.
 - **After the groups,** so the sweep doesn't offer a topic for a memory it's also suggesting
   you merge into another. A memory named in one of this sweep's `same` or `conflict`
-  suggestions is left for the next sweep.
+  suggestions is left for the next sweep: a `heldBack` hint brings it into the next one
+  even if it isn't edited, and is dropped once a later sweep finishes.
 - **Offered, never applied,** as §6 says. A placement shows where Sort these' do now: as
   "Suggested:" chips on its Unsorted row, and as a review card with **File there**. A
   suggested new topic is only made when you accept it (§5).
@@ -2351,3 +2354,306 @@ Climbing and Tutor Facts" (the failed Codex run), its Haiku rerun, "Hiking Near 
 Saturday"). The seed memories the run rewrote were put back, and the three new test memories
 were trashed. The first stray dummy chat was deleted. gaiaqa's dummy mode, its `sol` model and
 the profile are back as they were. The last tier now reads quick, not deep.
+
+## 30. Phase 8 build notes (2026-11-25)
+
+### 30.1 What was built
+
+- **`gaia_memory_suggestions_table`** (schema 205 → 206): kind, memory ids, topic ids, merged
+  text or new name (`body`), `why`, a placement, and `madeAt`. Local, listed as local-only
+  beside the hints. **Tidy memories weekly** is a synced setting, `tidyMemories`, off by default,
+  under auto-accept on the Memories tab.
+- **The sweep's groups** (`gaiaSweepGroups`, `GaiaMemories.sweepPlan`): one per topic holding an
+  active memory changed since the last sweep (Unsorted is one), with that topic's active
+  memories and each changed one's 5 nearest elsewhere by stage 1. A group past 80 lines is cut
+  into parts seeded by a changed memory, its stage 1 nearest first. A part with nothing changed
+  is left out. `sweepPlan` returns null within 7 days of the last sweep (unless forced) or when
+  no memory or topic changed.
+- **The call** (`GaiaUtility.sweep`, labelled `memory sweep`, the curator's 60 s): numbered lines
+  with topics, saved day and pin, today's date, and the topic list (`T1. path (count)`, a linked
+  project's marked `(project)`). `parseSweepAnswer` reads `same` / `conflict` / `expired` by
+  number and `topicMerge` / `topicRename` by `T` number, and drops wrong counts.
+- **Kept suggestions** (`addSuggestions`): only ones naming active memories and live topics, not
+  kept apart, not already stored. A merge away from a linked project's topic is turned round,
+  two linked ones are dropped, and a linked topic is never renamed.
+- **The run** (`GaiaController.sweepMemories`, in the companion): `sweepPlan` → one call per group
+  → `sweepFound` → `sweepUnsorted` (minus this sweep's same and conflict memories) → `placeMany`
+  in 30s, labelled `memory sweep sort` → `sweepPlaced` (kind `place`) → `sweepDone`, which stores
+  the start time as a `swept` hint. It logs `[gaia] memory sweep: N suggested and M placed, from
+  C calls (G groups) in T s`.
+- **When:** with Tidy memories weekly on, a timer ticks every `kGaiaCurateAfter` (10 minutes) and
+  asks for the plan once no turn has started or ended here for that long. The debug menu's
+  **Memory sweep → Sweep now** forces it and shows the summary in a toast.
+- **The cards:** the review deck's inbox deals them after pin and merge suggestions, and the
+  Memories tab's inbox lists them as rows. Same thing (merged text editable; E in the deck), These
+  disagree (Keep 1 / Keep 2, keys 1 and 2; Keep both), Out of date? (Archive / Keep, with the saved
+  date), Merge X into Y? and Rename X to Y?. Ctrl+Z undoes in the deck; the tab's toast has Undo.
+- **Stored placements** show as Sort these' own (`memorySorted`), each taken once, so one dropped
+  on the page doesn't come back on the next read.
+- **Leave unsorted** (§27.5): the tab's Skip is renamed, and both it and the deck's write a
+  `leftUnsorted` hint (`leaveUnsorted` / `undoLeaveUnsorted`). Sort these skips those memories.
+
+### 30.2 Decisions made while building
+
+1. **The topic list goes with the sweep's first call only**, or alone when only topics changed.
+   Sending it with every group would repeat it per call. A topic suggestion can't depend on the
+   group anyway.
+2. **The last sweep's time is a hint** (`swept`) in the local hints table, so no new store. It's
+   written only when every call succeeded. A failure leaves the sweep due, so the next idle tick
+   tries again. What was found stays, and `addSuggestions` doesn't store it twice.
+3. **Stale means changed after `madeAt`**, the time the sweep read the memories, not when it
+   stored. A memory edited mid-sweep is stale at once. Stale rows are deleted when the list is
+   read (`list()`), which the Memories tab does on every change.
+4. **Kept-apart keys:** a topic pair uses Phase 6's `gaiaTopicPairKey`, so Keep both also hides
+   Phase 6's merge suggestion for the pair. A rename is `rename:<topic id>`. Memories are
+   `memories:<ids in order>#<FNV-1a of their texts>`, so a text change brings it back. The key
+   isn't per kind: Keep apart on a pair also hides a conflict on it.
+5. **`leftUnsorted` is keyed by id and text hash**, and dropped when the list is read and the
+   memory is filed, edited or gone. Filed and unfiled between two reads keeps the hint (rare).
+6. **Undo puts back the suggestion as of now**, after the memories are put back, so it isn't stale
+   against the revert's own write.
+7. **Merge's pin budget** counts the other pinned memories outside the merge. The merged ones
+   share one pin.
+8. **The automatic sweep is skipped in dummy mode**. Sweep now isn't: it's an explicit check.
+9. **The utility imports the sweep's line and topic types from `gaia_memories.dart`**, as it
+   already took `GaiaTopicLine` from the models.
+
+### 30.3 How it was checked
+
+- **Unit** (`gaia_memory_sweep_test`, 21): the answer parser (wrong counts, out of range, `T`
+  numbers, bad JSON); the call's input, today's date, topics only when given, usage labels,
+  failure as null; the groups (neighbours elsewhere, unchanged topics left out, first sweep, the
+  80-line split); kept suggestions and the project rules; merge (oldest kept, topics, tags and
+  pin unioned, others trashed, undone), refused past the pin budget or for a text already said;
+  conflict Keep and expired Archive; kept apart not suggested again until a text changes;
+  topic merge and rename; stale dropped; due and nothing-changed; placing only new or edited
+  Unsorted with no placement, hint or same/conflict; `leftUnsorted` set, undone, dropped on an
+  edit or filing; JSON round trips. `gaia_migration_test`: 205 → 206. `import_export_test`:
+  the new table local-only.
+- **Controller** (`gaia_controller_test`): with the setting on and a 50 ms wait, the idle timer
+  runs one sweep through the real `GaiaMemories` and stores a `same`, and the next ticks don't
+  run another within the week. In `gaia_memory_review_test`: Sweep now's calls, labels, topics on
+  the first only, the except list, placements, `sweepDone`, and no `sweepDone` after a failure.
+- **Widget:** the deck's cards (merge with edited text, Ctrl+Z, Keep 2, Keep both, Keep); stored
+  placements in Sort these, Leave unsorted and its undo, Sort these skipping one left; the tab's
+  rows (edited merge, toast Undo, Rename's Keep), Leave unsorted in place of Skip with its toast
+  Undo, the setting.
+- The 16 Gaia suites touched pass: 837, 2 skipped as before.
+
+### 30.4 Live checks still to do for Phase 8
+
+From §27.6, in `gaiaqa` with real Haiku:
+- Seed the rewordings, contradictions, expired facts, topic pairs, lookalikes and Unsorted
+  memories (2 left unsorted first), then **Sweep now**: count what it finds, wrong merges of
+  lookalikes, calls, time, and tokens per call (Stats → by job, `memory sweep` and
+  `memory sweep sort`).
+- Edit or add about 10 memories in 3-4 topics and Sweep now again for a typical week's cost.
+- Write the numbers here and decide Tidy memories weekly's default (§27.7 item 3).
+- Each card's buttons and Undo on screen, the tab's rows, and the phone showing none of them.
+- The idle timer on a real desktop with the setting on.
+
+## 31. Live pass, 2026-11-25 (Phase 8)
+
+Run in `gaiaqa` (qa-128) on a fresh `flutter build windows --debug` of the working tree, with
+real Haiku. Sweep now was run first by eval, then from the debug menu. Dummy mode was on for
+the forced sweeps (Sweep now ignores it, §30.2 item 8), off for the idle-timer check, and back on
+after.
+
+**Seeded,** on top of 331 active memories (11 Unsorted): 10 rewordings (3 of them in Unsorted
+or another topic than the original), 5 contradictions, 5 time-bound facts dated before today,
+3 synonym topics (Gym, Money, Food, each with one new memory), 10 lookalikes (the overhead
+press at 45 kg, Pepper's vet, Mia's birthday, CS241's lectures, a tire rotation at 190,000 km,
+a roommate's phone plan, a Debussy piece stuck on other bars, Dad's asthma, a second vault,
+a roommate's peanut allergy), and 10 Unsorted memories that fit a topic, 2 of them left
+unsorted first. All 45 were trashed afterwards (§31.5).
+
+### 31.1 The first, full sweep
+
+**Cost:** 374 active memories gave 39 groups (9 of them at the 80-line cap), so 39
+`memory sweep` calls plus 1 `memory sweep sort` call. 348 s end to end, 2.4-18.2 s a call.
+
+| | Calls | Input | Cache read | Cache write | Output | Total |
+|---|---|---|---|---|---|---|
+| `memory sweep` | 39 | 82 | 6,829 | 113,456 | 58,757 | 179,124 |
+| `memory sweep sort` | 1 | 2 | 0 | 2,607 | 1,882 | 4,491 |
+| **All** | 40 | 84 | 6,829 | 116,063 | 60,639 | **183,615** |
+
+That's about 8.7 of §11's Standard-tier turns (21,145). Each call was a cold start of the
+utility process, so almost nothing was read from the cache. The five-hour window went from
+5% to 6%.
+
+**What it found:** 31 suggestions and 12 placements.
+- **Rewordings:** 10 of 10, each as Same thing? with a fair merged text. Three crossed topics
+  (Unsorted against Cooking|Health, Obsidian and Family). Two more were in the existing data:
+  the five MT3 budget filler facts, and Sunday meal prep against "MT7 I meal-prep high-protein
+  lunches", which is close enough to merge.
+- **Contradictions:** 5 of 5. Three more were real ones in the existing data: one coffee a day
+  against two, Pelikan pens against Pilot and Sailor, and the sister called Mira against Mia.
+  Two followed from the seeds and were right (the dentist in April against the November 10
+  appointment, and the EQ Bank account against "my only bank is RBC").
+- **Out of date:** 5 of 5, plus the MT6 rental van "booked for Friday" saved Nov 17, which is
+  right. **One wrong:** "CS246 A5 due date is December 2 at 23:59, with the plan of attack due
+  November 20". Only half of it has passed, and archiving it would lose the December 2 date.
+- **Lookalikes merged: none of 10.** None was called a conflict either.
+- **Topics:** Money into Finance, yes. Gym and Food were missed on this sweep (Gym into
+  Fitness came on the next one, below). It also offered to merge the two empty PRJ Dup topics,
+  which is right: both projects are gone, so neither is linked. No rename was offered, so
+  Rename wasn't checked live.
+- **Placements:** 12, every one fits: the 8 seeded (squat goal → Fitness, Biscuit's toy and
+  Neptune → Pets, sourdough → Cooking, the Ballade → Music, brake pads → Car, Kanban →
+  Obsidian › Plugins, laptop savings → Finance) and 4 old MT7/MT8 ones. The 2 left unsorted got
+  none, then or on any later sweep. The Unsorted memories named in a Same thing? (the cashew
+  allergy, the Atlas vault, Grandma, the MT3 budget facts, the MT7 meal prep) weren't placed, as
+  §27.4 says. The keyboard and the library memory weren't placed; no topic fits either.
+
+### 31.2 A typical week
+
+Five edits and five new memories in Pets, Fitness, Music and Car (one new one, "The user
+drives a 2019 Toyota Corolla.", contradicting the Civic), then **Sweep now** from the debug
+menu. The button showed Sweeping… and was disabled, then the toast read "3 suggested and 0
+placed, from 4 calls (4 groups) in 43.3 s".
+
+- **4 calls, 18,206 tokens** (8 input, 0 cache read, 10,942 cache write, 7,256 output), 43 s.
+  That's about 0.9 of a Standard-tier turn. The topic list (38-41 topics) goes with the first
+  call every time, even when no topic changed (§30.2 item 1).
+- It found the Corolla against the Civic, Gym into Fitness, and the golden retriever against
+  the original Biscuit memory. 13 raw items came back; the other 10 were already stored.
+
+### 31.3 The idle timer
+
+With **Tidy memories weekly** switched on from the Memories tab and dummy mode off, the last
+sweep's `swept` hint was set back 7 days (`GaiaMemories.swept`). The timer's first tick, 10
+minutes after the switch, ran the sweep with no input. That was after the seeds were trashed,
+so it read only what had changed since Nov 18: **12 groups, 13 calls, 41,598 tokens, 71 s**
+(about 2 turns). It wrote the new `swept` time. It found the Mia/Mira conflict and placed the
+keyboard memory in Preferences. It also gave **one wrong "out of date"**: "The Civic's winter
+tires go on in mid-November at Canadian Tire", which happens every year. The five-hour window
+read 18% by then, but other use on the account had moved it since the typical-week run (9%), so
+the tokens are the measure (§11).
+
+### 31.4 On screen
+
+**Passed:**
+- **Memories tab:** Tidy memories weekly sits under auto-accept and is off by default. The
+  inbox count includes the sweep's cards ("37 in the inbox · 36 suggestions"). Each kind shows
+  as a row: Same thing?, These disagree, Out of date? (with "saved Nov 17, 2026"), and Merge X
+  into Y? with the model's `why`. **Merge** on Money into Finance deleted Money and moved its
+  memory into Finance. On Gym into Fitness, Merge then the toast's **Undo** brought Gym back
+  with its memory and the suggestion.
+- **Review deck:** the sweep's cards come after the proposals, pins and merges (card 40 of 71).
+  - **Keep both** (Backspace) on the sweep's PRJ Dup card also removed Phase 6's own PRJ Dup
+    merge suggestion, because they share a key.
+  - **Archive** (Enter) archived the memory, and **Ctrl+Z** made it active with its card back.
+    **Keep** (Backspace) left it active and kept it apart.
+  - **These disagree:** **2** trashed memory 1, Ctrl+Z restored it, and **Keep both** left both
+    with the suggestion gone.
+  - **Same thing?:** **E**, a new text, Enter (ends the edit), Enter (merges). The oldest memory
+    (Nov 16) kept its id and Family topic and took the new text, and the copy went to the trash.
+    Ctrl+Z put both back. Merging Biscuit made both conflicts about Biscuit stale: they showed as
+    "Decided elsewhere".
+- **Sort these:** the 12 stored placements show as Sort these' own ("Accept all (12)", and
+  "Suggested: Finance · Accept · Leave unsorted" on each row). **Accept** filed the Kanban
+  memory in Obsidian › Plugins and dropped its stored placement. **Leave unsorted** said "Sort
+  these won't ask about it again" and set the hint. Its Undo removed the hint.
+
+**Bugs:**
+1. **Every sweep card's `why` ends in "..".** The deck adds a full stop
+   (`gaia_memory_review.dart:1619`, `'$why.'`), and the model's `why` already ends in one.
+   Pin and Phase 6 merge reasons have no stop, so those were fine. The tab's rows are fine.
+2. **The `why` names the model's line numbers,** which mean nothing on the card: "Memory 8
+   says one coffee a day; memory 11 says…", "Memories 13 and 52 both record…", "#1 adds that
+   all notes go there", "16 adds the high-protein…". The sweep's prompt should ask for the
+   reason in words, without the numbers.
+3. **The same topic pair is offered twice.** PRJ Dup into PRJ Dup showed as Phase 6's merge
+   suggestion and as the sweep's `topicMerge`: two rows on the tab and two cards in the deck.
+   Deciding either one hides both, but `addSuggestions` should skip a pair Phase 6 already
+   offers.
+4. **The tab's Merge toast reads 'Merged / Merge "..." into "Finance"?'.** Its body is the
+   card's question, worked out after the merge, so the merged-away topic's name is already gone
+   (`gaia_memories_tab.dart:195`).
+5. **Undo after Leave unsorted doesn't restore the stored placement.** The next `list()` deletes
+   the `place` row as stale (`gaia_memories.dart:806`). `undoLeaveUnsorted` only removes the
+   hint, so the suggestion comes back only in the companion's memory. After a restart it's gone,
+   and the sweep won't ask again until that memory changes.
+6. **"Out of date?" is too eager twice:** once for a memory with one past and one future date
+   (CS246 A5), once for a yearly habit (winter tires). Both are in the "what it suggests
+   wrongly" count below. The prompt could say that a recurring event, or a memory that still
+   holds a future date, isn't out of date.
+
+**Not checked:**
+- Rename (no rename was offered).
+- The phone. The sweep's cards are in a local, unsynced table, so a phone can't show them, by
+  construction (§27.4).
+
+### 31.5 Numbers for the default (§27.7 item 3)
+
+| Sweep | Calls | Tokens | Standard turns (21,145) | Time |
+|---|---|---|---|---|
+| First, full (374 memories) | 40 | 183,615 | 8.7 | 348 s |
+| Typical week (10 changes, 4 topics) | 4 | 18,206 | 0.9 | 43 s |
+| Busier week (12 topics changed) | 13 | 41,598 | 2.0 | 71 s |
+
+**Accuracy over the three sweeps:** 36 suggestions, 2 wrong (both "out of date"). No lookalike
+was merged. All 13 placements fit.
+
+**Recommendation (Juno to decide):** a week costs about one to two turns. The one costly sweep
+is the first, about 9 turns, and it runs once per desktop. That argues for shipping Tidy
+memories weekly **on**. Fix bugs 1, 2 and 6 first, since every card shows the `why`.
+
+**Left on qa-128:** the 45 seeded and added memories are in the trash. The 6 existing memories
+the run edited are back to their text. The Gym and Food topics are deleted; Money went in the
+Money-into-Finance merge. The sweep's table still holds 11 suggestions about the existing data:
+the A5 and winter-tire "out of date" cards, the meal-prep and MT3 budget merges, the pen and
+Mia/Mira conflicts, and 5 placements. The `keptApart` hints are kept: the coffee pair, PRJ Dup,
+and the MT6 van. `swept` is 2026-11-26 01:31 UTC. Tidy memories weekly is off and dummy mode is
+on, as before.
+
+### 31.6 Fixes, 2026-11-25
+
+All six bugs in §31.4 are fixed. Fixes 1, 4 and 5 were then checked live (§31.7).
+1. The deck adds a full stop only when the `why` doesn't already end in one
+   (`gaia_memory_review.dart`).
+2. The sweep's prompt asks for each `why` to name memories and topics by what they say, never
+   by their numbers (`gaia_utility.dart`).
+3. `list()` drops a Phase 6 merge suggestion for a pair that the sweep also suggests, so the
+   pair shows once, as the sweep's card (`gaia_memories.dart`).
+4. The tab's toast works out the card's heading before the decision and drops its question
+   mark: 'Merged / Merge "Money" into "Finance"' (`gaia_memories_tab.dart`).
+5. `_standing` keeps the stored placement of a memory left unsorted and only hides it, so
+   Undo brings it back after a restart too (`gaia_memories.dart`).
+6. The prompt says "expired" excludes a memory that still holds a day to come, and a habit that
+   repeats ("every November").
+
+**How the prompt fixes were checked:** I sent the same 10 memories, including the A5 and
+winter-tire ones, straight to Haiku with `claude -p`, three times with the new prompt and twice
+with the old one. With the new prompt, no `why` used a number in any of the three runs, and
+neither false positive was flagged. The dentist and Raptors memories, which are truly out of
+date, were flagged every time. With the old prompt, one run flagged the winter tires and cited
+"memory 6". The new reasons run a little longer.
+
+New tests cover 1, 3, 4 and 5 (`gaia_memory_sweep_test.dart`, `gaia_memory_review_test.dart`,
+`gaia_memories_tab_test.dart`).
+
+### 31.7 Live recheck, 2026-11-25: Rename, bugs 4 and 5
+
+I ran this in `gaiaqa` with a fresh `flutter build bundle` of the tree and real Haiku. To set
+it up I added a School topic holding "CS245 Course", "MATH 239 Course" and "cs341", plus
+Movies and Films topics. Each topic got 2 or 3 memories (`RN1 …`). A forced sweep then found
+both cards.
+
+- **Rename:** this found a seventh bug, now fixed. The model gave the new name as a path ("School
+  › CS341 Course"), and nothing stripped it, so accepting would have named the topic
+  "School › CS341 Course". `parseSweepAnswer` now keeps only the last part of the path, and
+  the prompt asks for the name without its parents. The sweep after the fix offered 'Rename
+  "School › cs341" to "CS341 Course"?'. **Rename** renamed the topic to School › CS341 Course
+  and showed the toast 'Renamed / Rename "School › cs341" to "CS341 Course"'. Undo gave back
+  "cs341" and the card.
+- **Bug 4:** Merge on Films into Movies showed the toast 'Merged / Merge "Films" into
+  "Movies"', so the topic's name was kept. Undo brought Films and its card back.
+- **Bug 5:** on the Keychron K2 memory, Leave unsorted and then Undo brought back "Suggested:
+  Preferences" on screen and in a fresh `list()`. It was still there after a restart.
+- **Bug 1:** the sweep's reasons on the tab ended in a single full stop.
+
+**Cleanup:** the 12 `RN1` memories are in the trash, and the 6 topics are deleted. Dummy mode is on, Tidy
+memories weekly is off, and the profile is stopped. The 11 older suggestions from §31.5 are
+still there.

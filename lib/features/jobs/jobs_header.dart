@@ -661,10 +661,13 @@ class _IncludeArchivedToggle extends StatelessWidget {
                       : theme.colorScheme.onSurfaceVariant,
                 ),
                 const SizedBox(width: 5),
-                Text(
-                  'Include archived',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
+                // Wraps on a phone rather than overflowing (BUG-390).
+                Flexible(
+                  child: Text(
+                    'Include archived',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
               ],

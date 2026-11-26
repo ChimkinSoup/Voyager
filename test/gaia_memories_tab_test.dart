@@ -74,6 +74,8 @@ void main() {
   late List<GaiaMemoryTopic> topics;
   late List<GaiaMergeSuggestion> merges;
   late List<GaiaPinSuggestion> pins;
+  late List<GaiaMemorySuggestion> suggestions;
+  late Set<String> left;
 
   /// Requests the main instance refuses, by method, with what it says.
   late Map<String, String> refuse;
@@ -134,6 +136,8 @@ void main() {
     ];
     merges = [];
     pins = [];
+    suggestions = [];
+    left = {};
     late FakeGaiaPipe companion;
     main = FakeGaiaPipe.main()
       ..onLaunch = (end, _) {
@@ -169,6 +173,8 @@ void main() {
               projects: {'p1'},
               pins: pins,
               merges: merges,
+              suggestions: suggestions,
+              leftUnsorted: left,
             ));
           case 'memoryTopics':
             return gaiaTopicLinesToJson(gaiaTopicLines(GaiaTopicTree(topics)));
@@ -188,6 +194,21 @@ void main() {
             };
           case 'placedMemory':
             return gaiaMemoryFilingToJson((topics: const [], suggested: null));
+          case 'decideSuggestion':
+            suggestions = [
+              for (final s in suggestions)
+                if (s.id != params['id']) s,
+            ];
+            return {
+              'memories': [gaiaMemoryToJson(memories.first)],
+              'topics': <Object?>[],
+              'suggestion': {
+                'id': params['id'],
+                'kind': 'same',
+                'memoryIds': ['m2', 'm3'],
+                'madeAt': at.toIso8601String(),
+              },
+            };
           case 'updateMemory':
             final proposal = memories.singleWhere(
               (memory) => memory.id == params['memoryId'],
@@ -717,6 +738,105 @@ void main() {
       },
     });
     expect(inTab(find.text('Suggested:')), findsNothing);
+  });
+
+  testWidgets("the sweep's suggestions in the inbox (GAIA_MEMORY_TOPICS_HLD.md "
+      "§27.4): Same thing's merged text edited, then Merge with a toast "
+      'whose Undo puts it back; Keep apart', (tester) async {
+    final controller = await pump(tester);
+    GaiaMemorySuggestion card(String id, GaiaSuggestionKind kind) => (
+      id: id,
+      kind: kind,
+      memoryIds: kind == GaiaSuggestionKind.topicRename
+          ? const []
+          : ['m2', 'm3'],
+      topicIds: kind == GaiaSuggestionKind.topicRename ? ['t3'] : const [],
+      text: kind == GaiaSuggestionKind.topicRename ? 'Meals' : 'One fact',
+      why: 'They say one thing',
+      placement: null,
+      madeAt: at,
+    );
+    suggestions = [
+      card('s1', GaiaSuggestionKind.same),
+      card('s2', GaiaSuggestionKind.topicRename),
+    ];
+    await open(tester, controller);
+    expect(inTab(find.text('Inbox (3)')), findsOneWidget);
+    expect(find.text('1 in the inbox · 2 suggestions'), findsOneWidget);
+    expect(inTab(find.text('Same thing?')), findsOneWidget);
+    expect(inTab(find.text('Rename "Food" to "Meals"?')), findsOneWidget);
+    await tester.enterText(
+      find.descendant(
+        of: find.byKey(const ValueKey('sweep s1')),
+        matching: find.byType(EditableText),
+      ),
+      'One fact, edited',
+    );
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const ValueKey('sweep s1')),
+        matching: find.text('Merge'),
+      ),
+    );
+    await settle(tester);
+    expect(sent('decideSuggestion').single, {
+      'id': 's1',
+      'accept': true,
+      'text': 'One fact, edited',
+    });
+    expect(find.text('Merged'), findsOneWidget);
+    // Said as done, not asked.
+    expect(find.text('Same thing'), findsOneWidget);
+    await tester.tap(find.text('Undo'));
+    await settle(tester);
+    expect(sent('revertMemories'), hasLength(1));
+    expect(
+      sent('restoreSuggestion').single['suggestion'],
+      containsPair('id', 's1'),
+    );
+
+    await tester.tap(inTab(find.text('Keep')));
+    await settle(tester);
+    expect(sent('decideSuggestion').last, {'id': 's2'});
+  });
+
+  testWidgets("Sort these' row offers Leave unsorted, not Skip: remembered, "
+      'and undone from its toast', (tester) async {
+    final runner = FakeUtilityRunner(
+      (job) => '[{"n": 1, "topics": ["t3"], "new": null, "tags": []}]',
+    );
+    final controller = await pump(tester, utility: GaiaUtility(runner));
+    await open(tester, controller);
+    await tester.tap(inTab(find.text('Unsorted')));
+    await tester.pump();
+    await tester.tap(inTab(find.text('Sort these')));
+    await settle(tester);
+    expect(inTab(find.text('Skip')), findsNothing);
+    await tester.tap(inTab(find.text('Leave unsorted')));
+    await settle(tester);
+    expect(sent('leaveUnsorted').single, {'memoryId': 'm3'});
+    expect(inTab(find.text('Suggested:')), findsNothing);
+    await tester.tap(find.text('Undo'));
+    await settle(tester);
+    expect(sent('undoLeaveUnsorted').single, {'memoryId': 'm3'});
+    expect(inTab(find.text('Suggested:')), findsOneWidget);
+  });
+
+  testWidgets('Tidy memories weekly is off at first, and saved when turned '
+      'on', (tester) async {
+    final controller = await pump(tester);
+    await open(tester, controller);
+    final tile = find.ancestor(
+      of: find.text('Tidy memories weekly'),
+      matching: find.byType(GaiaPanelSwitch),
+    );
+    expect(tester.widget<GaiaPanelSwitch>(tile).value, isFalse);
+    await tester.tap(inTab(find.text('Tidy memories weekly')));
+    await settle(tester);
+    expect(
+      sent('putSettings').single['changes'] ?? sent('putSettings').single,
+      allOf(containsPair('tidyMemories', true), contains('tidyMemoriesDevice')),
+    );
   });
 
   testWidgets("Sort these leaves out Unsorted's archived memories while "

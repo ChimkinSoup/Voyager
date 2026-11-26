@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:voyager/core/layout/window_size_class.dart';
 import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/features/leetcode/leetcode_actions.dart';
@@ -20,6 +21,9 @@ class LeetCodePage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final mode = ref.watch(_leetCodeViewModeProvider);
+    // A phone has no room for the segment icons or the cheat sheet's label
+    // (BUG-390).
+    final compact = context.isCompactWidth;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -46,16 +50,23 @@ class LeetCodePage extends ConsumerWidget {
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       visualDensity: VisualDensity.compact,
                     ),
-                    segments: const [
+                    segments: [
                       ButtonSegment(
                         value: _LeetCodeViewMode.dashboard,
-                        icon: Icon(PhosphorIconsRegular.gridFour, size: 15),
-                        label: Text('Dashboard'),
+                        icon: compact
+                            ? null
+                            : const Icon(
+                                PhosphorIconsRegular.gridFour,
+                                size: 15,
+                              ),
+                        label: const Text('Dashboard'),
                       ),
                       ButtonSegment(
                         value: _LeetCodeViewMode.reviewDeck,
-                        icon: Icon(PhosphorIconsRegular.cards, size: 15),
-                        label: Text('Review Deck'),
+                        icon: compact
+                            ? null
+                            : const Icon(PhosphorIconsRegular.cards, size: 15),
+                        label: const Text('Review Deck'),
                       ),
                     ],
                     selected: {mode},
@@ -69,7 +80,10 @@ class LeetCodePage extends ConsumerWidget {
                   const Spacer(),
                   // Right-aligned opposite the segmented control, and nowhere
                   // near the Track FAB in the bottom-right corner.
-                  const LeetCodeCheatSheetButton(dense: true),
+                  if (compact)
+                    const LeetCodeCheatSheetIconButton()
+                  else
+                    const LeetCodeCheatSheetButton(dense: true),
                 ],
               ),
             ),

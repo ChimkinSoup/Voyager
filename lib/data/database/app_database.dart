@@ -2410,6 +2410,8 @@ class GaiaSettingsTable extends Table {
       boolean().withDefault(const Constant(false))();
   TextColumn get userName => text().withDefault(const Constant(''))();
   IntColumn get memoryAlertAt => integer().withDefault(const Constant(100))();
+  BoolColumn get tidyMemories => boolean().withDefault(const Constant(false))();
+  TextColumn get tidyMemoriesDevice => text().withDefault(const Constant(''))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -2519,6 +2521,22 @@ class GaiaMemoryHintsTable extends Table {
   Set<Column> get primaryKey => {kind, subject};
 }
 
+/// The weekly sweep's suggestions (GAIA_MEMORY_TOPICS_HLD.md §27.4), shown
+/// on the desktop that ran it. Local, like the hints.
+class GaiaMemorySuggestionsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get kind => text()();
+  TextColumn get memoryIdsJson => text().withDefault(const Constant('[]'))();
+  TextColumn get topicIdsJson => text().withDefault(const Constant('[]'))();
+  TextColumn get body => text().nullable()();
+  TextColumn get why => text().nullable()();
+  TextColumn get placementJson => text().nullable()();
+  DateTimeColumn get madeAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 @DriftDatabase(
   // Gaia's message search (GAIA_HLD.md §17), an FTS5 table. Declared to drift
   // rather than created by hand, so it is in `allTables` and an account
@@ -2610,13 +2628,14 @@ class GaiaMemoryHintsTable extends Table {
     GaiaMemoryTopicsTable,
     GaiaRecallHistoryTable,
     GaiaMemoryHintsTable,
+    GaiaMemorySuggestionsTable,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 205;
+  int get schemaVersion => 207;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4940,6 +4959,28 @@ class AppDatabase extends _$AppDatabase {
           'gaia_memories_table',
           gaiaMemoriesTable,
           gaiaMemoriesTable.replacesId,
+        );
+      }
+      if (from < 206) {
+        // The weekly sweep's suggestions (GAIA_MEMORY_TOPICS_HLD.md §27.4).
+        await migrator.createTable(gaiaMemorySuggestionsTable);
+      }
+      if (from >= 169 && from < 206) {
+        // Tidy memories weekly (§27.5).
+        await _addColumnIfNotExists(
+          migrator,
+          'gaia_settings_table',
+          gaiaSettingsTable,
+          gaiaSettingsTable.tidyMemories,
+        );
+      }
+      if (from >= 169 && from < 207) {
+        // The device that sweeps (§27.5).
+        await _addColumnIfNotExists(
+          migrator,
+          'gaia_settings_table',
+          gaiaSettingsTable,
+          gaiaSettingsTable.tidyMemoriesDevice,
         );
       }
     },

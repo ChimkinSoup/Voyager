@@ -371,6 +371,33 @@ class _Main {
           ],
         );
         return null;
+      // The weekly sweep (GAIA_MEMORY_TOPICS_HLD.md §27.4), as GaiaHost
+      // answers it.
+      case 'sweepPlan':
+        final plan = await memories.sweepPlan(
+          DateTime.now().toUtc(),
+          force: params['force'] == true,
+        );
+        return plan == null ? null : gaiaSweepPlanToJson(plan);
+      case 'sweepFound':
+        return memories.addSuggestions([
+          for (final found in params['suggestions']! as List)
+            ?gaiaMemorySuggestionFromJson({
+              ...found! as Map,
+              'id': '',
+              'madeAt': params['at'],
+            }),
+        ], DateTime.parse(params['at']! as String));
+      case 'sweepUnsorted':
+        return [
+          for (final memory in await memories.sweepUnsorted({
+            ...(params['except'] as List? ?? const []).cast<String>(),
+          }, DateTime.parse(params['at']! as String)))
+            {'id': memory.id, 'text': memory.text},
+        ];
+      case 'sweepDone':
+        await memories.swept(DateTime.parse(params['at']! as String));
+        return null;
       case 'memoryTopics':
         return gaiaTopicLinesToJson(await memories.topicLines());
       case 'memoryFiling':
@@ -944,6 +971,80 @@ void main() {
         utility.jobs.where((job) => job.startsWith('You keep')),
         hasLength(2),
       );
+    });
+
+    test('with Tidy memories weekly on, the sweep runs once nothing has run '
+        "for the curator's wait, and not again within the week "
+        '(§27.4)', () async {
+      main.settings = GaiaSettings.initial()
+          .copyWith(tidyMemories: true, tidyMemoriesDevice: 'laptop')
+          .toJson();
+      final at = DateTime.utc(2026, 11, 1);
+      for (final (id, text) in [
+        ('a', 'I live in Toronto'),
+        ('b', 'Toronto is home'),
+      ]) {
+        await main.repository.upsertMemory(
+          GaiaMemory(
+            id: id,
+            text: text,
+            status: GaiaMemoryStatus.active,
+            createdAt: at,
+            updatedAt: at,
+          ),
+        );
+      }
+      final utility = FakeUtilityRunner(
+        (job) => job.startsWith('You tidy')
+            ? '[{"kind": "same", "n": [1, 2], "text": "I live in Toronto."}]'
+            : '[]',
+      );
+      await startCompanion(
+        utility: GaiaUtility(utility),
+        curateAfter: const Duration(milliseconds: 50),
+      );
+      addTearDown(() => main.pipe.notify('settings', {'tidyMemories': false}));
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      await settle();
+      expect(utility.usages.where((u) => u == 'memory sweep'), hasLength(1));
+      final stored = await main.repository.listMemorySuggestions();
+      expect(stored.single.kind, GaiaSuggestionKind.same);
+      expect(stored.single.memoryIds, ['a', 'b']);
+      expect(await main.memories.lastSweep(), isNotNull);
+
+      // It's still asked each idle tick, but the week hasn't passed.
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      await settle();
+      expect(
+        main.requests.where((r) => r == 'sweepPlan').length,
+        greaterThan(1),
+      );
+      expect(utility.usages.where((u) => u == 'memory sweep'), hasLength(1));
+    });
+
+    test('Tidy memories weekly turned on on another device sweeps there, not '
+        'here (§27.5)', () async {
+      main.settings = GaiaSettings.initial()
+          .copyWith(tidyMemories: true, tidyMemoriesDevice: 'desktop')
+          .toJson();
+      await main.repository.upsertMemory(
+        GaiaMemory(
+          id: 'a',
+          text: 'I live in Toronto',
+          status: GaiaMemoryStatus.active,
+          createdAt: DateTime.utc(2026, 11, 1),
+          updatedAt: DateTime.utc(2026, 11, 1),
+        ),
+      );
+      final utility = FakeUtilityRunner((_) => '[]');
+      await startCompanion(
+        utility: GaiaUtility(utility),
+        curateAfter: const Duration(milliseconds: 50),
+      );
+      addTearDown(() => main.pipe.notify('settings', {'tidyMemories': false}));
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      await settle();
+      expect(main.requests, isNot(contains('sweepPlan')));
     });
 
     test(

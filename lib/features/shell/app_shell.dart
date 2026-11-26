@@ -74,16 +74,12 @@ class AppShell extends ConsumerWidget {
       navigationShell: navigationShell,
       orderedDestinations: orderedDestinations,
       settings: settings,
-      child: PopScope(
-        // Always false: when a branch has something of its own to pop,
-        // go_router routes the gesture to that branch's navigator and this
-        // never fires. Reaching here means the section is at its root, and
-        // Back should step back through sections before it leaves the app.
-        canPop: false,
-        onPopInvokedWithResult: (didPop, _) {
-          if (didPop) return;
-          _handleSystemBack(navigationShell, orderedDestinations);
-        },
+      // When a branch has something of its own to pop, go_router routes the
+      // gesture to that branch's navigator and this never fires. Reaching
+      // here means the section is at its root, and Back should step back
+      // through sections before it leaves the app.
+      child: _ShellPopScope(
+        onBack: () => _handleSystemBack(navigationShell, orderedDestinations),
         child: Stack(
           clipBehavior: Clip.none,
           children: [
@@ -121,6 +117,63 @@ class AppShell extends ConsumerWidget {
         ),
       ),
     );
+  }
+}
+
+/// A [PopScope] that never lets the shell pop, registered on the route go_router
+/// asks.
+///
+/// The shell's own route sits in the navigator of the [ShellRoute] that adds
+/// the desktop window frame (`app_router.dart`), which go_router never asks:
+/// with no branch able to pop, it sends Back to the root navigator, whose
+/// route holds that whole outer shell. A [PopScope] here registered on the
+/// inner route, so Back closed the app (BUG-392). This registers on the route
+/// of the navigator the shell sits in.
+class _ShellPopScope extends StatefulWidget {
+  const _ShellPopScope({required this.onBack, required this.child});
+
+  final VoidCallback onBack;
+  final Widget child;
+
+  @override
+  State<_ShellPopScope> createState() => _ShellPopScopeState();
+}
+
+class _ShellPopScopeState extends State<_ShellPopScope> {
+  late final _entry = _ShellPopEntry(() => widget.onBack());
+  ModalRoute<Object?>? _route;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(Navigator.of(context).context);
+    if (route == _route) return;
+    _route?.unregisterPopEntry(_entry);
+    _route = route?..registerPopEntry(_entry);
+  }
+
+  @override
+  void dispose() {
+    _route?.unregisterPopEntry(_entry);
+    _entry.canPopNotifier.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
+
+class _ShellPopEntry extends PopEntry<Object?> {
+  _ShellPopEntry(this.onBack);
+
+  final VoidCallback onBack;
+
+  @override
+  final ValueNotifier<bool> canPopNotifier = ValueNotifier(false);
+
+  @override
+  void onPopInvokedWithResult(bool didPop, Object? result) {
+    if (!didPop) onBack();
   }
 }
 
@@ -230,7 +283,7 @@ class _CompactStatusStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 48,
+      height: shellCompactStripHeight,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: VoyagerSpacing.sm),
         child: Row(
@@ -310,46 +363,62 @@ class _VoyagerNavigationRail extends StatelessWidget {
     // destination list itself scrolls, between two fixed shoulders.
     return SizedBox(
       width: 72,
-      child: Column(
-        children: [
-          _RailClockWeather(accent: accent),
-          const SizedBox(height: 18),
-          Expanded(
-            child: _RailDestinationList(
-              child: Column(
-                children: [
-                  for (final item in orderedDestinations)
-                    Padding(
-                      // Keyed so hiding or reordering destinations keeps the
-                      // selection on the same button instead of shifting it.
-                      key: ValueKey(item.originalIndex),
-                      padding: const EdgeInsets.symmetric(vertical: 2),
-                      child: ExcludeFocus(
-                        child: _RailDestinationButton(
-                          icon: item.dest.icon,
-                          label: item.dest.label,
-                          selected: item.originalIndex == selectedIndex,
-                          accent: accent,
-                          onTap: () =>
-                              onDestinationSelected(item.originalIndex),
-                        ),
-                      ),
+      // A landscape phone with the keyboard up leaves less height than the
+      // shoulders alone need, so below the floor the whole rail scrolls
+      // rather than overflowing (BUG-385).
+      child: LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          primary: false,
+          child: SizedBox(
+            height: math.max(constraints.maxHeight, _railMinHeight),
+            child: Column(
+              children: [
+                _RailClockWeather(accent: accent),
+                const SizedBox(height: 18),
+                Expanded(
+                  child: _RailDestinationList(
+                    child: Column(
+                      children: [
+                        for (final item in orderedDestinations)
+                          Padding(
+                            // Keyed so hiding or reordering destinations keeps
+                            // the selection on the same button instead of
+                            // shifting it.
+                            key: ValueKey(item.originalIndex),
+                            padding: const EdgeInsets.symmetric(vertical: 2),
+                            child: ExcludeFocus(
+                              child: _RailDestinationButton(
+                                icon: item.dest.icon,
+                                label: item.dest.label,
+                                selected: item.originalIndex == selectedIndex,
+                                accent: accent,
+                                onTap: () =>
+                                    onDestinationSelected(item.originalIndex),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
-                ],
-              ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                const _ConnectivityIndicator(),
+                const SizedBox(height: 4),
+                const _SyncActivityIndicator(axis: Axis.vertical),
+                NotificationBell(accent: accent),
+                const SizedBox(height: 4),
+              ],
             ),
           ),
-          const SizedBox(height: 18),
-          const _ConnectivityIndicator(),
-          const SizedBox(height: 4),
-          const _SyncActivityIndicator(axis: Axis.vertical),
-          NotificationBell(accent: accent),
-          const SizedBox(height: 4),
-        ],
+        ),
       ),
     );
   }
 }
+
+/// The rail's height floor: its shoulders take ~195px, and this leaves room
+/// for a destination between them.
+const double _railMinHeight = 260;
 
 /// Depth of the rail list's edge fades; see [_RailDestinationList].
 @visibleForTesting

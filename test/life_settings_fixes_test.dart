@@ -1,7 +1,7 @@
 // Phase 16 Life fixes: the page's figures follow the clock instead of the
 // last rebuild (BUG-141), a long value stays inside the canvas at small sizes
-// (BUG-142), and Enter in the birth date picker's typed field accepts the date
-// (BUG-143).
+// (BUG-142), Enter in the birth date picker's typed field accepts the date
+// (BUG-143), and a phone without a birth date reads (BUG-391).
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -33,6 +33,7 @@ final _birth = DateTime(1990, 6, 15);
 Future<StateController<DateTime>> _pumpLife(
   WidgetTester tester, {
   Size size = const Size(1200, 800),
+  AppSettings? settings,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
@@ -43,7 +44,7 @@ Future<StateController<DateTime>> _pumpLife(
     ProviderScope(
       overrides: [
         settingsProvider.overrideWith(
-          () => _FixedSettings(AppSettings(birthDate: _birth)),
+          () => _FixedSettings(settings ?? AppSettings(birthDate: _birth)),
         ),
         lifeTrackerStatsProvider.overrideWith(
           (ref) async =>
@@ -121,6 +122,24 @@ void main() {
       expect(value.left, greaterThanOrEqualTo(canvas.left), reason: label.name);
       expect(value.right, lessThanOrEqualTo(canvas.right), reason: label.name);
     }
+  });
+
+  group('BUG-391 no birth date', () {
+    const prompt = 'Set your birth date in Settings';
+
+    testWidgets('a phone says it once', (tester) async {
+      await _pumpLife(
+        tester,
+        size: const Size(361, 690),
+        settings: const AppSettings(),
+      );
+      expect(find.text(prompt), findsOneWidget);
+    });
+
+    testWidgets('a desktop window keeps it on each label', (tester) async {
+      await _pumpLife(tester, settings: const AppSettings());
+      expect(find.text(prompt), findsNWidgets(5));
+    });
   });
 
   group('BUG-143 the birth date picker', () {

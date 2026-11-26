@@ -137,105 +137,122 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   Widget _buildForm(BuildContext context, {required bool busy}) {
     final showGoogleSignIn = !isWindows || isGoogleOAuthReadyForDesktop;
 
+    // Scrolls, so the buttons and the error line stay reachable with the
+    // soft keyboard up, in landscape, or at a large font (BUG-387).
     return Scaffold(
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: Card(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Voyager',
-                    style: Theme.of(context).textTheme.headlineMedium,
-                  ),
-                  const SizedBox(height: 24),
-                  LabeledTextField(
-                    label: 'Email',
-                    controller: _emailController,
-                    focusNode: _emailFocus,
-                    // Not on Android, where focus raises the soft keyboard
-                    // over the buttons before the user has chosen a field.
-                    autofocus: !isAndroid,
-                    enabled: !busy,
-                    onSubmitted: (_) => _submit(),
-                  ),
-                  const SizedBox(height: 12),
-                  LabeledTextField(
-                    label: 'Password',
-                    controller: _passwordController,
-                    focusNode: _passwordFocus,
-                    obscureText: true,
-                    enabled: !busy,
-                    onSubmitted: (_) => _submit(),
-                  ),
-                  if (!_isSignUp) ...[
-                    const SizedBox(height: 16),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: GlassButton(
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Voyager',
+                        style: Theme.of(context).textTheme.headlineMedium,
+                      ),
+                      const SizedBox(height: 24),
+                      LabeledTextField(
+                        label: 'Email',
+                        controller: _emailController,
+                        focusNode: _emailFocus,
+                        // Not on Android, where focus raises the soft keyboard
+                        // over the buttons before the user has chosen a field.
+                        autofocus: !isAndroid,
+                        enabled: !busy,
+                        keyboardType: TextInputType.emailAddress,
+                        textInputAction: TextInputAction.next,
+                        autofillHints: const [AutofillHints.email],
+                        standardContextMenu: true,
+                        // On to Password while it's empty (BUG-388).
+                        onSubmitted: (_) => _passwordController.text.isEmpty
+                            ? _passwordFocus.requestFocus()
+                            : _submit(),
+                      ),
+                      const SizedBox(height: 12),
+                      LabeledTextField(
+                        label: 'Password',
+                        controller: _passwordController,
+                        focusNode: _passwordFocus,
+                        obscureText: true,
+                        enabled: !busy,
+                        autofillHints: const [AutofillHints.password],
+                        standardContextMenu: true,
+                        onSubmitted: (_) => _submit(),
+                      ),
+                      if (!_isSignUp) ...[
+                        const SizedBox(height: 16),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: GlassButton(
+                            canRequestFocus: true,
+                            onPressed: busy ? null : _resetPassword,
+                            label: 'Forgot password?',
+                          ),
+                        ),
+                      ],
+                      if (_error != null) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          _error!,
+                          style: AppFonts.style(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        ),
+                      ],
+                      if (_success != null) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          _success!,
+                          style: AppFonts.style(
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                      const SizedBox(height: 24),
+                      GlassButton(
                         canRequestFocus: true,
-                        onPressed: busy ? null : _resetPassword,
-                        label: 'Forgot password?',
+                        onPressed: busy ? null : _submit,
+                        child: busy
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Text(_isSignUp ? 'Sign up' : 'Sign in'),
                       ),
-                    ),
-                  ],
-                  if (_error != null) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      _error!,
-                      style: AppFonts.style(
-                        color: Theme.of(context).colorScheme.error,
+                      const SizedBox(height: 8),
+                      if (showGoogleSignIn) ...[
+                        GlassButton(
+                          canRequestFocus: true,
+                          onPressed: busy ? null : _googleSignIn,
+                          label: 'Continue with Google',
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                      GlassButton(
+                        canRequestFocus: true,
+                        onPressed: busy
+                            ? null
+                            : () => setState(() {
+                                _isSignUp = !_isSignUp;
+                                _error = null;
+                                _success = null;
+                              }),
+                        label: _isSignUp
+                            ? 'Have an account? Sign in'
+                            : 'Create account',
                       ),
-                    ),
-                  ],
-                  if (_success != null) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      _success!,
-                      style: AppFonts.style(
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                  const SizedBox(height: 24),
-                  GlassButton(
-                    canRequestFocus: true,
-                    onPressed: busy ? null : _submit,
-                    child: busy
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Text(_isSignUp ? 'Sign up' : 'Sign in'),
+                    ],
                   ),
-                  const SizedBox(height: 8),
-                  if (showGoogleSignIn) ...[
-                    GlassButton(
-                      canRequestFocus: true,
-                      onPressed: busy ? null : _googleSignIn,
-                      label: 'Continue with Google',
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-                  GlassButton(
-                    canRequestFocus: true,
-                    onPressed: busy
-                        ? null
-                        : () => setState(() {
-                            _isSignUp = !_isSignUp;
-                            _error = null;
-                            _success = null;
-                          }),
-                    label: _isSignUp
-                        ? 'Have an account? Sign in'
-                        : 'Create account',
-                  ),
-                ],
+                ),
               ),
             ),
           ),

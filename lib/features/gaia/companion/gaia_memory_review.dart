@@ -49,6 +49,14 @@ final class GaiaReviewMerge extends GaiaReviewItem {
   final String why;
 }
 
+/// One of the weekly sweep's suggestions (GAIA_MEMORY_TOPICS_HLD.md §27.4),
+/// as it was dealt.
+final class GaiaReviewSweep extends GaiaReviewItem {
+  const GaiaReviewSweep(this.suggestion);
+
+  final GaiaMemorySuggestion suggestion;
+}
+
 /// Which way a decided card leaves (§6.2).
 enum GaiaReviewExit { up, down, aside }
 
@@ -66,7 +74,9 @@ enum GaiaReviewOutcome {
   merged('merged', GaiaReviewExit.up),
   keptApart('kept apart', GaiaReviewExit.down),
   filed('filed', GaiaReviewExit.up),
-  leftUnsorted('left unsorted', GaiaReviewExit.down);
+  leftUnsorted('left unsorted', GaiaReviewExit.down),
+  renamed('renamed', GaiaReviewExit.up),
+  keptBoth('kept both', GaiaReviewExit.down);
 
   const GaiaReviewOutcome(this.word, this.exit);
 
@@ -74,9 +84,22 @@ enum GaiaReviewOutcome {
   final GaiaReviewExit exit;
 }
 
-/// What a card asks: one of §6.2's rows, or nothing, once it's decided
-/// here or elsewhere.
-enum GaiaReviewKind { proposed, remembered, pin, merge, unsorted, done }
+/// What a card asks: one of §6.2's rows, one of the sweep's suggestions
+/// (GAIA_MEMORY_TOPICS_HLD.md §27.4), or nothing, once it's decided here or
+/// elsewhere.
+enum GaiaReviewKind {
+  proposed,
+  remembered,
+  pin,
+  merge,
+  unsorted,
+  same,
+  conflict,
+  expired,
+  topicMerge,
+  topicRename,
+  done,
+}
 
 /// A card as it shows now, from the Memories tab's latest list.
 typedef GaiaReviewCard = ({
@@ -87,6 +110,7 @@ typedef GaiaReviewCard = ({
   GaiaMemoryTopic? from,
   GaiaMemoryTopic? into,
   GaiaReviewOutcome? outcome,
+  GaiaMemorySuggestion? suggestion,
 });
 
 /// How a decision is undone; null for one that wrote nothing.
@@ -114,7 +138,7 @@ class GaiaMemoryReview extends ChangeNotifier {
   }
 
   /// The inbox: proposed memories, oldest first, then pin and merge
-  /// suggestions.
+  /// suggestions, then the weekly sweep's.
   factory GaiaMemoryReview.inbox(GaiaController controller) {
     final list = controller.memoryList!;
     return GaiaMemoryReview._(controller, GaiaReviewDeck.inbox, 'the inbox', [
@@ -124,6 +148,9 @@ class GaiaMemoryReview extends ChangeNotifier {
       for (final pin in list.pins) GaiaReviewPin(pin.memory.id, pin.why),
       for (final merge in list.merges)
         GaiaReviewMerge(merge.from, merge.into, merge.why),
+      for (final suggestion in list.suggestions)
+        if (suggestion.kind != GaiaSuggestionKind.place)
+          GaiaReviewSweep(suggestion),
     ]);
   }
 
@@ -236,6 +263,7 @@ class GaiaMemoryReview extends ChangeNotifier {
       String? why,
       GaiaMemoryTopic? from,
       GaiaMemoryTopic? into,
+      GaiaMemorySuggestion? suggestion,
     }) => (
       index: i,
       kind: outcome == null ? kind : GaiaReviewKind.done,
@@ -244,6 +272,7 @@ class GaiaMemoryReview extends ChangeNotifier {
       from: from,
       into: into,
       outcome: outcome,
+      suggestion: suggestion,
     );
     switch (items[i]) {
       case GaiaReviewMemory(:final id):
@@ -291,6 +320,24 @@ class GaiaMemoryReview extends ChangeNotifier {
           why: why,
           from: topic(from),
           into: topic(into),
+        );
+      case GaiaReviewSweep(:final suggestion):
+        final live = list.suggestions
+            .where((s) => s.id == suggestion.id)
+            .firstOrNull;
+        return of(
+          live == null
+              ? GaiaReviewKind.done
+              : switch (live.kind) {
+                  GaiaSuggestionKind.same => GaiaReviewKind.same,
+                  GaiaSuggestionKind.conflict => GaiaReviewKind.conflict,
+                  GaiaSuggestionKind.expired => GaiaReviewKind.expired,
+                  GaiaSuggestionKind.topicMerge => GaiaReviewKind.topicMerge,
+                  GaiaSuggestionKind.topicRename => GaiaReviewKind.topicRename,
+                  GaiaSuggestionKind.place => GaiaReviewKind.done,
+                },
+          why: suggestion.why,
+          suggestion: live ?? suggestion,
         );
     }
   }
@@ -456,6 +503,39 @@ class GaiaMemoryReview extends ChangeNotifier {
 bool _unsorted(GaiaMemory memory, GaiaTopicTree tree) =>
     memory.topicIds.every((id) => tree.path(id).isEmpty);
 
+/// What the sweep's [suggestion] asks, as its card's heading
+/// (GAIA_MEMORY_TOPICS_HLD.md §27.4).
+String gaiaSuggestionHeading(
+  GaiaMemorySuggestion suggestion,
+  GaiaTopicTree tree,
+) {
+  String path(String id) {
+    final path = tree.path(id);
+    return path.isEmpty ? '…' : path.join(' › ');
+  }
+
+  return switch (suggestion.kind) {
+    GaiaSuggestionKind.same => 'Same thing?',
+    GaiaSuggestionKind.conflict => 'These disagree',
+    GaiaSuggestionKind.expired => 'Out of date?',
+    GaiaSuggestionKind.topicMerge =>
+      'Merge "${path(suggestion.topicIds.first)}" into '
+          '"${path(suggestion.topicIds.last)}"?',
+    GaiaSuggestionKind.topicRename =>
+      'Rename "${path(suggestion.topicIds.single)}" to "${suggestion.text}"?',
+    GaiaSuggestionKind.place => 'Unsorted',
+  };
+}
+
+IconData gaiaSuggestionIcon(GaiaSuggestionKind kind) => switch (kind) {
+  GaiaSuggestionKind.same => Icons.call_merge,
+  GaiaSuggestionKind.conflict => Icons.compare_arrows,
+  GaiaSuggestionKind.expired => Icons.history,
+  GaiaSuggestionKind.topicMerge => Icons.merge,
+  GaiaSuggestionKind.topicRename => Icons.drive_file_rename_outline,
+  GaiaSuggestionKind.place => Icons.inbox_outlined,
+};
+
 /// The review in the Memories tab's place (GAIA_SETTINGS_HLD.md §6.2): the
 /// card in front, larger than a list card, its actions and their keys,
 /// the card decided last animating off over the next, and at the end what
@@ -492,6 +572,11 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
 
   /// The last edit saved, which a decision waits for.
   Future<void>? _saving;
+
+  /// Same thing's merged text as edited here, by suggestion; [_editing]'s
+  /// id is [_mergedEdit] and the suggestion's while it's edited.
+  final _merged = <String, String>{};
+  static const _mergedEdit = 'merged:';
 
   /// The card going off, built once as it starts, and its serial: it keeps
   /// its look and size while the write it set off changes what it shows.
@@ -612,6 +697,7 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
   }
 
   void _startEdit(GaiaMemory memory) {
+    _dropEdit();
     setState(
       () => _editing = (
         id: memory.id,
@@ -624,6 +710,15 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
     });
   }
 
+  /// An open edit replaced by another: its controller freed once the field
+  /// that used it is gone.
+  void _dropEdit() {
+    final old = _editing?.text;
+    if (old != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
+    }
+  }
+
   void _endEdit({required bool save}) {
     final editing = _editing;
     if (editing == null) return;
@@ -634,6 +729,11 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
       if (mounted) _keys.requestFocus();
     });
     if (!save || text.isEmpty) return;
+    // A merge's text, kept here until Merge (§27.4).
+    if (editing.id.startsWith(_mergedEdit)) {
+      setState(() => _merged[editing.id.substring(_mergedEdit.length)] = text);
+      return;
+    }
     final saving = _run(
       () => _controller.writeMemories('editMemory', {
         'memoryId': editing.id,
@@ -768,14 +868,56 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
     });
   }
 
-  /// Leave unsorted: its suggestion dropped, as the tab's Skip does, and
-  /// put back on undo.
+  /// Leave unsorted: its suggestion dropped and the choice remembered, as
+  /// on the tab (GAIA_MEMORY_TOPICS_HLD.md §27.5); both undone together.
   void _leaveUnsorted(GaiaMemory memory) {
     final placement = _controller.memorySorted[memory.id];
     _review.decide(GaiaReviewOutcome.leftUnsorted, () async {
-      _controller.changeSorted(memory.id);
-      if (placement == null) return null;
-      return () async => _controller.changeSorted(memory.id, placement);
+      await _controller.leaveUnsorted(memory.id);
+      return () => _controller.undoLeaveUnsorted(memory.id, placement);
+    });
+  }
+
+  /// The sweep's [suggestion] decided as [outcome] (§27.4): [accept]ed, a
+  /// merge with its text as edited, [keep]ing one of two, or kept apart.
+  void _decideSweep(
+    GaiaReviewOutcome outcome,
+    GaiaMemorySuggestion suggestion, {
+    bool accept = false,
+    String? keep,
+  }) {
+    // Merge clicked mid-edit: the text as typed, not as last saved.
+    final editing = _editing;
+    final typed = editing?.id == '$_mergedEdit${suggestion.id}'
+        ? editing!.text.text.trim()
+        : '';
+    _review.decide(
+      outcome,
+      () => _controller.decideSuggestion(
+        suggestion,
+        accept: accept,
+        keep: keep,
+        text: accept && suggestion.kind == GaiaSuggestionKind.same
+            ? (typed.isNotEmpty
+                  ? typed
+                  : _merged[suggestion.id] ?? suggestion.text)
+            : null,
+      ),
+    );
+  }
+
+  void _editMerged(GaiaMemorySuggestion suggestion) {
+    final text = _merged[suggestion.id] ?? suggestion.text ?? '';
+    _dropEdit();
+    setState(
+      () => _editing = (
+        id: '$_mergedEdit${suggestion.id}',
+        text: TextEditingController(text: text)
+          ..selection = TextSelection.collapsed(offset: text.length),
+      ),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _editFocus.requestFocus();
     });
   }
 
@@ -955,6 +1097,59 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
           action = () => _leaveUnsorted(memory!);
         } else if (letter(LogicalKeyboardKey.keyE)) {
           action = () => _startEdit(memory!);
+        } else if (right) {
+          action = () => _skip(GaiaReviewOutcome.skipped);
+        }
+      case GaiaReviewKind.same:
+        final suggestion = card.suggestion!;
+        if (enter()) {
+          action = () =>
+              _decideSweep(GaiaReviewOutcome.merged, suggestion, accept: true);
+        } else if (backspace) {
+          action = () => _decideSweep(GaiaReviewOutcome.keptApart, suggestion);
+        } else if (letter(LogicalKeyboardKey.keyE)) {
+          action = () => _editMerged(suggestion);
+        } else if (right) {
+          action = () => _skip(GaiaReviewOutcome.skipped);
+        }
+      case GaiaReviewKind.conflict:
+        final suggestion = card.suggestion!;
+        final digit = [
+          LogicalKeyboardKey.digit1,
+          LogicalKeyboardKey.digit2,
+        ].indexOf(key);
+        if (plain && digit >= 0) {
+          action = () => _decideSweep(
+            GaiaReviewOutcome.kept,
+            suggestion,
+            keep: suggestion.memoryIds[digit],
+          );
+        } else if (backspace) {
+          action = () => _decideSweep(GaiaReviewOutcome.keptBoth, suggestion);
+        } else if (right) {
+          action = () => _skip(GaiaReviewOutcome.skipped);
+        }
+      case GaiaReviewKind.expired ||
+          GaiaReviewKind.topicMerge ||
+          GaiaReviewKind.topicRename:
+        final suggestion = card.suggestion!;
+        if (enter()) {
+          action = () => _decideSweep(
+            switch (card.kind) {
+              GaiaReviewKind.expired => GaiaReviewOutcome.archived,
+              GaiaReviewKind.topicMerge => GaiaReviewOutcome.merged,
+              _ => GaiaReviewOutcome.renamed,
+            },
+            suggestion,
+            accept: true,
+          );
+        } else if (backspace) {
+          action = () => _decideSweep(
+            card.kind == GaiaReviewKind.topicMerge
+                ? GaiaReviewOutcome.keptBoth
+                : GaiaReviewOutcome.kept,
+            suggestion,
+          );
         } else if (right) {
           action = () => _skip(GaiaReviewOutcome.skipped);
         }
@@ -1235,6 +1430,32 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
         (['E'], 'edit'),
         (['→', 'S'], 'skip'),
       ],
+      GaiaReviewKind.same => [
+        (['Enter'], 'merge'),
+        (['Backspace'], 'keep apart'),
+        (['E'], 'edit'),
+        (['→'], 'skip'),
+      ],
+      GaiaReviewKind.conflict => [
+        (['1', '2'], 'keep that one'),
+        (['Backspace'], 'keep both'),
+        (['→'], 'skip'),
+      ],
+      GaiaReviewKind.expired => [
+        (['Enter'], 'archive'),
+        (['Backspace'], 'keep'),
+        (['→'], 'skip'),
+      ],
+      GaiaReviewKind.topicMerge => [
+        (['Enter'], 'merge'),
+        (['Backspace'], 'keep both'),
+        (['→'], 'skip'),
+      ],
+      GaiaReviewKind.topicRename => [
+        (['Enter'], 'rename'),
+        (['Backspace'], 'keep'),
+        (['→'], 'skip'),
+      ],
       GaiaReviewKind.done => [
         (['Enter', '→'], 'next'),
       ],
@@ -1314,6 +1535,20 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
       GaiaReviewKind.pin => (Icons.push_pin_outlined, 'Pin this?'),
       GaiaReviewKind.merge => (Icons.merge, 'Merge these topics?'),
       GaiaReviewKind.unsorted => (Icons.inbox_outlined, 'Unsorted'),
+      GaiaReviewKind.same ||
+      GaiaReviewKind.conflict ||
+      GaiaReviewKind.expired ||
+      GaiaReviewKind.topicMerge ||
+      GaiaReviewKind.topicRename => (
+        gaiaSuggestionIcon(card.suggestion!.kind),
+        switch (card.kind) {
+          GaiaReviewKind.same => 'Same thing?',
+          GaiaReviewKind.conflict => 'These disagree',
+          GaiaReviewKind.expired => 'Out of date?',
+          GaiaReviewKind.topicMerge => 'Merge these topics?',
+          _ => 'Rename this topic?',
+        },
+      ),
       GaiaReviewKind.done => (
         Icons.check,
         switch (card.outcome) {
@@ -1358,7 +1593,9 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
         ),
         const SizedBox(height: 6),
       ],
-      if (card.from != null)
+      if (card.suggestion case final suggestion?)
+        ..._sweepBody(card, suggestion, tree, still: still)
+      else if (card.from != null)
         Text(
           'Merge "${_path(tree, card.from)}" into "${_path(tree, card.into)}"',
           style: GaiaType.row.copyWith(color: GaiaInk.bright, fontSize: 16),
@@ -1397,7 +1634,10 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
         ),
       if (card.why case final why?) ...[
         const SizedBox(height: 6),
-        Text('$why.', style: GaiaType.label.copyWith(color: GaiaInk.muted)),
+        Text(
+          RegExp(r'[.!?…]$').hasMatch(why) ? why : '$why.',
+          style: GaiaType.label.copyWith(color: GaiaInk.muted),
+        ),
       ],
       if (memory != null && card.kind != GaiaReviewKind.merge) ...[
         const SizedBox(height: 8),
@@ -1435,6 +1675,83 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
         ),
       ),
     );
+  }
+
+  /// A sweep card's body (§27.4): the memories it names, conflict's with
+  /// their keys, same thing's merged text, a click editing it, or what a
+  /// topic would become.
+  List<Widget> _sweepBody(
+    GaiaReviewCard card,
+    GaiaMemorySuggestion suggestion,
+    GaiaTopicTree tree, {
+    required bool still,
+  }) {
+    final open = card.kind != GaiaReviewKind.done;
+    final memories = _controller.memoryList!.memories;
+    final big = GaiaType.row.copyWith(
+      color: open ? GaiaInk.bright : GaiaInk.muted,
+      fontSize: 16,
+    );
+    final dim = GaiaType.row.copyWith(color: GaiaInk.dim, fontSize: 15);
+    final editing = _editing;
+    if (suggestion.kind == GaiaSuggestionKind.topicMerge ||
+        suggestion.kind == GaiaSuggestionKind.topicRename) {
+      return [Text(gaiaSuggestionHeading(suggestion, tree), style: big)];
+    }
+    return [
+      for (final (i, id) in suggestion.memoryIds.indexed)
+        if (memories.where((memory) => memory.id == id).firstOrNull
+            case final memory?)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Text.rich(
+              TextSpan(
+                children: [
+                  if (suggestion.kind == GaiaSuggestionKind.conflict && open)
+                    TextSpan(
+                      text: '${i + 1}  ',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                  TextSpan(text: memory.text),
+                  if (suggestion.kind == GaiaSuggestionKind.expired)
+                    TextSpan(
+                      text: '  saved ${gaiaWhen(memory.createdAt.toLocal())}',
+                      style: GaiaType.label.copyWith(color: GaiaInk.faint),
+                    ),
+                ],
+              ),
+              style: suggestion.kind == GaiaSuggestionKind.same ? dim : big,
+            ),
+          ),
+      if (suggestion.kind == GaiaSuggestionKind.same) ...[
+        const SizedBox(height: 4),
+        Text(
+          'As one memory:',
+          style: GaiaType.label.copyWith(color: GaiaInk.muted),
+        ),
+        const SizedBox(height: 4),
+        if (editing?.id == '$_mergedEdit${suggestion.id}' && !still)
+          GaiaCardTextField(
+            controller: editing!.text,
+            focusNode: _editFocus,
+            maxLines: 8,
+            style: big,
+          )
+        else
+          MouseRegion(
+            cursor: open ? SystemMouseCursors.text : MouseCursor.defer,
+            child: GestureDetector(
+              onTap: open ? () => _editMerged(suggestion) : null,
+              child: Text(
+                _merged[suggestion.id] ?? suggestion.text ?? '',
+                style: big,
+              ),
+            ),
+          ),
+      ],
+    ];
   }
 
   String _path(GaiaTopicTree tree, GaiaMemoryTopic? topic) {
@@ -1775,6 +2092,98 @@ class _GaiaMemoryReviewViewState extends State<GaiaMemoryReviewView> {
           ),
           button('Edit', 'E', () => _startEdit(memory)),
           button('Skip', '→ or S', () => _skip(GaiaReviewOutcome.skipped)),
+        ],
+        GaiaReviewKind.same => [
+          button(
+            'Merge',
+            'Enter',
+            () => _decideSweep(
+              GaiaReviewOutcome.merged,
+              card.suggestion!,
+              accept: true,
+            ),
+            main: true,
+          ),
+          button(
+            'Keep apart',
+            'Backspace',
+            () => _decideSweep(GaiaReviewOutcome.keptApart, card.suggestion!),
+          ),
+          button('Edit', 'E', () => _editMerged(card.suggestion!)),
+          button('Skip', '→', () => _skip(GaiaReviewOutcome.skipped)),
+        ],
+        GaiaReviewKind.conflict => [
+          for (final (i, id) in card.suggestion!.memoryIds.indexed)
+            button(
+              'Keep ${i + 1}',
+              '${i + 1}: the other goes to the trash',
+              () => _decideSweep(
+                GaiaReviewOutcome.kept,
+                card.suggestion!,
+                keep: id,
+              ),
+              main: i == 0,
+            ),
+          button(
+            'Keep both',
+            'Backspace',
+            () => _decideSweep(GaiaReviewOutcome.keptBoth, card.suggestion!),
+          ),
+          button('Skip', '→', () => _skip(GaiaReviewOutcome.skipped)),
+        ],
+        GaiaReviewKind.expired => [
+          button(
+            'Archive',
+            'Enter',
+            () => _decideSweep(
+              GaiaReviewOutcome.archived,
+              card.suggestion!,
+              accept: true,
+            ),
+            main: true,
+          ),
+          button(
+            'Keep',
+            'Backspace',
+            () => _decideSweep(GaiaReviewOutcome.kept, card.suggestion!),
+          ),
+          button('Skip', '→', () => _skip(GaiaReviewOutcome.skipped)),
+        ],
+        GaiaReviewKind.topicMerge => [
+          button(
+            'Merge',
+            'Enter',
+            () => _decideSweep(
+              GaiaReviewOutcome.merged,
+              card.suggestion!,
+              accept: true,
+            ),
+            main: true,
+          ),
+          button(
+            'Keep both',
+            'Backspace',
+            () => _decideSweep(GaiaReviewOutcome.keptBoth, card.suggestion!),
+          ),
+          button('Skip', '→', () => _skip(GaiaReviewOutcome.skipped)),
+        ],
+        GaiaReviewKind.topicRename => [
+          button(
+            'Rename',
+            'Enter',
+            () => _decideSweep(
+              GaiaReviewOutcome.renamed,
+              card.suggestion!,
+              accept: true,
+            ),
+            main: true,
+          ),
+          button(
+            'Keep',
+            'Backspace',
+            () => _decideSweep(GaiaReviewOutcome.kept, card.suggestion!),
+          ),
+          button('Skip', '→', () => _skip(GaiaReviewOutcome.skipped)),
         ],
         GaiaReviewKind.done => const <Widget>[],
       },

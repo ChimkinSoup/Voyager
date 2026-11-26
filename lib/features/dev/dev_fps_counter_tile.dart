@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/dev/fps_monitor_controller.dart';
+import 'package:voyager/core/layout/window_size_class.dart';
+import 'package:voyager/features/shell/shell_nav_theme.dart';
 
 const double _graphWidth = 132;
 const double _graphHeight = 34;
@@ -43,9 +45,14 @@ class FpsCounterOverlay extends ConsumerWidget {
     );
     if (!visible) return const SizedBox.shrink();
 
+    // On a phone, below the status bar and the shell's status strip, where
+    // it covered the system icons and the inbox bell (BUG-394).
+    final insets = MediaQuery.paddingOf(context);
     return Positioned(
-      top: 12,
-      right: 12,
+      top: context.isCompactWidth
+          ? insets.top + shellCompactStripHeight + 12
+          : 12,
+      right: 12 + insets.right,
       child: IgnorePointer(
         // The card listens itself; watching the monitor would rebuild this
         // too.

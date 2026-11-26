@@ -7,6 +7,7 @@ import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:path/path.dart' as p;
 import 'package:voyager/core/notifications/notification_history.dart';
 import 'package:voyager/core/platform/app_data_directory.dart';
+import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/features/gaia/gaia_keybinds.dart';
@@ -2148,6 +2149,78 @@ class GaiaHost {
           params['topicId']! as String,
           params['intoId']! as String,
         );
+        return null;
+      // Leave unsorted, remembered (GAIA_MEMORY_TOPICS_HLD.md §27.5).
+      case 'leaveUnsorted':
+        await _memoriesOrThrow().leaveUnsorted(params['memoryId']! as String);
+        return null;
+      case 'undoLeaveUnsorted':
+        await _memoriesOrThrow().undoLeaveUnsorted(
+          params['memoryId']! as String,
+        );
+        return null;
+      // The weekly sweep (§27.4): the companion asks the utility model.
+      case 'sweepPlan':
+        final plan = await _memoriesOrThrow().sweepPlan(
+          utcNow(),
+          force: params['force'] == true,
+        );
+        return plan == null ? null : gaiaSweepPlanToJson(plan);
+      case 'sweepFound':
+        return _memoriesOrThrow().addSuggestions([
+          for (final found in params['suggestions']! as List)
+            ?gaiaMemorySuggestionFromJson({
+              ...found! as Map,
+              'id': '',
+              'madeAt': params['at'],
+            }),
+        ], DateTime.parse(params['at']! as String));
+      case 'sweepUnsorted':
+        return [
+          for (final memory in await _memoriesOrThrow().sweepUnsorted({
+            ...(params['except'] as List? ?? const []).cast<String>(),
+          }, DateTime.parse(params['at']! as String)))
+            {'id': memory.id, 'text': memory.text},
+        ];
+      case 'sweepPlaced':
+        return _memoriesOrThrow().addSuggestions([
+          for (final MapEntry(:key, :value)
+              in (params['placements']! as Map).entries)
+            (
+              id: '',
+              kind: GaiaSuggestionKind.place,
+              memoryIds: [key! as String],
+              topicIds: const [],
+              text: null,
+              why: null,
+              placement: gaiaPlacementFromJson(value),
+              madeAt: DateTime.parse(params['at']! as String),
+            ),
+        ], DateTime.parse(params['at']! as String));
+      case 'sweepDone':
+        await _memoriesOrThrow().swept(DateTime.parse(params['at']! as String));
+        return null;
+      case 'decideSuggestion':
+        final decided = await _readOrThrow(
+          () => _memoriesOrThrow().decideSuggestion(
+            params['id']! as String,
+            accept: params['accept'] == true,
+            keep: params['keep'] as String?,
+            text: params['text'] as String?,
+          ),
+        );
+        // As they were, for Undo through revertMemories and
+        // restoreSuggestion.
+        return {
+          'memories': [for (final m in decided.memories) gaiaMemoryToJson(m)],
+          'topics': [for (final t in decided.topics) gaiaMemoryTopicToJson(t)],
+          'suggestion': gaiaMemorySuggestionToJson(decided.suggestion),
+        };
+      case 'restoreSuggestion':
+        if (gaiaMemorySuggestionFromJson(params['suggestion'])
+            case final suggestion?) {
+          await _memoriesOrThrow().restoreSuggestion(suggestion);
+        }
         return null;
       case 'revertMemories':
         final reverted = await _memoriesOrThrow().revert(

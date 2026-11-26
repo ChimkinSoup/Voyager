@@ -91,6 +91,12 @@ typedef _JournalRowSignature = ({
 /// slider about 120px before it gets a line to itself.
 const double _journalMetadataRowMinWidth = 520;
 
+/// The editor's height floor. The rows around the body take ~355px on a phone
+/// (back bar, title, the stacked mood and date lines, quote), so this keeps
+/// about four lines of body; the desktop's smallest window leaves the editor
+/// more than this, so it never scrolls there.
+const double _journalEditorMinHeight = 440;
+
 /// The date/time pill's floor width, so the metadata row doesn't shift when the
 /// selection moves between entries whose labels are spelled at different
 /// lengths ("Sep 1, 2026 at 4:20 AM" against "May 10, 2026 at 10:00 AM"). 200
@@ -2960,298 +2966,327 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                     ),
                   if (showEditor)
                     Expanded(
-                      child: Padding(
-                        padding: JournalEntryListLayout.editorPadding,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            if (compact)
-                              CompactBackBar(
-                                label: 'Entries',
-                                onBack: () => unawaited(_closeCompactEditor()),
-                              ),
-                            Padding(
-                              padding: const EdgeInsets.only(
-                                top: 8,
-                                bottom: 12,
-                              ),
-                              child: Stack(
-                                clipBehavior: Clip.none,
-                                alignment: Alignment.centerRight,
+                      // A soft keyboard or a landscape phone leaves less
+                      // height than the rows above the body need, and the
+                      // body's Expanded collapsed to nothing (BUG-385). Below
+                      // the floor the editor scrolls instead, so the header
+                      // rows move away and the caret is scrolled into view.
+                      child: LayoutBuilder(
+                        builder: (context, constraints) => SingleChildScrollView(
+                          primary: false,
+                          child: SizedBox(
+                            height: math.max(
+                              constraints.maxHeight,
+                              _journalEditorMinHeight,
+                            ),
+                            child: Padding(
+                              padding: JournalEntryListLayout.editorPadding,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
-                                  Focus(
-                                    onKeyEvent: (node, event) {
-                                      if (event is! KeyDownEvent) {
-                                        return KeyEventResult.ignored;
-                                      }
-                                      if (event.logicalKey ==
-                                              LogicalKeyboardKey.tab &&
-                                          !HardwareKeyboard
-                                              .instance
-                                              .isShiftPressed) {
-                                        _submitTitleAndFocusBody();
-                                        return KeyEventResult.handled;
-                                      }
-                                      return KeyEventResult.ignored;
-                                    },
-                                    // Same padding as the body box below, so the
-                                    // two read as one column: text starts 14px in
-                                    // from the left border and sits the same
-                                    // distance under the top one. That runs under
-                                    // Material's 48px minimum at desktop density,
-                                    // and the decorator's own re-centring left the
-                                    // Vim overlay 2px above the text — see
-                                    // [LabeledTextField.allowShortHeight].
-                                    child: LabeledTextField(
-                                      label: 'Title',
-                                      controller: _titleController,
-                                      focusNode: _titleFocusNode,
-                                      textInputAction: TextInputAction.next,
-                                      accentColor: accentColor,
-                                      allowShortHeight: true,
-                                      contentPadding: const EdgeInsets.fromLTRB(
-                                        14,
-                                        14,
-                                        40,
-                                        14,
-                                      ),
-                                      onChanged: (value) {
-                                        _metadataDirty = true;
-                                        _listTitlePreview.value = value;
-                                        _scheduleMetadataSave();
-                                      },
-                                      onSubmitted: (_) =>
-                                          _submitTitleAndFocusBody(),
+                                  if (compact)
+                                    CompactBackBar(
+                                      label: 'Entries',
+                                      onBack: () =>
+                                          unawaited(_closeCompactEditor()),
+                                    ),
+                                  Padding(
+                                    padding: const EdgeInsets.only(
+                                      top: 8,
+                                      bottom: 12,
+                                    ),
+                                    child: Stack(
+                                      clipBehavior: Clip.none,
+                                      alignment: Alignment.centerRight,
+                                      children: [
+                                        Focus(
+                                          onKeyEvent: (node, event) {
+                                            if (event is! KeyDownEvent) {
+                                              return KeyEventResult.ignored;
+                                            }
+                                            if (event.logicalKey ==
+                                                    LogicalKeyboardKey.tab &&
+                                                !HardwareKeyboard
+                                                    .instance
+                                                    .isShiftPressed) {
+                                              _submitTitleAndFocusBody();
+                                              return KeyEventResult.handled;
+                                            }
+                                            return KeyEventResult.ignored;
+                                          },
+                                          // Same padding as the body box below, so the
+                                          // two read as one column: text starts 14px in
+                                          // from the left border and sits the same
+                                          // distance under the top one. That runs under
+                                          // Material's 48px minimum at desktop density,
+                                          // and the decorator's own re-centring left the
+                                          // Vim overlay 2px above the text — see
+                                          // [LabeledTextField.allowShortHeight].
+                                          child: LabeledTextField(
+                                            label: 'Title',
+                                            controller: _titleController,
+                                            focusNode: _titleFocusNode,
+                                            textInputAction:
+                                                TextInputAction.next,
+                                            accentColor: accentColor,
+                                            allowShortHeight: true,
+                                            contentPadding:
+                                                const EdgeInsets.fromLTRB(
+                                                  14,
+                                                  14,
+                                                  40,
+                                                  14,
+                                                ),
+                                            onChanged: (value) {
+                                              _metadataDirty = true;
+                                              _listTitlePreview.value = value;
+                                              _scheduleMetadataSave();
+                                            },
+                                            onSubmitted: (_) =>
+                                                _submitTitleAndFocusBody(),
+                                          ),
+                                        ),
+                                        if (_selectedEntry != null)
+                                          Positioned(
+                                            top: 0,
+                                            right: 10,
+                                            child: _journalFlagForEntry(
+                                              _selectedEntry!,
+                                              displayJournals,
+                                            )!,
+                                          ),
+                                      ],
                                     ),
                                   ),
-                                  if (_selectedEntry != null)
-                                    Positioned(
-                                      top: 0,
-                                      right: 10,
-                                      child: _journalFlagForEntry(
-                                        _selectedEntry!,
-                                        displayJournals,
-                                      )!,
+                                  // Always on screen, even with nothing selected.
+                                  // Deleting the last entry in a journal used to
+                                  // take the whole row with it, so the mood bar,
+                                  // weather, date and trash vanished and the body
+                                  // box grew into the gap; now it stays put showing
+                                  // the defaults a new entry would carry.
+                                  // [_deleteEntry] and [_changeEntryDateAndTime]
+                                  // both return early with no selection, so the two
+                                  // live controls simply do nothing there.
+                                  // Pinned to the mood slider's own height. The
+                                  // slider is 48 tall and ignores visual density,
+                                  // while every other control in the row is an
+                                  // icon button that does not: on desktop those
+                                  // shrink to 40, so hiding the mood bar took 8px
+                                  // out of the row and slid the body box up with
+                                  // it. The floor holds the row still whichever
+                                  // toggles are off.
+                                  LayoutBuilder(
+                                    builder: (context, constraints) {
+                                      final moodBar = <Widget>[
+                                        Text(
+                                          'Mood',
+                                          style: TextStyle(color: accentColor),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: MoodGradientSlider(
+                                            value: _mood,
+                                            accent: accentColor,
+                                            onChanged: (value) {
+                                              setState(() {
+                                                _mood = value;
+                                                _metadataDirty = true;
+                                              });
+                                              _scheduleMetadataSave();
+                                            },
+                                          ),
+                                        ),
+                                      ];
+                                      // [fitDate] lets the date pill shrink and
+                                      // ellipsize, for a line the controls hold
+                                      // alone: at a half-screen width even they
+                                      // overflow with the pill held at its floor.
+                                      // It needs the bounded width a Flexible gives,
+                                      // so it stays off beside the slider's Expanded.
+                                      List<Widget> controls({
+                                        required bool fitDate,
+                                      }) => [
+                                        if (showWeatherPicker) ...[
+                                          PopupMenuButton<
+                                            VoyagerMenuCatalogEntry
+                                          >(
+                                            tooltip: 'Weather',
+                                            icon: Icon(
+                                              _weatherData(_weatherIcon),
+                                              color: accentColor,
+                                            ),
+                                            padding: EdgeInsets.zero,
+                                            constraints: const BoxConstraints(
+                                              minWidth: 40,
+                                              minHeight: 40,
+                                            ),
+                                            // The theme's edge is the app accent;
+                                            // this menu belongs to the journal.
+                                            shape: VoyagerMenuTheme.shape(
+                                              accentColor,
+                                            ),
+                                            onSelected: (entry) {
+                                              setState(() {
+                                                _weatherIcon =
+                                                    entry.weatherIconValue;
+                                                _metadataDirty = true;
+                                              });
+                                              _scheduleMetadataSave();
+                                            },
+                                            itemBuilder: (context) =>
+                                                buildCatalogMenu(
+                                                  context,
+                                                  from: weatherMenuEntries,
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 20,
+                                                        vertical: 14,
+                                                      ),
+                                                ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                        ],
+                                        Flexible(
+                                          fit: FlexFit.loose,
+                                          flex: fitDate ? 1 : 0,
+                                          child: Builder(
+                                            builder: (ctx) {
+                                              // Now, with nothing selected: the date a
+                                              // new entry would be filed under.
+                                              final date =
+                                                  _selectedEntry?.entryDate
+                                                      .toLocal() ??
+                                                  DateTime.now();
+                                              final label =
+                                                  '${DateFormat.yMMMd().format(date)} at ${formatTime12Hour(date)}';
+                                              // A floor rather than a fixed width: it
+                                              // holds the row still across every label
+                                              // the formatter can produce, and a label
+                                              // pushed past it by text scaling still
+                                              // gets the room instead of overflowing.
+                                              return ConstrainedBox(
+                                                constraints: const BoxConstraints(
+                                                  minWidth:
+                                                      _journalDatePillMinWidth,
+                                                ),
+                                                child: SelectorPill(
+                                                  dense: false,
+                                                  ellipsize: fitDate,
+                                                  isActive: _isDatePickerOpen,
+                                                  label: label,
+                                                  accentColor: accentColor,
+                                                  onTap: () =>
+                                                      _changeEntryDateAndTime(
+                                                        ctx,
+                                                      ),
+                                                ),
+                                              );
+                                            },
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        if (_selectedEntry != null &&
+                                            ref
+                                                .watch(devSettingsProvider)
+                                                .showJournalRemotePullButton) ...[
+                                          IconButton(
+                                            tooltip: 'Compare remote DB value',
+                                            onPressed: () =>
+                                                _pullAndCompareRemoteValue(
+                                                  _selectedEntry!,
+                                                ),
+                                            icon: const Icon(
+                                              PhosphorIconsRegular
+                                                  .cloudArrowDown,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                        ],
+                                        IconButton(
+                                          tooltip: 'Delete entry',
+                                          onPressed: _deleteEntry,
+                                          icon: Icon(
+                                            PhosphorIconsRegular.trash,
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.error,
+                                          ),
+                                        ),
+                                      ];
+                                      Widget line(
+                                        List<Widget> children, {
+                                        MainAxisAlignment alignment =
+                                            MainAxisAlignment.start,
+                                      }) => ConstrainedBox(
+                                        constraints: const BoxConstraints(
+                                          minHeight: kMinInteractiveDimension,
+                                        ),
+                                        child: Row(
+                                          mainAxisAlignment: alignment,
+                                          children: children,
+                                        ),
+                                      );
+                                      // Right-aligned rather than led by a Spacer,
+                                      // which would take a flex share away from the
+                                      // date pill and squeeze it even when it fits.
+                                      Widget controlsLine() => line(
+                                        controls(fitDate: true),
+                                        alignment: MainAxisAlignment.end,
+                                      );
+                                      // Too narrow to share a line (a half-screen
+                                      // window beside a wide entry list): the
+                                      // controls cannot shrink, so the slider was
+                                      // squeezed to nothing and the row still
+                                      // overflowed. It takes a line of its own.
+                                      if (showMoodBar &&
+                                          constraints.maxWidth <
+                                              _journalMetadataRowMinWidth) {
+                                        return Column(
+                                          children: [
+                                            line(moodBar),
+                                            controlsLine(),
+                                          ],
+                                        );
+                                      }
+                                      // With the mood bar hidden the slider's
+                                      // Expanded goes with it, so the controls are
+                                      // right-aligned — otherwise the date pill and
+                                      // trash slide left into the empty space
+                                      // instead of staying where they always are.
+                                      if (!showMoodBar) return controlsLine();
+                                      return line([
+                                        ...moodBar,
+                                        const SizedBox(width: 12),
+                                        ...controls(fitDate: false),
+                                      ]);
+                                    },
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Expanded(
+                                    child: _PlainJournalEditor(
+                                      key: _editorKey,
+                                      entry: _selectedEntry,
+                                      focusNode: _bodyFocusNode,
+                                      accentColor: accentColor,
+                                      onDraftChanged: _updateBodyDraft,
+                                      onScheduleBodySave: _scheduleBodySave,
+                                      waitForFlush: () => _flushInProgress,
+                                      onDebugLog: (event, {details}) =>
+                                          _logJournal(event, details: details),
+                                    ),
+                                  ),
+                                  if (showEntryQuote && _selectedEntry != null)
+                                    _EntryQuote(
+                                      quote: _selectedEntry!.customQuote,
+                                      drawing: _quotePendingEntryIds.contains(
+                                        _selectedEntry!.id,
+                                      ),
+                                      onTap: _editQuote,
                                     ),
                                 ],
                               ),
                             ),
-                            // Always on screen, even with nothing selected.
-                            // Deleting the last entry in a journal used to
-                            // take the whole row with it, so the mood bar,
-                            // weather, date and trash vanished and the body
-                            // box grew into the gap; now it stays put showing
-                            // the defaults a new entry would carry.
-                            // [_deleteEntry] and [_changeEntryDateAndTime]
-                            // both return early with no selection, so the two
-                            // live controls simply do nothing there.
-                            // Pinned to the mood slider's own height. The
-                            // slider is 48 tall and ignores visual density,
-                            // while every other control in the row is an
-                            // icon button that does not: on desktop those
-                            // shrink to 40, so hiding the mood bar took 8px
-                            // out of the row and slid the body box up with
-                            // it. The floor holds the row still whichever
-                            // toggles are off.
-                            LayoutBuilder(
-                              builder: (context, constraints) {
-                                final moodBar = <Widget>[
-                                  Text(
-                                    'Mood',
-                                    style: TextStyle(color: accentColor),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: MoodGradientSlider(
-                                      value: _mood,
-                                      accent: accentColor,
-                                      onChanged: (value) {
-                                        setState(() {
-                                          _mood = value;
-                                          _metadataDirty = true;
-                                        });
-                                        _scheduleMetadataSave();
-                                      },
-                                    ),
-                                  ),
-                                ];
-                                // [fitDate] lets the date pill shrink and
-                                // ellipsize, for a line the controls hold
-                                // alone: at a half-screen width even they
-                                // overflow with the pill held at its floor.
-                                // It needs the bounded width a Flexible gives,
-                                // so it stays off beside the slider's Expanded.
-                                List<Widget> controls({
-                                  required bool fitDate,
-                                }) => [
-                                  if (showWeatherPicker) ...[
-                                    PopupMenuButton<VoyagerMenuCatalogEntry>(
-                                      tooltip: 'Weather',
-                                      icon: Icon(
-                                        _weatherData(_weatherIcon),
-                                        color: accentColor,
-                                      ),
-                                      padding: EdgeInsets.zero,
-                                      constraints: const BoxConstraints(
-                                        minWidth: 40,
-                                        minHeight: 40,
-                                      ),
-                                      // The theme's edge is the app accent;
-                                      // this menu belongs to the journal.
-                                      shape: VoyagerMenuTheme.shape(
-                                        accentColor,
-                                      ),
-                                      onSelected: (entry) {
-                                        setState(() {
-                                          _weatherIcon = entry.weatherIconValue;
-                                          _metadataDirty = true;
-                                        });
-                                        _scheduleMetadataSave();
-                                      },
-                                      itemBuilder: (context) =>
-                                          buildCatalogMenu(
-                                            context,
-                                            from: weatherMenuEntries,
-                                            padding:
-                                                const EdgeInsets.symmetric(
-                                                  horizontal: 20,
-                                                  vertical: 14,
-                                                ),
-                                          ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                  ],
-                                  Flexible(
-                                    fit: FlexFit.loose,
-                                    flex: fitDate ? 1 : 0,
-                                    child: Builder(
-                                      builder: (ctx) {
-                                        // Now, with nothing selected: the date a
-                                        // new entry would be filed under.
-                                        final date =
-                                            _selectedEntry?.entryDate
-                                                .toLocal() ??
-                                            DateTime.now();
-                                        final label =
-                                            '${DateFormat.yMMMd().format(date)} at ${formatTime12Hour(date)}';
-                                        // A floor rather than a fixed width: it
-                                        // holds the row still across every label
-                                        // the formatter can produce, and a label
-                                        // pushed past it by text scaling still
-                                        // gets the room instead of overflowing.
-                                        return ConstrainedBox(
-                                          constraints: const BoxConstraints(
-                                            minWidth: _journalDatePillMinWidth,
-                                          ),
-                                          child: SelectorPill(
-                                            dense: false,
-                                            ellipsize: fitDate,
-                                            isActive: _isDatePickerOpen,
-                                            label: label,
-                                            accentColor: accentColor,
-                                            onTap: () =>
-                                                _changeEntryDateAndTime(ctx),
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  if (_selectedEntry != null &&
-                                      ref
-                                          .watch(devSettingsProvider)
-                                          .showJournalRemotePullButton) ...[
-                                    IconButton(
-                                      tooltip: 'Compare remote DB value',
-                                      onPressed: () =>
-                                          _pullAndCompareRemoteValue(
-                                            _selectedEntry!,
-                                          ),
-                                      icon: const Icon(
-                                        PhosphorIconsRegular.cloudArrowDown,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                  ],
-                                  IconButton(
-                                    tooltip: 'Delete entry',
-                                    onPressed: _deleteEntry,
-                                    icon: Icon(
-                                      PhosphorIconsRegular.trash,
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.error,
-                                    ),
-                                  ),
-                                ];
-                                Widget line(
-                                  List<Widget> children, {
-                                  MainAxisAlignment alignment =
-                                      MainAxisAlignment.start,
-                                }) => ConstrainedBox(
-                                  constraints: const BoxConstraints(
-                                    minHeight: kMinInteractiveDimension,
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment: alignment,
-                                    children: children,
-                                  ),
-                                );
-                                // Right-aligned rather than led by a Spacer,
-                                // which would take a flex share away from the
-                                // date pill and squeeze it even when it fits.
-                                Widget controlsLine() => line(
-                                  controls(fitDate: true),
-                                  alignment: MainAxisAlignment.end,
-                                );
-                                // Too narrow to share a line (a half-screen
-                                // window beside a wide entry list): the
-                                // controls cannot shrink, so the slider was
-                                // squeezed to nothing and the row still
-                                // overflowed. It takes a line of its own.
-                                if (showMoodBar &&
-                                    constraints.maxWidth <
-                                        _journalMetadataRowMinWidth) {
-                                  return Column(
-                                    children: [line(moodBar), controlsLine()],
-                                  );
-                                }
-                                // With the mood bar hidden the slider's
-                                // Expanded goes with it, so the controls are
-                                // right-aligned — otherwise the date pill and
-                                // trash slide left into the empty space
-                                // instead of staying where they always are.
-                                if (!showMoodBar) return controlsLine();
-                                return line([
-                                  ...moodBar,
-                                  const SizedBox(width: 12),
-                                  ...controls(fitDate: false),
-                                ]);
-                              },
-                            ),
-                            const SizedBox(height: 12),
-                            Expanded(
-                              child: _PlainJournalEditor(
-                                key: _editorKey,
-                                entry: _selectedEntry,
-                                focusNode: _bodyFocusNode,
-                                accentColor: accentColor,
-                                onDraftChanged: _updateBodyDraft,
-                                onScheduleBodySave: _scheduleBodySave,
-                                waitForFlush: () => _flushInProgress,
-                                onDebugLog: (event, {details}) =>
-                                    _logJournal(event, details: details),
-                              ),
-                            ),
-                            if (showEntryQuote && _selectedEntry != null)
-                              _EntryQuote(
-                                quote: _selectedEntry!.customQuote,
-                                drawing: _quotePendingEntryIds.contains(
-                                  _selectedEntry!.id,
-                                ),
-                                onTap: _editQuote,
-                              ),
-                          ],
+                          ),
                         ),
                       ),
                     ),

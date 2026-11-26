@@ -14,6 +14,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/build_info.dart';
 import 'package:voyager/core/constants/hotkey_defaults.dart';
+import 'package:voyager/core/layout/window_size_class.dart';
 import 'package:voyager/core/platform/dev_profile.dart';
 import 'package:voyager/core/platform/launch_at_login.dart';
 import 'package:voyager/core/platform/platform_info.dart';
@@ -1260,7 +1261,18 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setState) {
+            final touch = switch (Theme.of(context).platform) {
+              TargetPlatform.android ||
+              TargetPlatform.iOS ||
+              TargetPlatform.fuchsia => true,
+              _ => false,
+            };
             return AlertDialog(
+              // On a phone the default 40dp inset leaves the labels too little
+              // room, and they broke mid-word (BUG-393).
+              insetPadding: context.isCompactWidth
+                  ? const EdgeInsets.symmetric(horizontal: 16, vertical: 24)
+                  : null,
               title: const Text('Navigation pages'),
               content: SizedBox(
                 width: 320,
@@ -1281,7 +1293,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                   },
                   children: [
                     for (var i = 0; i < items.length; i++)
-                      ReorderableDragStartListener(
+                      // On a touch screen a swipe has to scroll the list, so
+                      // a reorder starts on a long press there, as Material's
+                      // own touch handles do (BUG-393).
+                      (touch
+                          ? ReorderableDelayedDragStartListener.new
+                          : ReorderableDragStartListener.new)(
                         key: ValueKey(items[i].dest.path),
                         index: i,
                         child: _NavPageRow(
@@ -1568,7 +1585,12 @@ class _NavPageRow extends StatelessWidget {
     final muted = Theme.of(context).disabledColor;
     return ListTile(
       leading: Icon(dest.icon, color: hidden ? muted : null),
-      title: Text(dest.label, style: hidden ? TextStyle(color: muted) : null),
+      title: Text(
+        dest.label,
+        style: hidden ? TextStyle(color: muted) : null,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [

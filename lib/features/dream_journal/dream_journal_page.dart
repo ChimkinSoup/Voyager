@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
@@ -80,6 +81,11 @@ class DreamSplitLayout {
   }
 
   static const editorPadding = EdgeInsets.fromLTRB(28, 40, 28, 24);
+
+  /// The editor's height floor. The rows around the body take ~240px on a
+  /// phone, so this keeps about four lines of body; the desktop's smallest
+  /// window leaves the editor more than this, so it never scrolls there.
+  static const minEditorHeight = 340.0;
 }
 
 /// The Dream Journal's night palette: the app's surfaces and accent pulled
@@ -1462,94 +1468,109 @@ class _DreamJournalPageState extends ConsumerState<_DreamJournalView> {
     }
 
     final local = entry.entryDate.toLocal();
-    final editorColumn = Padding(
-      padding: DreamSplitLayout.editorPadding,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (compact)
-            CompactBackBar(
-              label: 'Dreams',
-              onBack: () => unawaited(_closeCompactEditor()),
-            ),
-          Focus(
-            onKeyEvent: (node, event) {
-              if (event is! KeyDownEvent) return KeyEventResult.ignored;
-              if (event.logicalKey == LogicalKeyboardKey.tab &&
-                  !HardwareKeyboard.instance.isShiftPressed) {
-                _bodyFocusNode.requestFocus();
-                return KeyEventResult.handled;
-              }
-              return KeyEventResult.ignored;
-            },
-            child: LabeledTextField(
-              label: 'Title',
-              controller: _titleController,
-              focusNode: _titleFocusNode,
-              textInputAction: TextInputAction.next,
-              accentColor: accent,
-              onChanged: (_) => _scheduleBodySave(),
-              // Enter leaves the title the same way Tab does, matching the
-              // journal page. No flush here on purpose: focus is staying
-              // inside the same dream, and [_handleTitleFocusChanged] already
-              // flushes on the blur this causes.
-              onSubmitted: (_) => _bodyFocusNode.requestFocus(),
+    // A soft keyboard or a landscape phone leaves less height than the rows
+    // above the body need, and the body's Expanded collapsed to nothing
+    // (BUG-385). Below the floor the editor scrolls instead, so the header
+    // rows move away and the caret is scrolled into view.
+    final editorColumn = LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        primary: false,
+        child: SizedBox(
+          height: math.max(
+            constraints.maxHeight,
+            DreamSplitLayout.minEditorHeight,
+          ),
+          child: Padding(
+            padding: DreamSplitLayout.editorPadding,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (compact)
+                  CompactBackBar(
+                    label: 'Dreams',
+                    onBack: () => unawaited(_closeCompactEditor()),
+                  ),
+                Focus(
+                  onKeyEvent: (node, event) {
+                    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+                    if (event.logicalKey == LogicalKeyboardKey.tab &&
+                        !HardwareKeyboard.instance.isShiftPressed) {
+                      _bodyFocusNode.requestFocus();
+                      return KeyEventResult.handled;
+                    }
+                    return KeyEventResult.ignored;
+                  },
+                  child: LabeledTextField(
+                    label: 'Title',
+                    controller: _titleController,
+                    focusNode: _titleFocusNode,
+                    textInputAction: TextInputAction.next,
+                    accentColor: accent,
+                    onChanged: (_) => _scheduleBodySave(),
+                    // Enter leaves the title the same way Tab does, matching the
+                    // journal page. No flush here on purpose: focus is staying
+                    // inside the same dream, and [_handleTitleFocusChanged] already
+                    // flushes on the blur this causes.
+                    onSubmitted: (_) => _bodyFocusNode.requestFocus(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Builder(
+                      builder: (buttonContext) => SelectorPill(
+                        dense: false,
+                        ellipsize: false,
+                        isActive: _isDatePickerOpen,
+                        label:
+                            '${MaterialLocalizations.of(context).formatShortDate(local)}'
+                            ' at ${formatTime12Hour(local)}',
+                        accentColor: accent,
+                        onTap: () => unawaited(_changeEntryDate(buttonContext)),
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      tooltip: 'Delete dream',
+                      onPressed: () => unawaited(_deleteEntry(entry)),
+                      icon: Icon(
+                        PhosphorIconsRegular.trash,
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Expanded(
+                  // The journal body's paste and drop (see `_withImages` in
+                  // journal_page.dart). An image is content, so it writes a held
+                  // "New dream" to disk before attaching to it.
+                  child: MediaPasteScope(
+                    collection: FirestoreCollections.dreamEntries,
+                    documentId: entry.id,
+                    fieldTakesBoth: true,
+                    onBeforeAttach: () => _promoteForImage(entry.id),
+                    child: MediaDropTarget(
+                      collection: FirestoreCollections.dreamEntries,
+                      documentId: entry.id,
+                      onBeforeAttach: () => _promoteForImage(entry.id),
+                      child: _DreamBodyEditor(
+                        key: _bodyEditorKey,
+                        entry: entry,
+                        focusNode: _bodyFocusNode,
+                        accentColor: accent,
+                        onScheduleBodySave: _scheduleBodySave,
+                        scrollPastEnd: _fanHasImages
+                            ? MediaFanStack.tallest + DreamStickyNote.edgeInset
+                            : DreamStickyNote.collapsedReach,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Builder(
-                builder: (buttonContext) => SelectorPill(
-                  dense: false,
-                  ellipsize: false,
-                  isActive: _isDatePickerOpen,
-                  label:
-                      '${MaterialLocalizations.of(context).formatShortDate(local)}'
-                      ' at ${formatTime12Hour(local)}',
-                  accentColor: accent,
-                  onTap: () => unawaited(_changeEntryDate(buttonContext)),
-                ),
-              ),
-              const Spacer(),
-              IconButton(
-                tooltip: 'Delete dream',
-                onPressed: () => unawaited(_deleteEntry(entry)),
-                icon: Icon(
-                  PhosphorIconsRegular.trash,
-                  color: Theme.of(context).colorScheme.error,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Expanded(
-            // The journal body's paste and drop (see `_withImages` in
-            // journal_page.dart). An image is content, so it writes a held
-            // "New dream" to disk before attaching to it.
-            child: MediaPasteScope(
-              collection: FirestoreCollections.dreamEntries,
-              documentId: entry.id,
-              fieldTakesBoth: true,
-              onBeforeAttach: () => _promoteForImage(entry.id),
-              child: MediaDropTarget(
-                collection: FirestoreCollections.dreamEntries,
-                documentId: entry.id,
-                onBeforeAttach: () => _promoteForImage(entry.id),
-                child: _DreamBodyEditor(
-                  key: _bodyEditorKey,
-                  entry: entry,
-                  focusNode: _bodyFocusNode,
-                  accentColor: accent,
-                  onScheduleBodySave: _scheduleBodySave,
-                  scrollPastEnd: _fanHasImages
-                      ? MediaFanStack.tallest + DreamStickyNote.edgeInset
-                      : DreamStickyNote.collapsedReach,
-                ),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
 

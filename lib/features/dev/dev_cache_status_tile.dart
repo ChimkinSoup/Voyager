@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/dev/cache_status.dart';
+import 'package:voyager/core/layout/window_size_class.dart';
+import 'package:voyager/core/theme/voyager_spacing.dart';
+import 'package:voyager/features/shell/shell_nav_theme.dart';
 
 class DevCacheStatusSection extends ConsumerWidget {
   const DevCacheStatusSection({super.key});
@@ -61,9 +64,19 @@ class CacheStatusOverlay extends ConsumerWidget {
     final snapshot = ref.watch(cacheStatusSnapshotProvider);
     final theme = Theme.of(context);
 
+    // Beside the rail on desktop. A phone has no rail, and its bottom bar
+    // (ShellBottomNav: the item height, its padding, its 1px border) would
+    // sit under the card (BUG-394).
+    final compact = context.isCompactWidth;
     return Positioned(
-      left: 88,
-      bottom: 12,
+      left: compact ? 12 + MediaQuery.paddingOf(context).left : 88,
+      bottom: compact
+          ? 12 +
+                shellNavItemHeight +
+                VoyagerSpacing.sm +
+                1 +
+                MediaQuery.paddingOf(context).bottom
+          : 12,
       child: Material(
         elevation: 6,
         color: theme.colorScheme.surface.withValues(alpha: 0.96),

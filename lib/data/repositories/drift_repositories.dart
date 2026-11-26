@@ -10189,6 +10189,8 @@ class DriftGaiaRepository implements GaiaRepository {
             splitGaiaRight: Value(settings.splitGaiaRight),
             userName: Value(settings.userName),
             memoryAlertAt: Value(settings.memoryAlertAt),
+            tidyMemories: Value(settings.tidyMemories),
+            tidyMemoriesDevice: Value(settings.tidyMemoriesDevice),
             commandsJson: Value(
               jsonEncode([
                 for (final command in settings.commands) command.toJson(),
@@ -10542,6 +10544,56 @@ class DriftGaiaRepository implements GaiaRepository {
       (_db.delete(
             _db.gaiaMemoryHintsTable,
           )..where((t) => t.kind.equals(kind.name) & t.subject.equals(subject)))
+          .go();
+
+  @override
+  Future<List<GaiaMemorySuggestion>> listMemorySuggestions() async => [
+    for (final row in await _db.select(_db.gaiaMemorySuggestionsTable).get())
+      if (GaiaSuggestionKind.values
+              .where((kind) => kind.name == row.kind)
+              .firstOrNull
+          case final kind?)
+        (
+          id: row.id,
+          kind: kind,
+          memoryIds: gaiaTopicIdsFromJson(jsonDecode(row.memoryIdsJson)),
+          topicIds: gaiaTopicIdsFromJson(jsonDecode(row.topicIdsJson)),
+          text: row.body,
+          why: row.why,
+          placement: row.placementJson == null
+              ? null
+              : gaiaPlacementFromJson(jsonDecode(row.placementJson!)),
+          madeAt: row.madeAt,
+        ),
+  ];
+
+  @override
+  Future<void> putMemorySuggestions(
+    List<GaiaMemorySuggestion> suggestions,
+  ) => _db.batch((batch) {
+    batch.insertAllOnConflictUpdate(_db.gaiaMemorySuggestionsTable, [
+      for (final s in suggestions)
+        GaiaMemorySuggestionsTableCompanion.insert(
+          id: s.id,
+          kind: s.kind.name,
+          memoryIdsJson: Value(jsonEncode(s.memoryIds)),
+          topicIdsJson: Value(jsonEncode(s.topicIds)),
+          body: Value(s.text),
+          why: Value(s.why),
+          placementJson: Value(
+            s.placement == null
+                ? null
+                : jsonEncode(gaiaPlacementToJson(s.placement!)),
+          ),
+          madeAt: s.madeAt,
+        ),
+    ]);
+  });
+
+  @override
+  Future<void> deleteMemorySuggestions(Iterable<String> ids) =>
+      (_db.delete(_db.gaiaMemorySuggestionsTable)
+            ..where((t) => t.id.isIn(ids.toList())))
           .go();
 
   SimpleSelectStatement<$GaiaQueueTableTable, GaiaQueueTableData> _queue({
@@ -10945,6 +10997,8 @@ GaiaSettings _mapGaiaSettings(GaiaSettingsTableData row) => GaiaSettings(
   splitGaiaRight: row.splitGaiaRight,
   userName: row.userName,
   memoryAlertAt: row.memoryAlertAt,
+  tidyMemories: row.tidyMemories,
+  tidyMemoriesDevice: row.tidyMemoriesDevice,
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
   version: row.version,

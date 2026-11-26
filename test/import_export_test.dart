@@ -1497,6 +1497,9 @@ void main() {
         'gaia_recall_history_table',
         // Pin and merge suggestion hints that go with it (§23).
         'gaia_memory_hints_table',
+        // The weekly sweep's suggestions, shown on the desktop that ran it
+        // (§27.4).
+        'gaia_memory_suggestions_table',
       };
 
       expect(

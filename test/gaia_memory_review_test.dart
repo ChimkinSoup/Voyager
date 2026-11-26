@@ -58,6 +58,11 @@ void main() {
   late List<GaiaMemoryTopic> topics;
   late List<GaiaMergeSuggestion> merges;
   late List<GaiaPinSuggestion> pins;
+  late List<GaiaMemorySuggestion> suggestions;
+  late Set<String> left;
+
+  /// What the main instance answers `sweepPlan` with.
+  Map<String, Object?>? sweepPlan;
   late Map<String, String> refuse;
   late Map<String, Completer<void>> hold;
   late List<GaiaChat> chats;
@@ -142,6 +147,8 @@ void main() {
               projects: const {},
               pins: pins,
               merges: merges,
+              suggestions: suggestions,
+              leftUnsorted: left,
             ));
           case 'memoryTopics':
             return gaiaTopicLinesToJson(gaiaTopicLines(GaiaTopicTree(topics)));
@@ -288,6 +295,75 @@ void main() {
             final placement = gaiaPlacementFromJson(params['placement']);
             change(id!, (m) => m.copyWith(topicIds: placement.topicIds));
             return gaiaMemoryFilingToJson((topics: const [], suggested: null));
+          case 'leaveUnsorted':
+            left.add(id!);
+          case 'undoLeaveUnsorted':
+            left.remove(id);
+          // The sweep's suggestions (GAIA_MEMORY_TOPICS_HLD.md §27.4), as
+          // GaiaMemories.decideSuggestion applies them.
+          case 'decideSuggestion':
+            final suggestion = suggestions.singleWhere(
+              (s) => s.id == params['id'],
+            );
+            suggestions = [...suggestions]..remove(suggestion);
+            final named = [
+              for (final memoryId in suggestion.memoryIds) stored(memoryId)!,
+            ];
+            var before = <GaiaMemory>[];
+            if (params['keep'] case final String keep) {
+              final other = named.firstWhere((m) => m.id != keep);
+              trash[other.id] = other;
+              change(other.id, (_) => null);
+              before = [other];
+            } else if (params['accept'] == true) {
+              before = named;
+              switch (suggestion.kind) {
+                case GaiaSuggestionKind.same:
+                  change(
+                    named.first.id,
+                    (m) => m.copyWith(
+                      text: params['text'] as String? ?? suggestion.text,
+                      pinned: named.any((m) => m.pinned),
+                      topicIds: [
+                        ...{for (final m in named) ...m.topicIds},
+                      ],
+                    ),
+                  );
+                  for (final other in named.skip(1)) {
+                    trash[other.id] = other;
+                    change(other.id, (_) => null);
+                  }
+                case GaiaSuggestionKind.expired:
+                  change(
+                    named.single.id,
+                    (m) => m.copyWith(status: GaiaMemoryStatus.archived),
+                  );
+                default:
+              }
+            }
+            return {
+              'memories': [for (final m in before) gaiaMemoryToJson(m)],
+              'topics': <Object?>[],
+              'suggestion': gaiaMemorySuggestionToJson(suggestion),
+            };
+          case 'restoreSuggestion':
+            suggestions = [
+              ...suggestions,
+              gaiaMemorySuggestionFromJson(params['suggestion'])!,
+            ];
+          case 'sweepPlan':
+            return sweepPlan;
+          case 'sweepFound':
+            return (params['suggestions']! as List).length;
+          case 'sweepUnsorted':
+            final except = (params['except']! as List).cast<String>();
+            return [
+              for (final m in memories)
+                if (m.topicIds.isEmpty && !except.contains(m.id))
+                  {'id': m.id, 'text': m.text},
+            ];
+          case 'sweepPlaced':
+            return (params['placements']! as Map).length;
         }
         return null;
       };
@@ -318,9 +394,30 @@ void main() {
     memories = [];
     merges = [];
     pins = [];
+    suggestions = [];
+    left = {};
+    sweepPlan = null;
     chats = [];
     messages = {};
   });
+
+  GaiaMemorySuggestion sweepCard(
+    String id,
+    GaiaSuggestionKind kind,
+    List<String> memoryIds, {
+    String? text,
+    String why = 'Because',
+    GaiaPlacement? placement,
+  }) => (
+    id: id,
+    kind: kind,
+    memoryIds: memoryIds,
+    topicIds: const [],
+    text: text,
+    why: why,
+    placement: placement,
+    madeAt: at,
+  );
 
   Finder inReview(Finder finder) =>
       find.descendant(of: find.byType(GaiaMemoryReviewView), matching: finder);
@@ -1209,6 +1306,170 @@ void main() {
     // The review's keys are back: Enter remembers the card.
     await key(tester, LogicalKeyboardKey.enter);
     expect(stored('p0')!.status, GaiaMemoryStatus.active);
+    // The controller's drafts timer.
+    await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets("the sweep's cards (GAIA_MEMORY_TOPICS_HLD.md §27.4): Same "
+      'thing merges its text as edited, These disagree keeps the one picked, '
+      'Out of date is kept; Ctrl+Z puts each back', (tester) async {
+    memories = [
+      memory('a', 'I live in Toronto'),
+      memory('b', 'Toronto is home', pinned: true),
+      memory('v', 'I moved to Vancouver'),
+      memory('e', 'My exam is next week'),
+    ];
+    suggestions = [
+      sweepCard('s1', GaiaSuggestionKind.same, [
+        'a',
+        'b',
+      ], text: 'I live in Toronto.'),
+      sweepCard('s2', GaiaSuggestionKind.conflict, ['v', 'a'], why: 'Both.'),
+      sweepCard('s3', GaiaSuggestionKind.expired, ['e']),
+    ];
+    await pump(tester);
+    expect(find.text('3 suggestions'), findsOneWidget);
+    await tester.tap(find.text('Review'));
+    await settle(tester);
+    expect(inReview(find.text('Same thing?')), findsOneWidget);
+    expect(inReview(find.text('I live in Toronto.')), findsOneWidget);
+    expect(inReview(find.text('Because.')), findsOneWidget);
+
+    await key(tester, LogicalKeyboardKey.keyE);
+    await tester.enterText(
+      find.byType(EditableText).last,
+      'I live in Toronto, Canada.',
+    );
+    await key(tester, LogicalKeyboardKey.enter);
+    expect(sent('decideSuggestion'), isEmpty);
+    expect(inReview(find.text('I live in Toronto, Canada.')), findsOneWidget);
+    await key(tester, LogicalKeyboardKey.enter);
+    expect(sent('decideSuggestion').single, {
+      'id': 's1',
+      'accept': true,
+      'text': 'I live in Toronto, Canada.',
+    });
+    expect(stored('a')!.text, 'I live in Toronto, Canada.');
+    expect(stored('a')!.pinned, isTrue);
+    expect(stored('b'), isNull);
+    expect(inReview(find.text('These disagree')), findsOneWidget);
+    // A why that ends in a full stop gets no second one.
+    expect(inReview(find.text('Both.')), findsOneWidget);
+
+    await key(tester, LogicalKeyboardKey.keyZ, control: true);
+    expect(stored('a')!.text, 'I live in Toronto');
+    expect(stored('b'), isNotNull);
+    expect(suggestions.map((s) => s.id), contains('s1'));
+    expect(inReview(find.text('Same thing?')), findsOneWidget);
+    await key(tester, LogicalKeyboardKey.arrowRight);
+
+    // 2 keeps the second: the first goes to the trash.
+    await key(tester, LogicalKeyboardKey.digit2);
+    expect(sent('decideSuggestion').last, {'id': 's2', 'keep': 'a'});
+    expect(stored('v'), isNull);
+    await key(tester, LogicalKeyboardKey.keyZ, control: true);
+    expect(stored('v'), isNotNull);
+    await key(tester, LogicalKeyboardKey.backspace);
+    expect(sent('decideSuggestion').last, {'id': 's2'});
+
+    expect(inReview(find.text('Out of date?')), findsOneWidget);
+    expect(inReview(find.textContaining('saved')), findsOneWidget);
+    await key(tester, LogicalKeyboardKey.backspace);
+    expect(sent('decideSuggestion').last, {'id': 's3'});
+    expect(stored('e')!.status, GaiaMemoryStatus.active);
+    expect(inReview(find.textContaining('kept both')), findsOneWidget);
+    // The controller's drafts timer.
+    await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets("the sweep's placements show as Sort these' own; Leave "
+      'unsorted is remembered and undone; Sort these skips one left', (
+    tester,
+  ) async {
+    memories = [memory('u0', 'Exam on Monday'), memory('u1', 'Buy rice')];
+    suggestions = [
+      sweepCard(
+        'p0',
+        GaiaSuggestionKind.place,
+        ['u0'],
+        placement: (topicIds: ['t1'], suggested: null, tags: const []),
+      ),
+    ];
+    left = {'u1'};
+    final runner = FakeUtilityRunner((_) => '[]');
+    final controller = await pump(tester, utility: GaiaUtility(runner));
+    expect(controller.memorySorted['u0']?.topicIds, ['t1']);
+    await tester.runAsync(
+      () => controller.sortMemories(controller.memoryList!.memories),
+    );
+    expect(runner.jobs, isEmpty, reason: 'u0 has one; u1 was left unsorted');
+
+    await tester.tap(find.text('Unsorted'));
+    await settle(tester);
+    await tester.tap(find.text('Review these (2)'));
+    await settle(tester);
+    expect(inReview(find.text('File it in:')), findsOneWidget);
+    await key(tester, LogicalKeyboardKey.backspace);
+    expect(sent('leaveUnsorted').single, {'memoryId': 'u0'});
+    expect(controller.memorySorted.containsKey('u0'), isFalse);
+    await key(tester, LogicalKeyboardKey.keyZ, control: true);
+    expect(sent('undoLeaveUnsorted').single, {'memoryId': 'u0'});
+    expect(controller.memorySorted['u0']?.topicIds, ['t1']);
+    // The controller's drafts timer.
+    await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets('Sweep now: one call a group, the topics with the first, what '
+      "it finds kept, the Unsorted ones it doesn't name placed, and the "
+      'sweep marked done; a failed call leaves it due', (tester) async {
+    memories = [
+      memory('a', 'I live in Toronto'),
+      memory('b', 'Toronto is home'),
+      memory('u', 'Buy rice'),
+    ];
+    GaiaSweepLine line(GaiaMemory m) =>
+        (id: m.id, text: m.text, topics: const [], saved: at, pinned: false);
+    sweepPlan = gaiaSweepPlanToJson((
+      at: at,
+      groups: [
+        [line(memories[0]), line(memories[1])],
+        [line(memories[2])],
+      ],
+      topics: [(id: 't1', path: 'School', count: 0, project: false)],
+    ));
+    var fail = false;
+    var sweeps = 0;
+    final runner = FakeUtilityRunner((job) {
+      if (job.startsWith('File each fact')) {
+        return '[{"n": 1, "topics": ["t1"]}]';
+      }
+      if (fail) return 'no';
+      return sweeps++ == 0
+          ? '[{"kind": "same", "n": [1, 2], "text": "I live in Toronto."}]'
+          : '[]';
+    });
+    final controller = await pump(tester, utility: GaiaUtility(runner));
+    final said = await tester.runAsync(
+      () => controller.sweepMemories(force: true),
+    );
+    expect(sent('sweepPlan').single, {'force': true});
+    expect(runner.usages, [
+      'memory sweep',
+      'memory sweep',
+      'memory sweep sort',
+    ]);
+    expect(runner.inputs[0], contains('T1. School (0)'));
+    expect(runner.inputs[1], isNot(contains('Topics:')));
+    final found = (sent('sweepFound').single['suggestions']! as List).single;
+    expect((found as Map)['memoryIds'], ['a', 'b']);
+    expect(sent('sweepUnsorted').single['except'], ['a', 'b']);
+    expect((sent('sweepPlaced').single['placements']! as Map).keys, ['u']);
+    expect(sent('sweepDone'), hasLength(1));
+    expect(said, startsWith('1 suggested and 1 placed, from 3 calls'));
+
+    fail = true;
+    await tester.runAsync(() => controller.sweepMemories(force: true));
+    expect(sent('sweepDone'), hasLength(1));
     // The controller's drafts timer.
     await tester.pump(const Duration(seconds: 2));
   });

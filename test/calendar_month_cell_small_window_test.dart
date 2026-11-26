@@ -83,4 +83,18 @@ void main() {
     // One bar drawn, five behind the badge.
     expect(find.text('+5'), findsOneWidget);
   });
+
+  test(
+    'a cell squeezed below its margin and padding gives frozen morph metrics '
+    'instead of throwing (BUG-386)',
+    () {
+      // The offstage Calendar laid out in a viewport the soft keyboard has
+      // shrunk: a month cell's inner height goes negative.
+      expect(calendarMorphMonthDayLayoutSize(-4), 0);
+      expect(
+        () => calendarMorphEventFrozenMetrics(monthCellOuterHeight: 3),
+        returnsNormally,
+      );
+    },
+  );
 }

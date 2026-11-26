@@ -48,6 +48,8 @@ class LabeledTextField extends StatefulWidget {
     this.autocorrectAllowed = true,
     this.showLineBreaks = false,
     this.inputFormatters = const [],
+    this.autofillHints,
+    this.standardContextMenu = false,
   });
 
   final String label;
@@ -104,6 +106,14 @@ class LabeledTextField extends StatefulWidget {
   /// Run after the field's own newline handling, to keep out what the field
   /// can never hold.
   final List<TextInputFormatter> inputFormatters;
+
+  final Iterable<String>? autofillHints;
+
+  /// Gives the field the platform's own text toolbar (Cut, Copy, Paste,
+  /// Select all) in place of Voyager's word menu, for fields whose text is
+  /// not prose: the login page's, where "Add to dictionary" offered the
+  /// typed e-mail and wrote it with nobody signed in (BUG-389).
+  final bool standardContextMenu;
 
   @override
   State<LabeledTextField> createState() => _LabeledTextFieldState();
@@ -298,12 +308,14 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
         key: _fieldKey,
         // Right-click gets a menu on any field a new snippet could be
         // written from, single-line ones included.
-        contextMenuBuilder: voyagerTextContextMenuBuilder(
-          context,
-          snippetsAllowed: vim.snippetsAllowed,
-          spellcheckAllowed: spellcheckOn,
-          autocorrectSession: vim.autocorrectSession,
-        ),
+        contextMenuBuilder: widget.standardContextMenu
+            ? _standardContextMenu
+            : voyagerTextContextMenuBuilder(
+                context,
+                snippetsAllowed: vim.snippetsAllowed,
+                spellcheckAllowed: spellcheckOn,
+                autocorrectSession: vim.autocorrectSession,
+              ),
         // No spell config: squiggles come from [SpellCheckSquiggleLayer] and
         // the right-click corrections from [misspellingAtCursor]. Giving
         // EditableText results of its own makes it build the paragraph itself
@@ -325,6 +337,9 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
         autofocus: widget.autofocus,
         keyboardType: widget.keyboardType,
         textInputAction: widget.textInputAction,
+        // An address isn't a word: the keyboard mustn't correct it (BUG-388).
+        autocorrect: widget.keyboardType != TextInputType.emailAddress,
+        autofillHints: widget.autofillHints,
         onChanged: widget.onChanged,
         onSubmitted: widget.onSubmitted,
         onEditingComplete: widget.onEditingComplete,
@@ -602,3 +617,12 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
     );
   }
 }
+
+/// One function, not a closure per build: `EditableText` re-shows an open menu
+/// whenever its builder's identity changes.
+Widget _standardContextMenu(
+  BuildContext context,
+  EditableTextState editableTextState,
+) => AdaptiveTextSelectionToolbar.editableText(
+  editableTextState: editableTextState,
+);

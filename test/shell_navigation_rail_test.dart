@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -28,8 +29,11 @@ class _FakeNavigationShell extends Fake implements StatefulNavigationShell {
   @override
   final int currentIndex;
 
+  final branchesGone = <int>[];
+
   @override
-  void goBranch(int index, {bool initialLocation = false}) {}
+  void goBranch(int index, {bool initialLocation = false}) =>
+      branchesGone.add(index);
 
   @override
   StatefulElement createElement() => StatefulElement(this);
@@ -310,6 +314,69 @@ void main() {
       final before = probes;
       await tester.tap(badge);
       expect(probes, before + 1);
+    },
+  );
+
+  testWidgets(
+    'Android Back on another section goes to the first one, with the shell '
+    'inside the window-frame ShellRoute, rather than closing the app (BUG-392)',
+    (tester) async {
+      final db = AppDatabase.inMemory();
+      addTearDown(db.close);
+      final fakeShell = _FakeNavigationShell(currentIndex: 3);
+      final exits = <MethodCall>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'SystemNavigator.pop') exits.add(call);
+          return null;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
+      // The nesting app_router.dart has: the shell's page sits in the
+      // navigator of an outer ShellRoute, not in the root navigator.
+      final router = GoRouter(
+        initialLocation: '/shell',
+        routes: [
+          ShellRoute(
+            builder: (_, _, child) => child,
+            routes: [
+              GoRoute(
+                path: '/shell',
+                builder: (_, _) => AppShell(child: fakeShell),
+              ),
+            ],
+          ),
+        ],
+      );
+      addTearDown(router.dispose);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            databaseProvider.overrideWithValue(db),
+            authRepositoryProvider.overrideWithValue(InMemoryAuthRepository()),
+            syncRepositoryProvider.overrideWithValue(InMemorySyncRepository()),
+            weatherApiClientProvider.overrideWithValue(FakeWeatherApiClient()),
+            settingsProvider.overrideWith(_FixedSettings.new),
+          ],
+          child: MaterialApp.router(routerConfig: router),
+        ),
+      );
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+
+      expect(exits, isEmpty, reason: 'Back must not close the app');
+      expect(fakeShell.branchesGone, [0]);
     },
   );
 }

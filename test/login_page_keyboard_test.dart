@@ -84,130 +84,173 @@ void main() {
     await tester.pump();
   }
 
+  testWidgets('Email has focus on arrival, and Tab moves to Password', (
+    tester,
+  ) async {
+    await pumpLogin(tester);
+    expect(_focusedField(tester), 0);
+
+    await _press(tester, LogicalKeyboardKey.tab);
+    expect(_focusedField(tester), 1);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  testWidgets('Enter and Space activate the focused button', (tester) async {
+    await pumpLogin(tester);
+
+    // Email → Password → Forgot password?
+    await _press(tester, LogicalKeyboardKey.tab);
+    await _press(tester, LogicalKeyboardKey.tab);
+    await _press(tester, LogicalKeyboardKey.enter);
+    expect(find.text('Enter your email to reset your password.'), findsOne);
+    // Back in the empty field that needs filling.
+    await tester.pump();
+    expect(_focusedField(tester), 0);
+
+    // Email → Password → Forgot password? → Sign in
+    await _press(tester, LogicalKeyboardKey.tab);
+    await _press(tester, LogicalKeyboardKey.tab);
+    await _press(tester, LogicalKeyboardKey.tab);
+    await _press(tester, LogicalKeyboardKey.space);
+    expect(find.text('Email and password are required.'), findsOne);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  testWidgets('Create account is reachable and activates by keyboard', (
+    tester,
+  ) async {
+    await pumpLogin(tester);
+
+    // Backwards from Email wraps to the last control on the page.
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await _press(tester, LogicalKeyboardKey.tab);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await _press(tester, LogicalKeyboardKey.enter);
+
+    expect(find.text('Sign up'), findsOne);
+    expect(find.text('Have an account? Sign in'), findsOne);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  testWidgets('a button pressed by keyboard drops its ring once it fails', (
+    tester,
+  ) async {
+    await pumpLogin(tester);
+    await tester.enterText(find.byType(EditableText).at(0), 'qa@example.com');
+    await tester.enterText(find.byType(EditableText).at(1), 'wrong');
+
+    // Password → Forgot password? → Sign in
+    await _press(tester, LogicalKeyboardKey.tab);
+    await _press(tester, LogicalKeyboardKey.tab);
+    expect(_ringOn(tester, 'Sign in'), isTrue);
+    await _press(tester, LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Wrong password.'), findsOne);
+    expect(_focusedField(tester), 1);
+    expect(_ringOn(tester, 'Sign in'), isFalse);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  testWidgets('a password reset, refused or sent, leaves focus in Email', (
+    tester,
+  ) async {
+    await pumpLogin(tester);
+    await tester.enterText(find.byType(EditableText).at(0), 'bad@example');
+
+    // Email → Password → Forgot password?
+    await _press(tester, LogicalKeyboardKey.tab);
+    await _press(tester, LogicalKeyboardKey.tab);
+    await _press(tester, LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.text('No account for this email.'), findsOne);
+    expect(_focusedField(tester), 0);
+
+    await tester.enterText(find.byType(EditableText).at(0), 'qa@example.com');
+    await _press(tester, LogicalKeyboardKey.tab);
+    await _press(tester, LogicalKeyboardKey.tab);
+    await _press(tester, LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('a password reset link has been sent'),
+      findsOne,
+    );
+    expect(_focusedField(tester), 0);
+    expect(_ringOn(tester, 'Forgot password?'), isFalse);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
+  testWidgets('nothing is focused on arrival on Android', (tester) async {
+    await pumpLogin(tester);
+    expect(_focusedField(tester), isNull);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+  testWidgets('a failed sign-in leaves focus in the password field', (
+    tester,
+  ) async {
+    await pumpLogin(tester);
+    await tester.enterText(find.byType(EditableText).at(0), 'qa@example.com');
+    await tester.enterText(find.byType(EditableText).at(1), 'wrong');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Wrong password.'), findsOne);
+    expect(_focusedField(tester), 1);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
   testWidgets(
-    'Email has focus on arrival, and Tab moves to Password',
+    'Email takes an e-mail keyboard with no autocorrect, and its action moves '
+    'to Password instead of submitting (BUG-388)',
     (tester) async {
       await pumpLogin(tester);
-      expect(_focusedField(tester), 0);
-
-      await _press(tester, LogicalKeyboardKey.tab);
-      expect(_focusedField(tester), 1);
-    },
-    variant: TargetPlatformVariant.only(TargetPlatform.windows),
-  );
-
-  testWidgets(
-    'Enter and Space activate the focused button',
-    (tester) async {
-      await pumpLogin(tester);
-
-      // Email → Password → Forgot password?
-      await _press(tester, LogicalKeyboardKey.tab);
-      await _press(tester, LogicalKeyboardKey.tab);
-      await _press(tester, LogicalKeyboardKey.enter);
-      expect(find.text('Enter your email to reset your password.'), findsOne);
-      // Back in the empty field that needs filling.
-      await tester.pump();
-      expect(_focusedField(tester), 0);
-
-      // Email → Password → Forgot password? → Sign in
-      await _press(tester, LogicalKeyboardKey.tab);
-      await _press(tester, LogicalKeyboardKey.tab);
-      await _press(tester, LogicalKeyboardKey.tab);
-      await _press(tester, LogicalKeyboardKey.space);
-      expect(find.text('Email and password are required.'), findsOne);
-    },
-    variant: TargetPlatformVariant.only(TargetPlatform.windows),
-  );
-
-  testWidgets(
-    'Create account is reachable and activates by keyboard',
-    (tester) async {
-      await pumpLogin(tester);
-
-      // Backwards from Email wraps to the last control on the page.
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
-      await _press(tester, LogicalKeyboardKey.tab);
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
-      await _press(tester, LogicalKeyboardKey.enter);
-
-      expect(find.text('Sign up'), findsOne);
-      expect(find.text('Have an account? Sign in'), findsOne);
-    },
-    variant: TargetPlatformVariant.only(TargetPlatform.windows),
-  );
-
-  testWidgets(
-    'a button pressed by keyboard drops its ring once it fails',
-    (tester) async {
-      await pumpLogin(tester);
-      await tester.enterText(find.byType(EditableText).at(0), 'qa@example.com');
-      await tester.enterText(find.byType(EditableText).at(1), 'wrong');
-
-      // Password → Forgot password? → Sign in
-      await _press(tester, LogicalKeyboardKey.tab);
-      await _press(tester, LogicalKeyboardKey.tab);
-      expect(_ringOn(tester, 'Sign in'), isTrue);
-      await _press(tester, LogicalKeyboardKey.enter);
-      await tester.pumpAndSettle();
-
-      expect(find.text('Wrong password.'), findsOne);
-      expect(_focusedField(tester), 1);
-      expect(_ringOn(tester, 'Sign in'), isFalse);
-    },
-    variant: TargetPlatformVariant.only(TargetPlatform.windows),
-  );
-
-  testWidgets(
-    'a password reset, refused or sent, leaves focus in Email',
-    (tester) async {
-      await pumpLogin(tester);
-      await tester.enterText(find.byType(EditableText).at(0), 'bad@example');
-
-      // Email → Password → Forgot password?
-      await _press(tester, LogicalKeyboardKey.tab);
-      await _press(tester, LogicalKeyboardKey.tab);
-      await _press(tester, LogicalKeyboardKey.enter);
-      await tester.pumpAndSettle();
-      expect(find.text('No account for this email.'), findsOne);
-      expect(_focusedField(tester), 0);
-
-      await tester.enterText(find.byType(EditableText).at(0), 'qa@example.com');
-      await _press(tester, LogicalKeyboardKey.tab);
-      await _press(tester, LogicalKeyboardKey.tab);
-      await _press(tester, LogicalKeyboardKey.enter);
-      await tester.pumpAndSettle();
-      expect(
-        find.textContaining('a password reset link has been sent'),
-        findsOne,
+      final email = tester.widget<EditableText>(
+        find.byType(EditableText).at(0),
       );
-      expect(_focusedField(tester), 0);
-      expect(_ringOn(tester, 'Forgot password?'), isFalse);
-    },
-    variant: TargetPlatformVariant.only(TargetPlatform.windows),
-  );
+      expect(email.keyboardType, TextInputType.emailAddress);
+      expect(email.autocorrect, isFalse);
+      expect(email.textInputAction, TextInputAction.next);
+      expect(email.autofillHints, [AutofillHints.email]);
 
-  testWidgets(
-    'nothing is focused on arrival on Android',
-    (tester) async {
-      await pumpLogin(tester);
-      expect(_focusedField(tester), isNull);
+      await tester.tap(find.byType(EditableText).at(0));
+      await tester.enterText(find.byType(EditableText).at(0), 'qa@example.com');
+      await tester.testTextInput.receiveAction(TextInputAction.next);
+      await tester.pump();
+      await tester.pump();
+
+      expect(_focusedField(tester), 1);
+      expect(find.text('Email and password are required.'), findsNothing);
     },
     variant: TargetPlatformVariant.only(TargetPlatform.android),
   );
 
   testWidgets(
-    'a failed sign-in leaves focus in the password field',
+    'a long press in Email offers the standard Copy/Select all toolbar, not '
+    'the word menu (BUG-389)',
     (tester) async {
       await pumpLogin(tester);
-      await tester.enterText(find.byType(EditableText).at(0), 'qa@example.com');
-      await tester.enterText(find.byType(EditableText).at(1), 'wrong');
-      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.enterText(find.byType(EditableText).at(0), 'qaexample');
+      await tester.longPress(find.byType(EditableText).at(0));
       await tester.pumpAndSettle();
 
-      expect(find.text('Wrong password.'), findsOne);
-      expect(_focusedField(tester), 1);
+      expect(find.text('Select all'), findsOne);
+      expect(find.text('Add to dictionary'), findsNothing);
     },
-    variant: TargetPlatformVariant.only(TargetPlatform.windows),
+    variant: TargetPlatformVariant.only(TargetPlatform.android),
+  );
+
+  testWidgets(
+    'every control stays reachable on a short phone with the keyboard up '
+    '(BUG-387)',
+    (tester) async {
+      tester.view.physicalSize = const Size(720, 1280);
+      tester.view.devicePixelRatio = 2.0;
+      tester.view.viewInsets = const FakeViewPadding(bottom: 600);
+      addTearDown(tester.view.reset);
+      await pumpLogin(tester);
+      await tester.tap(find.byType(EditableText).at(0));
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      await tester.ensureVisible(find.text('Create account'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Create account'));
+      await tester.pump();
+      expect(find.text('Have an account? Sign in'), findsOne);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.android),
   );
 }

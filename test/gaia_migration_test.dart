@@ -1156,6 +1156,68 @@ void main() {
     );
   });
 
+  test('205→206 adds the sweep suggestions and Tidy memories weekly, none '
+      'and off at first', () async {
+    final seed = AppDatabase(NativeDatabase(file));
+    await DriftGaiaRepository(
+      seed,
+    ).upsertSettings(GaiaSettings.initial().copyWith(gaiaMd: 'Be brief.'));
+    await seed.customStatement('DROP TABLE gaia_memory_suggestions_table');
+    await seed.customStatement(
+      'ALTER TABLE gaia_settings_table DROP COLUMN tidy_memories',
+    );
+    await seed.customStatement('PRAGMA user_version = 205');
+    await seed.close();
+
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+    final repo = DriftGaiaRepository(upgraded);
+    final settings = await repo.getSettings();
+    expect(settings.gaiaMd, 'Be brief.');
+    expect(settings.tidyMemories, isFalse);
+    await repo.upsertSettings(settings.copyWith(tidyMemories: true));
+    expect((await repo.getSettings()).tidyMemories, isTrue);
+    expect(await repo.listMemorySuggestions(), isEmpty);
+    await repo.putMemorySuggestions([
+      (
+        id: 's1',
+        kind: GaiaSuggestionKind.same,
+        memoryIds: ['a', 'b'],
+        topicIds: const [],
+        text: 'One',
+        why: 'Same',
+        placement: null,
+        madeAt: DateTime.utc(2026, 11, 25),
+      ),
+    ]);
+    final stored = (await repo.listMemorySuggestions()).single;
+    expect(stored.memoryIds, ['a', 'b']);
+    expect(stored.madeAt, DateTime.utc(2026, 11, 25));
+    await repo.deleteMemorySuggestions(['s1']);
+    expect(await repo.listMemorySuggestions(), isEmpty);
+  });
+
+  test('206→207 adds the device that sweeps, none at first', () async {
+    final seed = AppDatabase(NativeDatabase(file));
+    await DriftGaiaRepository(seed).upsertSettings(
+      GaiaSettings.initial().copyWith(gaiaMd: 'Be brief.', tidyMemories: true),
+    );
+    await seed.customStatement(
+      'ALTER TABLE gaia_settings_table DROP COLUMN tidy_memories_device',
+    );
+    await seed.customStatement('PRAGMA user_version = 206');
+    await seed.close();
+
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+    final repo = DriftGaiaRepository(upgraded);
+    final settings = await repo.getSettings();
+    expect(settings.tidyMemories, isTrue);
+    expect(settings.tidyMemoriesDevice, '');
+    await repo.upsertSettings(settings.copyWith(tidyMemoriesDevice: 'pc-1'));
+    expect((await repo.getSettings()).tidyMemoriesDevice, 'pc-1');
+  });
+
   test('173→174 adds slash commands, none at first', () async {
     final seed = AppDatabase(NativeDatabase(file));
     await DriftGaiaRepository(

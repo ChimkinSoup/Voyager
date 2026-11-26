@@ -142,8 +142,8 @@ const _elbowRun = 0.016;
 /// monospace against the painting, and the contrast between the drafted label
 /// and the wet brushwork is most of why they read as annotations on a study
 /// rather than as chrome bolted onto a picture.
-const _monoFamily = 'Consolas';
-const _monoFallback = <String>[
+const labelMonoFamily = 'Consolas';
+const labelMonoFallback = <String>[
   'Menlo',
   'DejaVu Sans Mono',
   'Courier New',
@@ -212,8 +212,8 @@ class _StatLeaderLabelState extends State<StatLeaderLabel> {
       widget.value,
       textAlign: widget.onLeft ? TextAlign.right : TextAlign.left,
       style: TextStyle(
-        fontFamily: _monoFamily,
-        fontFamilyFallback: _monoFallback,
+        fontFamily: labelMonoFamily,
+        fontFamilyFallback: labelMonoFallback,
         fontSize: 13,
         height: 1.3,
         letterSpacing: 0.2,
@@ -240,8 +240,8 @@ class _StatLeaderLabelState extends State<StatLeaderLabel> {
               '[ ${widget.name.toUpperCase()} ]',
               textAlign: widget.onLeft ? TextAlign.right : TextAlign.left,
               style: TextStyle(
-                fontFamily: _monoFamily,
-                fontFamilyFallback: _monoFallback,
+                fontFamily: labelMonoFamily,
+                fontFamilyFallback: labelMonoFallback,
                 fontSize: 11,
                 height: 1.35,
                 letterSpacing: 1.1,

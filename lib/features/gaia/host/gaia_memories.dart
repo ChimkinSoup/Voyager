@@ -715,7 +715,9 @@ class GaiaMemories {
   /// Everything the settings panel's Memories tab shows
   /// (GAIA_SETTINGS_HLD.md §3.2): every live memory and topic, the live
   /// projects (whose topics can't be merged away or deleted), and the pin
-  /// and merge suggestions, as the Gaia page works them out.
+  /// and merge suggestions, as the Gaia page works them out. Then the
+  /// sweep's suggestions still standing (GAIA_MEMORY_TOPICS_HLD.md §27.4),
+  /// the stale ones dropped, and the memories left unsorted (§27.5).
   Future<GaiaMemoryList> list() async {
     final memories = await _repository.listMemories();
     final topics = await _repository.listMemoryTopics();
@@ -724,18 +726,489 @@ class GaiaMemories {
     };
     final hints = await _repository.listMemoryHints();
     final history = await _repository.listRecallHistory();
+    final left = await _leftUnsorted(memories, topics, hints);
+    final suggestions = await _standing(memories, topics, hints, left);
+    // A pair the sweep also suggests shows once, as the sweep's card.
+    final swept = {
+      for (final suggestion in suggestions)
+        if (suggestion.kind == GaiaSuggestionKind.topicMerge)
+          gaiaTopicPairKey(suggestion.topicIds.first, suggestion.topicIds.last),
+    };
     return (
       memories: memories,
       topics: topics,
       projects: projects,
       pins: gaiaPinSuggestions(memories, history, hints, utcNow()),
-      merges: gaiaMergeSuggestions(
-        GaiaTopicTree(topics),
-        memories,
-        projects,
-        hints,
-      ),
+      merges: [
+        for (final merge in gaiaMergeSuggestions(
+          GaiaTopicTree(topics),
+          memories,
+          projects,
+          hints,
+        ))
+          if (!swept.contains(gaiaTopicPairKey(merge.from.id, merge.into.id)))
+            merge,
+      ],
+      suggestions: suggestions,
+      leftUnsorted: left,
     );
+  }
+
+  /// The memories Leave unsorted was given (§27.5), by id: those still in
+  /// Unsorted with the text they had then. The hint of one filed since,
+  /// edited or gone is dropped.
+  Future<Set<String>> _leftUnsorted(
+    List<GaiaMemory> memories,
+    List<GaiaMemoryTopic> topics,
+    List<GaiaMemoryHint> hints,
+  ) async {
+    final tree = GaiaTopicTree(topics);
+    final byId = {for (final memory in memories) memory.id: memory};
+    final left = <String>{};
+    for (final hint in hints) {
+      if (hint.kind != GaiaMemoryHintKind.leftUnsorted) continue;
+      final id = hint.subject.split('#').first;
+      final memory = byId[id];
+      if (memory != null &&
+          gaiaUnsorted(memory, tree) &&
+          hint.subject == _leftKey(memory)) {
+        left.add(id);
+      } else {
+        await _repository.deleteMemoryHint(
+          GaiaMemoryHintKind.leftUnsorted,
+          hint.subject,
+        );
+      }
+    }
+    return left;
+  }
+
+  /// The sweep's suggestions still standing. One is stale, and dropped, when
+  /// a memory or topic it names has changed since the sweep read it, or is
+  /// gone, or (a placement) is filed. A placement for a memory left
+  /// unsorted is kept but not shown (§27.4).
+  Future<List<GaiaMemorySuggestion>> _standing(
+    List<GaiaMemory> memories,
+    List<GaiaMemoryTopic> topics,
+    List<GaiaMemoryHint> hints,
+    Set<String> left,
+  ) async {
+    final tree = GaiaTopicTree(topics);
+    final byId = {for (final memory in memories) memory.id: memory};
+    final apart = {
+      for (final hint in hints)
+        if (hint.kind == GaiaMemoryHintKind.keptApart) hint.subject,
+    };
+    final standing = <GaiaMemorySuggestion>[];
+    final stale = <String>[];
+    for (final suggestion in await _repository.listMemorySuggestions()) {
+      final named = [for (final id in suggestion.memoryIds) byId[id]];
+      final ok =
+          named.every(
+            (memory) =>
+                memory != null &&
+                memory.status == GaiaMemoryStatus.active &&
+                !memory.updatedAt.isAfter(suggestion.madeAt),
+          ) &&
+          suggestion.topicIds.every(
+            (id) =>
+                tree[id] != null &&
+                !tree[id]!.updatedAt.isAfter(suggestion.madeAt),
+          ) &&
+          (suggestion.kind != GaiaSuggestionKind.place ||
+              (named.length == 1 && gaiaUnsorted(named.single!, tree))) &&
+          !apart.contains(gaiaSweepKey(suggestion, byId));
+      if (!ok) {
+        stale.add(suggestion.id);
+      } else if (suggestion.kind != GaiaSuggestionKind.place ||
+          !left.contains(named.single!.id)) {
+        // A placement for a memory left unsorted is kept, not shown, so
+        // Undo brings it back.
+        standing.add(suggestion);
+      }
+    }
+    if (stale.isNotEmpty) await _repository.deleteMemorySuggestions(stale);
+    return standing;
+  }
+
+  /// Leave unsorted (§27.5): Sort these and the sweep don't ask about
+  /// memory [id] again while it's in Unsorted with this text.
+  Future<void> leaveUnsorted(String id) async {
+    final memory = await _repository.getMemory(id);
+    if (memory == null || memory.isDeleted) return;
+    await _repository.putMemoryHint((
+      kind: GaiaMemoryHintKind.leftUnsorted,
+      subject: _leftKey(memory),
+      until: null,
+    ));
+  }
+
+  /// [leaveUnsorted] undone.
+  Future<void> undoLeaveUnsorted(String id) async {
+    for (final hint in await _repository.listMemoryHints()) {
+      if (hint.kind == GaiaMemoryHintKind.leftUnsorted &&
+          hint.subject.split('#').first == id) {
+        await _repository.deleteMemoryHint(hint.kind, hint.subject);
+      }
+    }
+  }
+
+  /// When the last sweep ran on this device (§27.4); null before the first.
+  Future<DateTime?> lastSweep() async => (await _repository.listMemoryHints())
+      .where((hint) => hint.kind == GaiaMemoryHintKind.swept)
+      .firstOrNull
+      ?.until;
+
+  /// What a sweep that starts [now] reads (§27.4): null when it isn't due
+  /// (less than [kGaiaSweepEvery] since the last, unless [force]) or nothing
+  /// changed since. Otherwise its groups, each holding a memory changed
+  /// since, and the topics.
+  Future<GaiaSweepPlan?> sweepPlan(DateTime now, {bool force = false}) async {
+    final since = await lastSweep();
+    if (!force && since != null && now.difference(since) < kGaiaSweepEvery) {
+      return null;
+    }
+    final memories = await _repository.listMemories();
+    final topics = await _repository.listMemoryTopics();
+    final projects = {
+      for (final project in await _repository.listProjects()) project.id,
+    };
+    final plan = gaiaSweepGroups(memories, topics, projects, since, now);
+    final topicChanged = topics.any(
+      (topic) => since == null || topic.updatedAt.isAfter(since),
+    );
+    if (plan.groups.isEmpty && !topicChanged) return null;
+    return plan;
+  }
+
+  /// The active Unsorted memories the sweep that started at [at] places
+  /// (§27.4): changed since the last sweep (all at the first) or held back
+  /// by an earlier one, with no placement waiting, not left unsorted, and
+  /// not in [except], those in this sweep's same and conflict suggestions.
+  /// Those in [except] are held back for the next.
+  Future<List<({String id, String text})>> sweepUnsorted(
+    Set<String> except,
+    DateTime at,
+  ) async {
+    final since = await lastSweep();
+    final memories = await _repository.listMemories();
+    final topics = await _repository.listMemoryTopics();
+    final hints = await _repository.listMemoryHints();
+    final left = await _leftUnsorted(memories, topics, hints);
+    final waiting = {
+      for (final suggestion in await _standing(memories, topics, hints, left))
+        if (suggestion.kind == GaiaSuggestionKind.place)
+          ...suggestion.memoryIds,
+    };
+    final held = {
+      for (final hint in hints)
+        if (hint.kind == GaiaMemoryHintKind.heldBack) hint.subject,
+    };
+    final tree = GaiaTopicTree(topics);
+    final placing = <({String id, String text})>[];
+    for (final memory in memories) {
+      if (memory.status != GaiaMemoryStatus.active ||
+          !gaiaUnsorted(memory, tree) ||
+          !(since == null ||
+              memory.updatedAt.isAfter(since) ||
+              held.contains(memory.id)) ||
+          waiting.contains(memory.id) ||
+          left.contains(memory.id)) {
+        continue;
+      }
+      if (except.contains(memory.id)) {
+        // Past since once this sweep is done: kept for the next.
+        await _repository.putMemoryHint((
+          kind: GaiaMemoryHintKind.heldBack,
+          subject: memory.id,
+          until: at,
+        ));
+      } else {
+        placing.add((id: memory.id, text: memory.text));
+      }
+    }
+    return placing;
+  }
+
+  /// The sweep that read the memories at [madeAt] found [found] (§27.4):
+  /// each kept as a suggestion, unless it names a memory or topic gone or
+  /// not active, one a project's topic can't take, one kept apart, or one
+  /// already suggested. How many were kept.
+  Future<int> addSuggestions(
+    List<GaiaMemorySuggestion> found,
+    DateTime madeAt,
+  ) async {
+    final memories = await _repository.listMemories();
+    final topics = await _repository.listMemoryTopics();
+    final projects = {
+      for (final project in await _repository.listProjects()) project.id,
+    };
+    final hints = await _repository.listMemoryHints();
+    final tree = GaiaTopicTree(topics);
+    final byId = {for (final memory in memories) memory.id: memory};
+    final apart = {
+      for (final hint in hints)
+        if (hint.kind == GaiaMemoryHintKind.keptApart) hint.subject,
+    };
+    String said(GaiaMemorySuggestion s) => [
+      s.kind.name,
+      (s.memoryIds.toList()..sort()).join('|'),
+      s.topicIds.join('|'),
+    ].join(':');
+    final had = {
+      for (final suggestion in await _repository.listMemorySuggestions())
+        said(suggestion),
+    };
+    bool linked(String id) => projects.contains(tree[id]?.projectId);
+    final kept = <GaiaMemorySuggestion>[];
+    for (final suggestion in found) {
+      var topicIds = suggestion.topicIds;
+      if (suggestion.memoryIds.any(
+            (id) => byId[id]?.status != GaiaMemoryStatus.active,
+          ) ||
+          topicIds.any((id) => tree[id] == null)) {
+        continue;
+      }
+      if (suggestion.memoryIds.toSet().length != suggestion.memoryIds.length) {
+        continue;
+      }
+      final text = suggestion.text?.trim() ?? '';
+      switch (suggestion.kind) {
+        case GaiaSuggestionKind.same:
+          if (suggestion.memoryIds.length < 2 ||
+              text.isEmpty ||
+              text.length > kGaiaMemoryMaxLength) {
+            continue;
+          }
+        case GaiaSuggestionKind.conflict:
+          if (suggestion.memoryIds.length != 2) continue;
+        case GaiaSuggestionKind.expired:
+          if (suggestion.memoryIds.length != 1) continue;
+        case GaiaSuggestionKind.topicMerge:
+          if (topicIds.length != 2) continue;
+          // A project's topic can be merged into, not away.
+          if (linked(topicIds.first) && linked(topicIds.last)) continue;
+          if (linked(topicIds.first)) topicIds = topicIds.reversed.toList();
+        case GaiaSuggestionKind.topicRename:
+          if (topicIds.length != 1 ||
+              text.isEmpty ||
+              linked(topicIds.single) ||
+              text == tree[topicIds.single]!.name) {
+            continue;
+          }
+        case GaiaSuggestionKind.place:
+          if (suggestion.memoryIds.length != 1 ||
+              suggestion.placement == null) {
+            continue;
+          }
+      }
+      final made = (
+        id: _uuid.v4(),
+        kind: suggestion.kind,
+        memoryIds: suggestion.memoryIds,
+        topicIds: topicIds,
+        text: text.isEmpty ? null : text,
+        why: suggestion.why,
+        placement: suggestion.placement,
+        madeAt: madeAt,
+      );
+      if (apart.contains(gaiaSweepKey(made, byId)) || !had.add(said(made))) {
+        continue;
+      }
+      kept.add(made);
+    }
+    if (kept.isNotEmpty) await _repository.putMemorySuggestions(kept);
+    return kept.length;
+  }
+
+  /// The sweep that started at [at] is done: the next goes from there, and
+  /// memories an earlier sweep held back have been asked about.
+  Future<void> swept(DateTime at) async {
+    await _repository.putMemoryHint((
+      kind: GaiaMemoryHintKind.swept,
+      subject: 'sweep',
+      until: at,
+    ));
+    for (final hint in await _repository.listMemoryHints()) {
+      if (hint.kind == GaiaMemoryHintKind.heldBack &&
+          !(hint.until?.isAtSameMomentAs(at) ?? false)) {
+        await _repository.deleteMemoryHint(hint.kind, hint.subject);
+      }
+    }
+  }
+
+  /// The sweep's suggestion [id] decided (§27.4): [accept]ed (same merged
+  /// with [text], expired archived, topics merged or renamed), [keep]ing
+  /// memory [keep] of two that disagree, the other trashed, or neither:
+  /// kept apart, so it isn't suggested again. The suggestion goes. What it
+  /// changed as it was, and the suggestion, for Undo ([restoreSuggestion]).
+  /// Throws a [GaiaReadException] for a suggestion gone, or a write refused.
+  Future<
+    ({
+      List<GaiaMemory> memories,
+      List<GaiaMemoryTopic> topics,
+      GaiaMemorySuggestion suggestion,
+    })
+  >
+  decideSuggestion(
+    String id, {
+    bool accept = false,
+    String? keep,
+    String? text,
+  }) async {
+    final suggestion = (await _repository.listMemorySuggestions())
+        .where((s) => s.id == id)
+        .firstOrNull;
+    if (suggestion == null) {
+      throw GaiaReadException('That suggestion is gone.');
+    }
+    final memories = [
+      for (final memoryId in suggestion.memoryIds)
+        await activeMemory(memoryId) ??
+            (throw GaiaReadException('That suggestion is gone.')),
+    ];
+    var before = <GaiaMemory>[];
+    var topics = <GaiaMemoryTopic>[];
+    if (keep != null) {
+      if (suggestion.kind != GaiaSuggestionKind.conflict ||
+          !suggestion.memoryIds.contains(keep)) {
+        throw GaiaReadException('That suggestion is gone.');
+      }
+      final other = memories.firstWhere((memory) => memory.id != keep);
+      // Trashed, not archived: a fact said to be wrong shouldn't come back
+      // through memory_search.
+      await _repository.upsertMemory(other.copyWith(deletedAt: utcNow()));
+      before = [other];
+    } else if (accept) {
+      switch (suggestion.kind) {
+        case GaiaSuggestionKind.same:
+          before = memories;
+          await _merge(memories, text ?? suggestion.text ?? '');
+        case GaiaSuggestionKind.expired:
+          before = memories;
+          await archive(memories.single.id);
+        case GaiaSuggestionKind.topicMerge:
+          final fromId = suggestion.topicIds.first;
+          final intoId = suggestion.topicIds.last;
+          final tree = GaiaTopicTree(await _repository.listMemoryTopics());
+          if (tree[fromId] == null || tree[intoId] == null) {
+            throw GaiaReadException('That topic is gone.');
+          }
+          topics = [tree[fromId]!, tree[intoId]!, ...tree.childrenOf(fromId)];
+          before = [
+            for (final memory in await _repository.listMemories())
+              if (memory.topicIds.contains(fromId) ||
+                  memory.suggestedTopic?.parentId == fromId)
+                memory,
+          ];
+          await mergeTopic(fromId, intoId);
+        case GaiaSuggestionKind.topicRename:
+          final topic =
+              await _liveTopic(suggestion.topicIds.single) ??
+              (throw GaiaReadException('That topic is gone.'));
+          topics = [topic];
+          await renameTopic(topic.id, suggestion.text ?? '');
+        case GaiaSuggestionKind.conflict || GaiaSuggestionKind.place:
+          throw GaiaReadException('That suggestion is gone.');
+      }
+    } else {
+      await _repository.putMemoryHint((
+        kind: GaiaMemoryHintKind.keptApart,
+        subject: gaiaSweepKey(suggestion, {
+          for (final memory in memories) memory.id: memory,
+        }),
+        until: null,
+      ));
+    }
+    await _repository.deleteMemorySuggestions([id]);
+    return (memories: before, topics: topics, suggestion: suggestion);
+  }
+
+  /// [decideSuggestion] undone, once what it changed is put back: the
+  /// suggestion is back, as of now, and kept apart no more.
+  Future<void> restoreSuggestion(GaiaMemorySuggestion suggestion) async {
+    final byId = {
+      for (final memory in await _repository.listMemories()) memory.id: memory,
+    };
+    await _repository.deleteMemoryHint(
+      GaiaMemoryHintKind.keptApart,
+      gaiaSweepKey(suggestion, byId),
+    );
+    await _repository.putMemorySuggestions([
+      (
+        id: suggestion.id,
+        kind: suggestion.kind,
+        memoryIds: suggestion.memoryIds,
+        topicIds: suggestion.topicIds,
+        text: suggestion.text,
+        why: suggestion.why,
+        placement: suggestion.placement,
+        madeAt: utcNow(),
+      ),
+    ]);
+  }
+
+  /// [memories] that say one thing merged into the oldest, in one write
+  /// (§27.4): it takes [text], every topic and tag of them all, and the pin
+  /// if any had one; the others go to the trash. Throws a
+  /// [GaiaReadException] for empty or overlong text, text another active
+  /// memory says, or a pin past [kGaiaPinBudget].
+  Future<void> _merge(List<GaiaMemory> memories, String text) async {
+    final body = text.trim();
+    if (body.isEmpty) throw GaiaReadException('A memory needs text.');
+    if (body.length > kGaiaMemoryMaxLength) {
+      throw GaiaReadException(
+        'A memory is one short fact, at most $kGaiaMemoryMaxLength '
+        'characters.',
+      );
+    }
+    final ids = {for (final memory in memories) memory.id};
+    final keep = memories.reduce(
+      (a, b) =>
+          a.createdAt.isBefore(b.createdAt) ||
+              (a.createdAt == b.createdAt && a.id.compareTo(b.id) < 0)
+          ? a
+          : b,
+    );
+    final active = await _active();
+    for (final other in active) {
+      if (!ids.contains(other.id) &&
+          gaiaMemoryKey(other.text) == gaiaMemoryKey(body)) {
+        throw GaiaReadException('Already remembered: ${other.text}');
+      }
+    }
+    final pinned = memories.any((memory) => memory.pinned);
+    if (pinned) {
+      final used = [
+        for (final other in active)
+          if (other.pinned && !ids.contains(other.id)) other.text.trim().length,
+      ].fold(0, (sum, length) => sum + length);
+      if (used + body.length > kGaiaPinBudget) {
+        throw GaiaReadException(
+          'Pinned memories are kept under $kGaiaPinBudget characters in all. '
+          'Unpin one first.',
+        );
+      }
+    }
+    final now = utcNow();
+    await _repository.upsertMemoryTopics(const [], [
+      keep.copyWith(
+        text: body,
+        topicIds: [
+          ...{
+            for (final memory in [keep, ...memories]) ...memory.topicIds,
+          },
+        ],
+        tags: [
+          ...{
+            for (final memory in [keep, ...memories]) ...memory.tags,
+          },
+        ],
+        pinned: pinned,
+      ),
+      for (final memory in memories)
+        if (memory.id != keep.id) memory.copyWith(deletedAt: now),
+    ]);
   }
 
   /// Memory [id] edited to say [text], with [tags] if given (the Gaia page's
@@ -1691,6 +2164,8 @@ typedef GaiaMemoryList = ({
   Set<String> projects,
   List<GaiaPinSuggestion> pins,
   List<GaiaMergeSuggestion> merges,
+  List<GaiaMemorySuggestion> suggestions,
+  Set<String> leftUnsorted,
 });
 
 /// [list] as the pipe carries it: a suggestion names its memory or topics
@@ -1706,6 +2181,11 @@ Map<String, Object?> gaiaMemoryListToJson(GaiaMemoryList list) => {
     for (final merge in list.merges)
       {'from': merge.from.id, 'into': merge.into.id, 'why': merge.why},
   ],
+  'suggestions': [
+    for (final suggestion in list.suggestions)
+      gaiaMemorySuggestionToJson(suggestion),
+  ],
+  'leftUnsorted': [...list.leftUnsorted],
 };
 
 GaiaMemoryList gaiaMemoryListFromJson(Map<Object?, Object?> json) {
@@ -1736,7 +2216,240 @@ GaiaMemoryList gaiaMemoryListFromJson(Map<Object?, Object?> json) {
         ))
           (from: from, into: into, why: merge['why']! as String),
     ],
+    suggestions: [
+      for (final suggestion in json['suggestions'] as List? ?? const [])
+        ?gaiaMemorySuggestionFromJson(suggestion),
+    ],
+    leftUnsorted: {
+      ...(json['leftUnsorted'] as List? ?? const []).cast<String>(),
+    },
   );
+}
+
+/// How often the weekly sweep runs (GAIA_MEMORY_TOPICS_HLD.md §27.4).
+const kGaiaSweepEvery = Duration(days: 7);
+
+/// The most lines one sweep call reads, and how many nearest memories in
+/// other topics a changed one brings into its group (§27.4).
+const _sweepLines = 80;
+const _sweepNear = 5;
+
+/// One memory as a sweep call reads it (§27.4): its text, its topics'
+/// paths, the day it was saved and whether it's pinned.
+typedef GaiaSweepLine = ({
+  String id,
+  String text,
+  List<String> topics,
+  DateTime saved,
+  bool pinned,
+});
+
+/// A topic as a sweep call reads it: its path, how many active memories
+/// it holds, and whether it's a linked project's, which isn't renamed.
+typedef GaiaSweepTopic = ({String id, String path, int count, bool project});
+
+/// What a sweep reads (§27.4): when it started, its groups, one call each,
+/// and the topics.
+typedef GaiaSweepPlan = ({
+  DateTime at,
+  List<List<GaiaSweepLine>> groups,
+  List<GaiaSweepTopic> topics,
+});
+
+Map<String, Object?> gaiaSweepPlanToJson(GaiaSweepPlan plan) => {
+  'at': plan.at.toIso8601String(),
+  'groups': [
+    for (final group in plan.groups)
+      [
+        for (final line in group)
+          {
+            'id': line.id,
+            'text': line.text,
+            'topics': line.topics,
+            'saved': line.saved.toIso8601String(),
+            'pinned': line.pinned,
+          },
+      ],
+  ],
+  'topics': [
+    for (final topic in plan.topics)
+      {
+        'id': topic.id,
+        'path': topic.path,
+        'count': topic.count,
+        'project': topic.project,
+      },
+  ],
+};
+
+GaiaSweepPlan gaiaSweepPlanFromJson(Map<Object?, Object?> json) => (
+  at: DateTime.parse(json['at']! as String),
+  groups: [
+    for (final group in json['groups']! as List)
+      [
+        for (final line in group as List)
+          if (line case final Map line)
+            (
+              id: line['id']! as String,
+              text: line['text']! as String,
+              topics: (line['topics'] as List? ?? const []).cast<String>(),
+              saved: DateTime.parse(line['saved']! as String),
+              pinned: line['pinned'] == true,
+            ),
+      ],
+  ],
+  topics: [
+    for (final topic in json['topics']! as List)
+      if (topic case final Map topic)
+        (
+          id: topic['id']! as String,
+          path: topic['path']! as String,
+          count: topic['count'] as int? ?? 0,
+          project: topic['project'] == true,
+        ),
+  ],
+);
+
+/// A sweep's groups (§27.4) at [now], of the active [memories] changed
+/// since [since] (all with none): one per topic holding a changed one
+/// (Unsorted counting as one), with the topic's active memories and, for
+/// each changed one, its [_sweepNear] nearest active memories elsewhere by
+/// stage 1. A group past [_sweepLines] is split by stage 1 nearness, and a
+/// part with nothing changed is left out. Every live topic, too.
+GaiaSweepPlan gaiaSweepGroups(
+  List<GaiaMemory> memories,
+  List<GaiaMemoryTopic> topics,
+  Set<String> projects,
+  DateTime? since,
+  DateTime now,
+) {
+  final tree = GaiaTopicTree(topics);
+  final active = [
+    for (final memory in memories)
+      if (!memory.isDeleted && memory.status == GaiaMemoryStatus.active) memory,
+  ];
+  bool changed(GaiaMemory memory) =>
+      since == null || memory.updatedAt.isAfter(since);
+  final byTopic = <String, List<GaiaMemory>>{};
+  for (final memory in active) {
+    final ids = [
+      for (final id in memory.topicIds)
+        if (tree[id] != null) id,
+    ];
+    for (final id in ids.isEmpty ? const [''] : ids) {
+      (byTopic[id] ??= []).add(memory);
+    }
+  }
+  GaiaSweepLine line(GaiaMemory memory) => (
+    id: memory.id,
+    text: memory.text,
+    topics: [
+      for (final id in memory.topicIds)
+        if (tree.path(id) case final path when path.isNotEmpty)
+          path.join(' › '),
+    ],
+    saved: memory.createdAt,
+    pinned: memory.pinned,
+  );
+  final groups = <List<GaiaSweepLine>>[];
+  for (final members in byTopic.values) {
+    if (!members.any(changed)) continue;
+    final ids = {for (final memory in members) memory.id};
+    final lines = {for (final memory in members) memory.id: memory};
+    for (final memory in members.where(changed)) {
+      for (final near in gaiaRecallCandidates(
+        active,
+        tree,
+        memory.text,
+        limit: _sweepNear + ids.length + 1,
+      ).where((c) => !ids.contains(c.memory.id)).take(_sweepNear)) {
+        lines[near.memory.id] = near.memory;
+      }
+    }
+    // The changed ones first, so each part starts from one.
+    final left = [
+      ...lines.values.where(changed),
+      ...lines.values.where((memory) => !changed(memory)),
+    ];
+    while (left.any(changed)) {
+      final seed = left.removeAt(0);
+      final part = [
+        seed,
+        for (final near in gaiaRecallCandidates(
+          left,
+          tree,
+          seed.text,
+          limit: _sweepLines - 1,
+        ))
+          near.memory,
+      ];
+      for (final memory in left) {
+        if (part.length >= _sweepLines) break;
+        if (!part.contains(memory)) part.add(memory);
+      }
+      left.removeWhere(part.contains);
+      groups.add([for (final memory in part) line(memory)]);
+    }
+  }
+  final counts = <String, int>{};
+  for (final memory in active) {
+    for (final id in memory.topicIds) {
+      counts[id] = (counts[id] ?? 0) + 1;
+    }
+  }
+  return (
+    at: now,
+    groups: groups,
+    topics: [
+      for (final topic in gaiaTopicLines(tree))
+        (
+          id: topic.id,
+          path: topic.path,
+          count: counts[topic.id] ?? 0,
+          project: projects.contains(tree[topic.id]!.projectId),
+        ),
+    ],
+  );
+}
+
+/// Whether [memory] is in Unsorted: in no topic in [tree].
+bool gaiaUnsorted(GaiaMemory memory, GaiaTopicTree tree) =>
+    memory.topicIds.every((id) => tree.path(id).isEmpty);
+
+/// How a sweep suggestion kept apart is stored (§27.4): two topics as a
+/// merge suggestion's pair ([gaiaTopicPairKey]), a topic to rename by its
+/// id, and memories by their ids in order and their texts ([byId]), so one
+/// whose text changes can be suggested again.
+String gaiaSweepKey(
+  GaiaMemorySuggestion suggestion,
+  Map<String, GaiaMemory> byId,
+) {
+  switch (suggestion.kind) {
+    case GaiaSuggestionKind.topicMerge:
+      return gaiaTopicPairKey(
+        suggestion.topicIds.first,
+        suggestion.topicIds.last,
+      );
+    case GaiaSuggestionKind.topicRename:
+      return 'rename:${suggestion.topicIds.join('|')}';
+    default:
+      final ids = suggestion.memoryIds.toList()..sort();
+      final texts = [for (final id in ids) byId[id]?.text ?? ''];
+      return '${suggestion.kind.name}:${ids.join('|')}#'
+          '${_textHash(texts.join('\n'))}';
+  }
+}
+
+/// A leftUnsorted hint's subject (§27.5): [memory]'s id and its text's hash.
+String _leftKey(GaiaMemory memory) => '${memory.id}#${_textHash(memory.text)}';
+
+/// [text]'s 32-bit FNV-1a hash, in hex: the same on every run.
+String _textHash(String text) {
+  var hash = 0x811c9dc5;
+  for (final unit in text.codeUnits) {
+    hash = ((hash ^ unit) * 0x01000193) & 0xffffffff;
+  }
+  return hash.toRadixString(16);
 }
 
 Map<String, Object?> gaiaMemoryToJson(GaiaMemory memory) => {

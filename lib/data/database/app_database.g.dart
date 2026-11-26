@@ -60743,6 +60743,33 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
     requiredDuringInsert: false,
     defaultValue: const Constant(100),
   );
+  static const VerificationMeta _tidyMemoriesMeta = const VerificationMeta(
+    'tidyMemories',
+  );
+  @override
+  late final GeneratedColumn<bool> tidyMemories = GeneratedColumn<bool>(
+    'tidy_memories',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("tidy_memories" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _tidyMemoriesDeviceMeta =
+      const VerificationMeta('tidyMemoriesDevice');
+  @override
+  late final GeneratedColumn<String> tidyMemoriesDevice =
+      GeneratedColumn<String>(
+        'tidy_memories_device',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(''),
+      );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -60811,6 +60838,8 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
     splitGaiaRight,
     userName,
     memoryAlertAt,
+    tidyMemories,
+    tidyMemoriesDevice,
     createdAt,
     updatedAt,
     version,
@@ -60995,6 +61024,24 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
         ),
       );
     }
+    if (data.containsKey('tidy_memories')) {
+      context.handle(
+        _tidyMemoriesMeta,
+        tidyMemories.isAcceptableOrUnknown(
+          data['tidy_memories']!,
+          _tidyMemoriesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('tidy_memories_device')) {
+      context.handle(
+        _tidyMemoriesDeviceMeta,
+        tidyMemoriesDevice.isAcceptableOrUnknown(
+          data['tidy_memories_device']!,
+          _tidyMemoriesDeviceMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -61116,6 +61163,14 @@ class $GaiaSettingsTableTable extends GaiaSettingsTable
         DriftSqlType.int,
         data['${effectivePrefix}memory_alert_at'],
       )!,
+      tidyMemories: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}tidy_memories'],
+      )!,
+      tidyMemoriesDevice: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}tidy_memories_device'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -61180,6 +61235,8 @@ class GaiaSettingsTableData extends DataClass
   final bool splitGaiaRight;
   final String userName;
   final int memoryAlertAt;
+  final bool tidyMemories;
+  final String tidyMemoriesDevice;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -61206,6 +61263,8 @@ class GaiaSettingsTableData extends DataClass
     required this.splitGaiaRight,
     required this.userName,
     required this.memoryAlertAt,
+    required this.tidyMemories,
+    required this.tidyMemoriesDevice,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -61243,6 +61302,8 @@ class GaiaSettingsTableData extends DataClass
     map['split_gaia_right'] = Variable<bool>(splitGaiaRight);
     map['user_name'] = Variable<String>(userName);
     map['memory_alert_at'] = Variable<int>(memoryAlertAt);
+    map['tidy_memories'] = Variable<bool>(tidyMemories);
+    map['tidy_memories_device'] = Variable<String>(tidyMemoriesDevice);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['version'] = Variable<int>(version);
@@ -61283,6 +61344,8 @@ class GaiaSettingsTableData extends DataClass
       splitGaiaRight: Value(splitGaiaRight),
       userName: Value(userName),
       memoryAlertAt: Value(memoryAlertAt),
+      tidyMemories: Value(tidyMemories),
+      tidyMemoriesDevice: Value(tidyMemoriesDevice),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -61323,6 +61386,10 @@ class GaiaSettingsTableData extends DataClass
       splitGaiaRight: serializer.fromJson<bool>(json['splitGaiaRight']),
       userName: serializer.fromJson<String>(json['userName']),
       memoryAlertAt: serializer.fromJson<int>(json['memoryAlertAt']),
+      tidyMemories: serializer.fromJson<bool>(json['tidyMemories']),
+      tidyMemoriesDevice: serializer.fromJson<String>(
+        json['tidyMemoriesDevice'],
+      ),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -61356,6 +61423,8 @@ class GaiaSettingsTableData extends DataClass
       'splitGaiaRight': serializer.toJson<bool>(splitGaiaRight),
       'userName': serializer.toJson<String>(userName),
       'memoryAlertAt': serializer.toJson<int>(memoryAlertAt),
+      'tidyMemories': serializer.toJson<bool>(tidyMemories),
+      'tidyMemoriesDevice': serializer.toJson<String>(tidyMemoriesDevice),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -61385,6 +61454,8 @@ class GaiaSettingsTableData extends DataClass
     bool? splitGaiaRight,
     String? userName,
     int? memoryAlertAt,
+    bool? tidyMemories,
+    String? tidyMemoriesDevice,
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -61413,6 +61484,8 @@ class GaiaSettingsTableData extends DataClass
     splitGaiaRight: splitGaiaRight ?? this.splitGaiaRight,
     userName: userName ?? this.userName,
     memoryAlertAt: memoryAlertAt ?? this.memoryAlertAt,
+    tidyMemories: tidyMemories ?? this.tidyMemories,
+    tidyMemoriesDevice: tidyMemoriesDevice ?? this.tidyMemoriesDevice,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -61471,6 +61544,12 @@ class GaiaSettingsTableData extends DataClass
       memoryAlertAt: data.memoryAlertAt.present
           ? data.memoryAlertAt.value
           : this.memoryAlertAt,
+      tidyMemories: data.tidyMemories.present
+          ? data.tidyMemories.value
+          : this.tidyMemories,
+      tidyMemoriesDevice: data.tidyMemoriesDevice.present
+          ? data.tidyMemoriesDevice.value
+          : this.tidyMemoriesDevice,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -61502,6 +61581,8 @@ class GaiaSettingsTableData extends DataClass
           ..write('splitGaiaRight: $splitGaiaRight, ')
           ..write('userName: $userName, ')
           ..write('memoryAlertAt: $memoryAlertAt, ')
+          ..write('tidyMemories: $tidyMemories, ')
+          ..write('tidyMemoriesDevice: $tidyMemoriesDevice, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -61533,6 +61614,8 @@ class GaiaSettingsTableData extends DataClass
     splitGaiaRight,
     userName,
     memoryAlertAt,
+    tidyMemories,
+    tidyMemoriesDevice,
     createdAt,
     updatedAt,
     version,
@@ -61563,6 +61646,8 @@ class GaiaSettingsTableData extends DataClass
           other.splitGaiaRight == this.splitGaiaRight &&
           other.userName == this.userName &&
           other.memoryAlertAt == this.memoryAlertAt &&
+          other.tidyMemories == this.tidyMemories &&
+          other.tidyMemoriesDevice == this.tidyMemoriesDevice &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -61592,6 +61677,8 @@ class GaiaSettingsTableCompanion
   final Value<bool> splitGaiaRight;
   final Value<String> userName;
   final Value<int> memoryAlertAt;
+  final Value<bool> tidyMemories;
+  final Value<String> tidyMemoriesDevice;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -61619,6 +61706,8 @@ class GaiaSettingsTableCompanion
     this.splitGaiaRight = const Value.absent(),
     this.userName = const Value.absent(),
     this.memoryAlertAt = const Value.absent(),
+    this.tidyMemories = const Value.absent(),
+    this.tidyMemoriesDevice = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -61647,6 +61736,8 @@ class GaiaSettingsTableCompanion
     this.splitGaiaRight = const Value.absent(),
     this.userName = const Value.absent(),
     this.memoryAlertAt = const Value.absent(),
+    this.tidyMemories = const Value.absent(),
+    this.tidyMemoriesDevice = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -61677,6 +61768,8 @@ class GaiaSettingsTableCompanion
     Expression<bool>? splitGaiaRight,
     Expression<String>? userName,
     Expression<int>? memoryAlertAt,
+    Expression<bool>? tidyMemories,
+    Expression<String>? tidyMemoriesDevice,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -61707,6 +61800,9 @@ class GaiaSettingsTableCompanion
       if (splitGaiaRight != null) 'split_gaia_right': splitGaiaRight,
       if (userName != null) 'user_name': userName,
       if (memoryAlertAt != null) 'memory_alert_at': memoryAlertAt,
+      if (tidyMemories != null) 'tidy_memories': tidyMemories,
+      if (tidyMemoriesDevice != null)
+        'tidy_memories_device': tidyMemoriesDevice,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -61737,6 +61833,8 @@ class GaiaSettingsTableCompanion
     Value<bool>? splitGaiaRight,
     Value<String>? userName,
     Value<int>? memoryAlertAt,
+    Value<bool>? tidyMemories,
+    Value<String>? tidyMemoriesDevice,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -61766,6 +61864,8 @@ class GaiaSettingsTableCompanion
       splitGaiaRight: splitGaiaRight ?? this.splitGaiaRight,
       userName: userName ?? this.userName,
       memoryAlertAt: memoryAlertAt ?? this.memoryAlertAt,
+      tidyMemories: tidyMemories ?? this.tidyMemories,
+      tidyMemoriesDevice: tidyMemoriesDevice ?? this.tidyMemoriesDevice,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -61844,6 +61944,12 @@ class GaiaSettingsTableCompanion
     if (memoryAlertAt.present) {
       map['memory_alert_at'] = Variable<int>(memoryAlertAt.value);
     }
+    if (tidyMemories.present) {
+      map['tidy_memories'] = Variable<bool>(tidyMemories.value);
+    }
+    if (tidyMemoriesDevice.present) {
+      map['tidy_memories_device'] = Variable<String>(tidyMemoriesDevice.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -61886,6 +61992,8 @@ class GaiaSettingsTableCompanion
           ..write('splitGaiaRight: $splitGaiaRight, ')
           ..write('userName: $userName, ')
           ..write('memoryAlertAt: $memoryAlertAt, ')
+          ..write('tidyMemories: $tidyMemories, ')
+          ..write('tidyMemoriesDevice: $tidyMemoriesDevice, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -66472,6 +66580,533 @@ class GaiaMemoryHintsTableCompanion
   }
 }
 
+class $GaiaMemorySuggestionsTableTable extends GaiaMemorySuggestionsTable
+    with
+        TableInfo<
+          $GaiaMemorySuggestionsTableTable,
+          GaiaMemorySuggestionsTableData
+        > {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $GaiaMemorySuggestionsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _memoryIdsJsonMeta = const VerificationMeta(
+    'memoryIdsJson',
+  );
+  @override
+  late final GeneratedColumn<String> memoryIdsJson = GeneratedColumn<String>(
+    'memory_ids_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  );
+  static const VerificationMeta _topicIdsJsonMeta = const VerificationMeta(
+    'topicIdsJson',
+  );
+  @override
+  late final GeneratedColumn<String> topicIdsJson = GeneratedColumn<String>(
+    'topic_ids_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  );
+  static const VerificationMeta _bodyMeta = const VerificationMeta('body');
+  @override
+  late final GeneratedColumn<String> body = GeneratedColumn<String>(
+    'body',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _whyMeta = const VerificationMeta('why');
+  @override
+  late final GeneratedColumn<String> why = GeneratedColumn<String>(
+    'why',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _placementJsonMeta = const VerificationMeta(
+    'placementJson',
+  );
+  @override
+  late final GeneratedColumn<String> placementJson = GeneratedColumn<String>(
+    'placement_json',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _madeAtMeta = const VerificationMeta('madeAt');
+  @override
+  late final GeneratedColumn<DateTime> madeAt = GeneratedColumn<DateTime>(
+    'made_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    kind,
+    memoryIdsJson,
+    topicIdsJson,
+    body,
+    why,
+    placementJson,
+    madeAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'gaia_memory_suggestions_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<GaiaMemorySuggestionsTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_kindMeta);
+    }
+    if (data.containsKey('memory_ids_json')) {
+      context.handle(
+        _memoryIdsJsonMeta,
+        memoryIdsJson.isAcceptableOrUnknown(
+          data['memory_ids_json']!,
+          _memoryIdsJsonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('topic_ids_json')) {
+      context.handle(
+        _topicIdsJsonMeta,
+        topicIdsJson.isAcceptableOrUnknown(
+          data['topic_ids_json']!,
+          _topicIdsJsonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('body')) {
+      context.handle(
+        _bodyMeta,
+        body.isAcceptableOrUnknown(data['body']!, _bodyMeta),
+      );
+    }
+    if (data.containsKey('why')) {
+      context.handle(
+        _whyMeta,
+        why.isAcceptableOrUnknown(data['why']!, _whyMeta),
+      );
+    }
+    if (data.containsKey('placement_json')) {
+      context.handle(
+        _placementJsonMeta,
+        placementJson.isAcceptableOrUnknown(
+          data['placement_json']!,
+          _placementJsonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('made_at')) {
+      context.handle(
+        _madeAtMeta,
+        madeAt.isAcceptableOrUnknown(data['made_at']!, _madeAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_madeAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  GaiaMemorySuggestionsTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return GaiaMemorySuggestionsTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
+      memoryIdsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}memory_ids_json'],
+      )!,
+      topicIdsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}topic_ids_json'],
+      )!,
+      body: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}body'],
+      ),
+      why: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}why'],
+      ),
+      placementJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}placement_json'],
+      ),
+      madeAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}made_at'],
+      )!,
+    );
+  }
+
+  @override
+  $GaiaMemorySuggestionsTableTable createAlias(String alias) {
+    return $GaiaMemorySuggestionsTableTable(attachedDatabase, alias);
+  }
+}
+
+class GaiaMemorySuggestionsTableData extends DataClass
+    implements Insertable<GaiaMemorySuggestionsTableData> {
+  final String id;
+  final String kind;
+  final String memoryIdsJson;
+  final String topicIdsJson;
+  final String? body;
+  final String? why;
+  final String? placementJson;
+  final DateTime madeAt;
+  const GaiaMemorySuggestionsTableData({
+    required this.id,
+    required this.kind,
+    required this.memoryIdsJson,
+    required this.topicIdsJson,
+    this.body,
+    this.why,
+    this.placementJson,
+    required this.madeAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['kind'] = Variable<String>(kind);
+    map['memory_ids_json'] = Variable<String>(memoryIdsJson);
+    map['topic_ids_json'] = Variable<String>(topicIdsJson);
+    if (!nullToAbsent || body != null) {
+      map['body'] = Variable<String>(body);
+    }
+    if (!nullToAbsent || why != null) {
+      map['why'] = Variable<String>(why);
+    }
+    if (!nullToAbsent || placementJson != null) {
+      map['placement_json'] = Variable<String>(placementJson);
+    }
+    map['made_at'] = Variable<DateTime>(madeAt);
+    return map;
+  }
+
+  GaiaMemorySuggestionsTableCompanion toCompanion(bool nullToAbsent) {
+    return GaiaMemorySuggestionsTableCompanion(
+      id: Value(id),
+      kind: Value(kind),
+      memoryIdsJson: Value(memoryIdsJson),
+      topicIdsJson: Value(topicIdsJson),
+      body: body == null && nullToAbsent ? const Value.absent() : Value(body),
+      why: why == null && nullToAbsent ? const Value.absent() : Value(why),
+      placementJson: placementJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(placementJson),
+      madeAt: Value(madeAt),
+    );
+  }
+
+  factory GaiaMemorySuggestionsTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return GaiaMemorySuggestionsTableData(
+      id: serializer.fromJson<String>(json['id']),
+      kind: serializer.fromJson<String>(json['kind']),
+      memoryIdsJson: serializer.fromJson<String>(json['memoryIdsJson']),
+      topicIdsJson: serializer.fromJson<String>(json['topicIdsJson']),
+      body: serializer.fromJson<String?>(json['body']),
+      why: serializer.fromJson<String?>(json['why']),
+      placementJson: serializer.fromJson<String?>(json['placementJson']),
+      madeAt: serializer.fromJson<DateTime>(json['madeAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'kind': serializer.toJson<String>(kind),
+      'memoryIdsJson': serializer.toJson<String>(memoryIdsJson),
+      'topicIdsJson': serializer.toJson<String>(topicIdsJson),
+      'body': serializer.toJson<String?>(body),
+      'why': serializer.toJson<String?>(why),
+      'placementJson': serializer.toJson<String?>(placementJson),
+      'madeAt': serializer.toJson<DateTime>(madeAt),
+    };
+  }
+
+  GaiaMemorySuggestionsTableData copyWith({
+    String? id,
+    String? kind,
+    String? memoryIdsJson,
+    String? topicIdsJson,
+    Value<String?> body = const Value.absent(),
+    Value<String?> why = const Value.absent(),
+    Value<String?> placementJson = const Value.absent(),
+    DateTime? madeAt,
+  }) => GaiaMemorySuggestionsTableData(
+    id: id ?? this.id,
+    kind: kind ?? this.kind,
+    memoryIdsJson: memoryIdsJson ?? this.memoryIdsJson,
+    topicIdsJson: topicIdsJson ?? this.topicIdsJson,
+    body: body.present ? body.value : this.body,
+    why: why.present ? why.value : this.why,
+    placementJson: placementJson.present
+        ? placementJson.value
+        : this.placementJson,
+    madeAt: madeAt ?? this.madeAt,
+  );
+  GaiaMemorySuggestionsTableData copyWithCompanion(
+    GaiaMemorySuggestionsTableCompanion data,
+  ) {
+    return GaiaMemorySuggestionsTableData(
+      id: data.id.present ? data.id.value : this.id,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      memoryIdsJson: data.memoryIdsJson.present
+          ? data.memoryIdsJson.value
+          : this.memoryIdsJson,
+      topicIdsJson: data.topicIdsJson.present
+          ? data.topicIdsJson.value
+          : this.topicIdsJson,
+      body: data.body.present ? data.body.value : this.body,
+      why: data.why.present ? data.why.value : this.why,
+      placementJson: data.placementJson.present
+          ? data.placementJson.value
+          : this.placementJson,
+      madeAt: data.madeAt.present ? data.madeAt.value : this.madeAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GaiaMemorySuggestionsTableData(')
+          ..write('id: $id, ')
+          ..write('kind: $kind, ')
+          ..write('memoryIdsJson: $memoryIdsJson, ')
+          ..write('topicIdsJson: $topicIdsJson, ')
+          ..write('body: $body, ')
+          ..write('why: $why, ')
+          ..write('placementJson: $placementJson, ')
+          ..write('madeAt: $madeAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    kind,
+    memoryIdsJson,
+    topicIdsJson,
+    body,
+    why,
+    placementJson,
+    madeAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is GaiaMemorySuggestionsTableData &&
+          other.id == this.id &&
+          other.kind == this.kind &&
+          other.memoryIdsJson == this.memoryIdsJson &&
+          other.topicIdsJson == this.topicIdsJson &&
+          other.body == this.body &&
+          other.why == this.why &&
+          other.placementJson == this.placementJson &&
+          other.madeAt == this.madeAt);
+}
+
+class GaiaMemorySuggestionsTableCompanion
+    extends UpdateCompanion<GaiaMemorySuggestionsTableData> {
+  final Value<String> id;
+  final Value<String> kind;
+  final Value<String> memoryIdsJson;
+  final Value<String> topicIdsJson;
+  final Value<String?> body;
+  final Value<String?> why;
+  final Value<String?> placementJson;
+  final Value<DateTime> madeAt;
+  final Value<int> rowid;
+  const GaiaMemorySuggestionsTableCompanion({
+    this.id = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.memoryIdsJson = const Value.absent(),
+    this.topicIdsJson = const Value.absent(),
+    this.body = const Value.absent(),
+    this.why = const Value.absent(),
+    this.placementJson = const Value.absent(),
+    this.madeAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  GaiaMemorySuggestionsTableCompanion.insert({
+    required String id,
+    required String kind,
+    this.memoryIdsJson = const Value.absent(),
+    this.topicIdsJson = const Value.absent(),
+    this.body = const Value.absent(),
+    this.why = const Value.absent(),
+    this.placementJson = const Value.absent(),
+    required DateTime madeAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       kind = Value(kind),
+       madeAt = Value(madeAt);
+  static Insertable<GaiaMemorySuggestionsTableData> custom({
+    Expression<String>? id,
+    Expression<String>? kind,
+    Expression<String>? memoryIdsJson,
+    Expression<String>? topicIdsJson,
+    Expression<String>? body,
+    Expression<String>? why,
+    Expression<String>? placementJson,
+    Expression<DateTime>? madeAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (kind != null) 'kind': kind,
+      if (memoryIdsJson != null) 'memory_ids_json': memoryIdsJson,
+      if (topicIdsJson != null) 'topic_ids_json': topicIdsJson,
+      if (body != null) 'body': body,
+      if (why != null) 'why': why,
+      if (placementJson != null) 'placement_json': placementJson,
+      if (madeAt != null) 'made_at': madeAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  GaiaMemorySuggestionsTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? kind,
+    Value<String>? memoryIdsJson,
+    Value<String>? topicIdsJson,
+    Value<String?>? body,
+    Value<String?>? why,
+    Value<String?>? placementJson,
+    Value<DateTime>? madeAt,
+    Value<int>? rowid,
+  }) {
+    return GaiaMemorySuggestionsTableCompanion(
+      id: id ?? this.id,
+      kind: kind ?? this.kind,
+      memoryIdsJson: memoryIdsJson ?? this.memoryIdsJson,
+      topicIdsJson: topicIdsJson ?? this.topicIdsJson,
+      body: body ?? this.body,
+      why: why ?? this.why,
+      placementJson: placementJson ?? this.placementJson,
+      madeAt: madeAt ?? this.madeAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
+    if (memoryIdsJson.present) {
+      map['memory_ids_json'] = Variable<String>(memoryIdsJson.value);
+    }
+    if (topicIdsJson.present) {
+      map['topic_ids_json'] = Variable<String>(topicIdsJson.value);
+    }
+    if (body.present) {
+      map['body'] = Variable<String>(body.value);
+    }
+    if (why.present) {
+      map['why'] = Variable<String>(why.value);
+    }
+    if (placementJson.present) {
+      map['placement_json'] = Variable<String>(placementJson.value);
+    }
+    if (madeAt.present) {
+      map['made_at'] = Variable<DateTime>(madeAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GaiaMemorySuggestionsTableCompanion(')
+          ..write('id: $id, ')
+          ..write('kind: $kind, ')
+          ..write('memoryIdsJson: $memoryIdsJson, ')
+          ..write('topicIdsJson: $topicIdsJson, ')
+          ..write('body: $body, ')
+          ..write('why: $why, ')
+          ..write('placementJson: $placementJson, ')
+          ..write('madeAt: $madeAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -66642,6 +67277,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $GaiaRecallHistoryTableTable(this);
   late final $GaiaMemoryHintsTableTable gaiaMemoryHintsTable =
       $GaiaMemoryHintsTableTable(this);
+  late final $GaiaMemorySuggestionsTableTable gaiaMemorySuggestionsTable =
+      $GaiaMemorySuggestionsTableTable(this);
   late final Index idxJournalEntriesQuoteUse = Index(
     'idx_journal_entries_quote_use',
     'CREATE INDEX IF NOT EXISTS idx_journal_entries_quote_use ON journal_entries_table (journal_id, quote_id, created_at, deleted_at) WHERE deleted_at IS NULL AND quote_id IS NOT NULL',
@@ -66802,6 +67439,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     gaiaMemoryTopicsTable,
     gaiaRecallHistoryTable,
     gaiaMemoryHintsTable,
+    gaiaMemorySuggestionsTable,
     idxJournalEntriesQuoteUse,
     idxTodoTasksListId,
     idxTodoTasksParentTaskId,
@@ -95620,6 +96258,8 @@ typedef $$GaiaSettingsTableTableCreateCompanionBuilder =
       Value<bool> splitGaiaRight,
       Value<String> userName,
       Value<int> memoryAlertAt,
+      Value<bool> tidyMemories,
+      Value<String> tidyMemoriesDevice,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -95649,6 +96289,8 @@ typedef $$GaiaSettingsTableTableUpdateCompanionBuilder =
       Value<bool> splitGaiaRight,
       Value<String> userName,
       Value<int> memoryAlertAt,
+      Value<bool> tidyMemories,
+      Value<String> tidyMemoriesDevice,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -95767,6 +96409,16 @@ class $$GaiaSettingsTableTableFilterComposer
 
   ColumnFilters<int> get memoryAlertAt => $composableBuilder(
     column: $table.memoryAlertAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get tidyMemories => $composableBuilder(
+    column: $table.tidyMemories,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get tidyMemoriesDevice => $composableBuilder(
+    column: $table.tidyMemoriesDevice,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -95905,6 +96557,16 @@ class $$GaiaSettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get tidyMemories => $composableBuilder(
+    column: $table.tidyMemories,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get tidyMemoriesDevice => $composableBuilder(
+    column: $table.tidyMemoriesDevice,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -96028,6 +96690,16 @@ class $$GaiaSettingsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get tidyMemories => $composableBuilder(
+    column: $table.tidyMemories,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get tidyMemoriesDevice => $composableBuilder(
+    column: $table.tidyMemoriesDevice,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -96102,6 +96774,8 @@ class $$GaiaSettingsTableTableTableManager
                 Value<bool> splitGaiaRight = const Value.absent(),
                 Value<String> userName = const Value.absent(),
                 Value<int> memoryAlertAt = const Value.absent(),
+                Value<bool> tidyMemories = const Value.absent(),
+                Value<String> tidyMemoriesDevice = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -96129,6 +96803,8 @@ class $$GaiaSettingsTableTableTableManager
                 splitGaiaRight: splitGaiaRight,
                 userName: userName,
                 memoryAlertAt: memoryAlertAt,
+                tidyMemories: tidyMemories,
+                tidyMemoriesDevice: tidyMemoriesDevice,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -96158,6 +96834,8 @@ class $$GaiaSettingsTableTableTableManager
                 Value<bool> splitGaiaRight = const Value.absent(),
                 Value<String> userName = const Value.absent(),
                 Value<int> memoryAlertAt = const Value.absent(),
+                Value<bool> tidyMemories = const Value.absent(),
+                Value<String> tidyMemoriesDevice = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -96185,6 +96863,8 @@ class $$GaiaSettingsTableTableTableManager
                 splitGaiaRight: splitGaiaRight,
                 userName: userName,
                 memoryAlertAt: memoryAlertAt,
+                tidyMemories: tidyMemories,
+                tidyMemoriesDevice: tidyMemoriesDevice,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -98561,6 +99241,288 @@ typedef $$GaiaMemoryHintsTableTableProcessedTableManager =
       GaiaMemoryHintsTableData,
       PrefetchHooks Function()
     >;
+typedef $$GaiaMemorySuggestionsTableTableCreateCompanionBuilder =
+    GaiaMemorySuggestionsTableCompanion Function({
+      required String id,
+      required String kind,
+      Value<String> memoryIdsJson,
+      Value<String> topicIdsJson,
+      Value<String?> body,
+      Value<String?> why,
+      Value<String?> placementJson,
+      required DateTime madeAt,
+      Value<int> rowid,
+    });
+typedef $$GaiaMemorySuggestionsTableTableUpdateCompanionBuilder =
+    GaiaMemorySuggestionsTableCompanion Function({
+      Value<String> id,
+      Value<String> kind,
+      Value<String> memoryIdsJson,
+      Value<String> topicIdsJson,
+      Value<String?> body,
+      Value<String?> why,
+      Value<String?> placementJson,
+      Value<DateTime> madeAt,
+      Value<int> rowid,
+    });
+
+class $$GaiaMemorySuggestionsTableTableFilterComposer
+    extends Composer<_$AppDatabase, $GaiaMemorySuggestionsTableTable> {
+  $$GaiaMemorySuggestionsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get memoryIdsJson => $composableBuilder(
+    column: $table.memoryIdsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get topicIdsJson => $composableBuilder(
+    column: $table.topicIdsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get body => $composableBuilder(
+    column: $table.body,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get why => $composableBuilder(
+    column: $table.why,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get placementJson => $composableBuilder(
+    column: $table.placementJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get madeAt => $composableBuilder(
+    column: $table.madeAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$GaiaMemorySuggestionsTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $GaiaMemorySuggestionsTableTable> {
+  $$GaiaMemorySuggestionsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get memoryIdsJson => $composableBuilder(
+    column: $table.memoryIdsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get topicIdsJson => $composableBuilder(
+    column: $table.topicIdsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get body => $composableBuilder(
+    column: $table.body,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get why => $composableBuilder(
+    column: $table.why,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get placementJson => $composableBuilder(
+    column: $table.placementJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get madeAt => $composableBuilder(
+    column: $table.madeAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$GaiaMemorySuggestionsTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $GaiaMemorySuggestionsTableTable> {
+  $$GaiaMemorySuggestionsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<String> get memoryIdsJson => $composableBuilder(
+    column: $table.memoryIdsJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get topicIdsJson => $composableBuilder(
+    column: $table.topicIdsJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get body =>
+      $composableBuilder(column: $table.body, builder: (column) => column);
+
+  GeneratedColumn<String> get why =>
+      $composableBuilder(column: $table.why, builder: (column) => column);
+
+  GeneratedColumn<String> get placementJson => $composableBuilder(
+    column: $table.placementJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get madeAt =>
+      $composableBuilder(column: $table.madeAt, builder: (column) => column);
+}
+
+class $$GaiaMemorySuggestionsTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $GaiaMemorySuggestionsTableTable,
+          GaiaMemorySuggestionsTableData,
+          $$GaiaMemorySuggestionsTableTableFilterComposer,
+          $$GaiaMemorySuggestionsTableTableOrderingComposer,
+          $$GaiaMemorySuggestionsTableTableAnnotationComposer,
+          $$GaiaMemorySuggestionsTableTableCreateCompanionBuilder,
+          $$GaiaMemorySuggestionsTableTableUpdateCompanionBuilder,
+          (
+            GaiaMemorySuggestionsTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $GaiaMemorySuggestionsTableTable,
+              GaiaMemorySuggestionsTableData
+            >,
+          ),
+          GaiaMemorySuggestionsTableData,
+          PrefetchHooks Function()
+        > {
+  $$GaiaMemorySuggestionsTableTableTableManager(
+    _$AppDatabase db,
+    $GaiaMemorySuggestionsTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$GaiaMemorySuggestionsTableTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$GaiaMemorySuggestionsTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$GaiaMemorySuggestionsTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> kind = const Value.absent(),
+                Value<String> memoryIdsJson = const Value.absent(),
+                Value<String> topicIdsJson = const Value.absent(),
+                Value<String?> body = const Value.absent(),
+                Value<String?> why = const Value.absent(),
+                Value<String?> placementJson = const Value.absent(),
+                Value<DateTime> madeAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => GaiaMemorySuggestionsTableCompanion(
+                id: id,
+                kind: kind,
+                memoryIdsJson: memoryIdsJson,
+                topicIdsJson: topicIdsJson,
+                body: body,
+                why: why,
+                placementJson: placementJson,
+                madeAt: madeAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String kind,
+                Value<String> memoryIdsJson = const Value.absent(),
+                Value<String> topicIdsJson = const Value.absent(),
+                Value<String?> body = const Value.absent(),
+                Value<String?> why = const Value.absent(),
+                Value<String?> placementJson = const Value.absent(),
+                required DateTime madeAt,
+                Value<int> rowid = const Value.absent(),
+              }) => GaiaMemorySuggestionsTableCompanion.insert(
+                id: id,
+                kind: kind,
+                memoryIdsJson: memoryIdsJson,
+                topicIdsJson: topicIdsJson,
+                body: body,
+                why: why,
+                placementJson: placementJson,
+                madeAt: madeAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$GaiaMemorySuggestionsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $GaiaMemorySuggestionsTableTable,
+      GaiaMemorySuggestionsTableData,
+      $$GaiaMemorySuggestionsTableTableFilterComposer,
+      $$GaiaMemorySuggestionsTableTableOrderingComposer,
+      $$GaiaMemorySuggestionsTableTableAnnotationComposer,
+      $$GaiaMemorySuggestionsTableTableCreateCompanionBuilder,
+      $$GaiaMemorySuggestionsTableTableUpdateCompanionBuilder,
+      (
+        GaiaMemorySuggestionsTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $GaiaMemorySuggestionsTableTable,
+          GaiaMemorySuggestionsTableData
+        >,
+      ),
+      GaiaMemorySuggestionsTableData,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -98807,4 +99769,10 @@ class $AppDatabaseManager {
       );
   $$GaiaMemoryHintsTableTableTableManager get gaiaMemoryHintsTable =>
       $$GaiaMemoryHintsTableTableTableManager(_db, _db.gaiaMemoryHintsTable);
+  $$GaiaMemorySuggestionsTableTableTableManager
+  get gaiaMemorySuggestionsTable =>
+      $$GaiaMemorySuggestionsTableTableTableManager(
+        _db,
+        _db.gaiaMemorySuggestionsTable,
+      );
 }

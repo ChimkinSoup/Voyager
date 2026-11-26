@@ -165,6 +165,43 @@ class _GaiaMemoriesTabState extends State<GaiaMemoriesTab> {
     String failed = "Couldn't save that",
   }) => _run(() => _controller.writeMemories(method, params), failed);
 
+  /// The sweep's [suggestion] decided (GAIA_MEMORY_TOPICS_HLD.md §27.4) as
+  /// [GaiaController.decideSuggestion] does, then said in a toast titled
+  /// [done] that offers to undo it.
+  Future<void> _decideSuggestion(
+    GaiaMemorySuggestion suggestion,
+    String done, {
+    bool accept = false,
+    String? keep,
+    String? text,
+  }) async {
+    // Said before it's decided: a merged topic is gone after.
+    final heading = gaiaSuggestionHeading(
+      suggestion,
+      GaiaTopicTree(_controller.memoryList?.topics ?? const []),
+    ).replaceFirst(RegExp(r'\?$'), '');
+    Future<void> Function()? undo;
+    if (!await _run(
+          () async => undo = await _controller.decideSuggestion(
+            suggestion,
+            accept: accept,
+            keep: keep,
+            text: text,
+          ),
+          "Couldn't save that",
+        ) ||
+        !mounted) {
+      return;
+    }
+    showGaiaToast(
+      context,
+      mark: GaiaToastMark.done,
+      title: done,
+      body: heading,
+      onUndo: () => unawaited(_run(undo!, "Couldn't undo it")),
+    );
+  }
+
   /// The memory a recall chip asked for, taken from the controller: the
   /// view cleared so nothing hides it, then scrolled to once it's built.
   void _takeReveal(GaiaMemoryList list) {
@@ -327,6 +364,19 @@ class _GaiaMemoriesTabState extends State<GaiaMemoriesTab> {
             named.contains(merge.into.id))
           merge,
     ];
+    final byId = {for (final memory in list.memories) memory.id: memory};
+    // The weekly sweep's (GAIA_MEMORY_TOPICS_HLD.md §27.4); its placements
+    // show on their Unsorted rows instead.
+    final sweeps = [
+      for (final suggestion in list.suggestions)
+        if (suggestion.kind != GaiaSuggestionKind.place &&
+            (query.isEmpty ||
+                suggestion.topicIds.any(named.contains) ||
+                suggestion.memoryIds.any(
+                  (id) => byId[id] != null && matches(byId[id]!),
+                )))
+          suggestion,
+    ];
     // What a chip counts and its topic shows: remembered and archived ones.
     final shelved = [
       for (final memory in list.memories)
@@ -369,6 +419,10 @@ class _GaiaMemoriesTabState extends State<GaiaMemoriesTab> {
     final showInbox = _showInbox ?? (topic == null || query.isNotEmpty);
 
     final settings = _controller.settings;
+    final tidyOn = settings['tidyMemories'] == true;
+    final tidyHere =
+        tidyOn && settings['tidyMemoriesDevice'] == _controller.deviceId;
+    final tidyElsewhere = tidyOn && !tidyHere;
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.keyF, control: true):
@@ -404,6 +458,29 @@ class _GaiaMemoriesTabState extends State<GaiaMemoriesTab> {
                 onChanged: (value) => unawaited(
                   _run(
                     () => _controller.putSettings({'autoAcceptCurator': value}),
+                    'Not saved',
+                  ),
+                ),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: GaiaPanelSwitch(
+                title: 'Tidy memories weekly',
+                subtitle:
+                    'Once a week, while this computer is idle, Gaia looks over '
+                    'what changed for memories that say the same thing, '
+                    "disagree or have gone out of date, and topics to merge or "
+                    'rename, and finds topics for Unsorted ones. What it finds '
+                    'waits in the inbox here.'
+                    '${tidyElsewhere ? ' On for another computer; turning it '
+                              'on here moves it.' : ''}',
+                value: tidyHere,
+                onChanged: (value) => unawaited(
+                  _run(
+                    () => _controller.putSettings({
+                      'tidyMemories': value,
+                      if (value) 'tidyMemoriesDevice': _controller.deviceId,
+                    }),
                     'Not saved',
                   ),
                 ),
@@ -468,11 +545,15 @@ class _GaiaMemoriesTabState extends State<GaiaMemoriesTab> {
             SliverToBoxAdapter(
               child: _reviewBar(list, tree, topic, scope, unsorted),
             ),
-            if (inbox.isNotEmpty || pins.isNotEmpty || merges.isNotEmpty) ...[
+            if (inbox.isNotEmpty ||
+                pins.isNotEmpty ||
+                merges.isNotEmpty ||
+                sweeps.isNotEmpty) ...[
               SliverToBoxAdapter(
                 child: _FoldHeading(
                   key: _inboxKey,
-                  'Inbox (${inbox.length + pins.length + merges.length})',
+                  'Inbox '
+                  '(${inbox.length + pins.length + merges.length + sweeps.length})',
                   shown: showInbox,
                   onTap: () => setState(() => _showInbox = !showInbox),
                 ),
@@ -520,6 +601,14 @@ class _GaiaMemoriesTabState extends State<GaiaMemoriesTab> {
                             'topicId': merge.from.id,
                             'intoId': merge.into.id,
                           }),
+                        ),
+                      for (final suggestion in sweeps)
+                        _SweepRow(
+                          key: ValueKey('sweep ${suggestion.id}'),
+                          suggestion: suggestion,
+                          memories: byId,
+                          tree: tree,
+                          onDecide: _decideSuggestion,
                         ),
                     ],
                   ),
@@ -625,7 +714,12 @@ class _GaiaMemoriesTabState extends State<GaiaMemoriesTab> {
     final waiting = list.memories
         .where((memory) => memory.status == GaiaMemoryStatus.proposed)
         .length;
-    final suggestions = list.pins.length + list.merges.length;
+    final suggestions =
+        list.pins.length +
+        list.merges.length +
+        list.suggestions
+            .where((suggestion) => suggestion.kind != GaiaSuggestionKind.place)
+            .length;
     final here = topic == null
         ? 0
         : list.memories
@@ -1395,6 +1489,169 @@ class _SuggestionRowState extends State<_SuggestionRow> {
   );
 }
 
+/// One of the weekly sweep's suggestions in the inbox
+/// (GAIA_MEMORY_TOPICS_HLD.md §27.4): what it asks, the memories it names,
+/// the model's why, and its buttons. Same thing's merged text can be edited
+/// before Merge.
+class _SweepRow extends StatefulWidget {
+  const _SweepRow({
+    super.key,
+    required this.suggestion,
+    required this.memories,
+    required this.tree,
+    required this.onDecide,
+  });
+
+  final GaiaMemorySuggestion suggestion;
+  final Map<String, GaiaMemory> memories;
+  final GaiaTopicTree tree;
+  final Future<void> Function(
+    GaiaMemorySuggestion suggestion,
+    String done, {
+    bool accept,
+    String? keep,
+    String? text,
+  })
+  onDecide;
+
+  @override
+  State<_SweepRow> createState() => _SweepRowState();
+}
+
+class _SweepRowState extends State<_SweepRow> {
+  late final _text = TextEditingController(
+    text: widget.suggestion.text ?? '',
+  );
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  Widget _button(String label, VoidCallback onPressed, {bool main = false}) =>
+      Padding(
+        padding: const EdgeInsets.only(left: 6),
+        child: GaiaButton(
+          label: label,
+          size: 28,
+          padding: 10,
+          color: main ? null : GaiaInk.muted,
+          onPressed: onPressed,
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final suggestion = widget.suggestion;
+    final named = [
+      for (final id in suggestion.memoryIds) ?widget.memories[id],
+    ];
+    void decide(String done, {bool accept = false, String? keep}) => unawaited(
+      widget.onDecide(
+        suggestion,
+        done,
+        accept: accept,
+        keep: keep,
+        text: suggestion.kind == GaiaSuggestionKind.same && accept
+            ? _text.text.trim()
+            : null,
+      ),
+    );
+    final text = GaiaType.row.copyWith(color: GaiaInk.dim);
+    final muted = GaiaType.label.copyWith(color: GaiaInk.muted);
+    final (String yes, String no, String yesDone, String noDone) =
+        switch (suggestion.kind) {
+          GaiaSuggestionKind.same => (
+            'Merge',
+            'Keep apart',
+            'Merged',
+            'Kept apart',
+          ),
+          GaiaSuggestionKind.conflict => ('', 'Keep both', '', 'Kept both'),
+          GaiaSuggestionKind.expired => ('Archive', 'Keep', 'Archived', 'Kept'),
+          GaiaSuggestionKind.topicMerge => (
+            'Merge',
+            'Keep both',
+            'Merged',
+            'Kept both',
+          ),
+          GaiaSuggestionKind.topicRename => (
+            'Rename',
+            'Keep',
+            'Renamed',
+            'Kept',
+          ),
+          GaiaSuggestionKind.place => ('', '', '', ''),
+        };
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            gaiaSuggestionIcon(suggestion.kind),
+            size: 16,
+            color: kGaiaAstralGold,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  gaiaSuggestionHeading(suggestion, widget.tree),
+                  style: GaiaType.row.copyWith(color: GaiaInk.bright),
+                ),
+                for (final memory in named)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            suggestion.kind == GaiaSuggestionKind.expired
+                                ? '${memory.text} (saved '
+                                      '${DateFormat.yMMMd().format(memory.createdAt.toLocal())})'
+                                : memory.text,
+                            style: text,
+                          ),
+                        ),
+                        if (suggestion.kind == GaiaSuggestionKind.conflict)
+                          _button(
+                            'Keep',
+                            () => decide('Kept', keep: memory.id),
+                          ),
+                      ],
+                    ),
+                  ),
+                if (suggestion.kind == GaiaSuggestionKind.same) ...[
+                  const SizedBox(height: 6),
+                  GaiaCardTextField(
+                    controller: _text,
+                    labelText: 'As one memory',
+                    maxLines: 4,
+                    style: GaiaType.row.copyWith(color: GaiaInk.bright),
+                  ),
+                ],
+                if (suggestion.why case final why?) ...[
+                  const SizedBox(height: 2),
+                  Text(why, style: muted),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          _button(no, () => decide(noDone)),
+          if (yes.isNotEmpty)
+            _button(yes, () => decide(yesDone, accept: true), main: true),
+        ],
+      ),
+    );
+  }
+}
+
 /// A memory's card in the list (GAIA_SETTINGS_HLD.md §5.3): its text, a
 /// click to edit it in place with its tags; its topics as the chat's memory
 /// card shows them, a click taking one out, + Topic adding one through the
@@ -1524,6 +1781,31 @@ class _MemoryCardState extends State<_MemoryCard> {
             debugPrint('[gaia] memory not restored: $error');
             return null;
           },
+        ),
+      ),
+    );
+  }
+
+  /// Leave unsorted: not asked about again, a toast offering to undo it.
+  Future<void> _leaveUnsorted(GaiaPlacement placement) async {
+    final controller = widget.controller;
+    final id = _memory.id;
+    if (!await widget.run(
+          () => controller.leaveUnsorted(id),
+          "Couldn't save that",
+        ) ||
+        !mounted) {
+      return;
+    }
+    showGaiaToast(
+      context,
+      mark: GaiaToastMark.done,
+      title: 'Left unsorted',
+      body: "Sort these won't ask about it again.",
+      onUndo: () => unawaited(
+        widget.run(
+          () => controller.undoLeaveUnsorted(id, placement),
+          "Couldn't undo it",
         ),
       ),
     );
@@ -1756,7 +2038,8 @@ class _MemoryCardState extends State<_MemoryCard> {
   }
 
   /// Sort these's suggestion: each topic and any new one, a click leaving
-  /// it out, then Accept or Skip.
+  /// it out, then Accept or Leave unsorted, which is remembered
+  /// (GAIA_MEMORY_TOPICS_HLD.md §27.5).
   Widget _sortedLine(ThemeData theme, GaiaPlacement placement) {
     final controller = widget.controller;
     final tree = widget.tree;
@@ -1816,11 +2099,11 @@ class _MemoryCardState extends State<_MemoryCard> {
           ),
         ),
         GaiaButton(
-          label: 'Skip',
+          label: 'Leave unsorted',
           size: 24,
           padding: 8,
           color: GaiaInk.muted,
-          onPressed: () => controller.changeSorted(_memory.id),
+          onPressed: () => unawaited(_leaveUnsorted(placement)),
         ),
       ],
     );

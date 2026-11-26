@@ -4821,6 +4821,8 @@ Map<String, dynamic> gaiaSettingsToFirestore(GaiaSettings settings) => {
   'splitGaiaRight': settings.splitGaiaRight,
   'userName': settings.userName,
   'memoryAlertAt': settings.memoryAlertAt,
+  'tidyMemories': settings.tidyMemories,
+  'tidyMemoriesDevice': settings.tidyMemoriesDevice,
   'createdAt': _dateToFirestoreRequired(settings.createdAt),
   'updatedAt': _dateToFirestoreRequired(settings.updatedAt),
   'version': settings.version,
@@ -4893,6 +4895,11 @@ GaiaSettings mergeGaiaSettingsFromRemote(
         (data['memoryAlertAt'] as num?)?.toInt() ??
         local?.memoryAlertAt ??
         kGaiaDefaultMemoryAlertAt,
+    tidyMemories: data['tidyMemories'] as bool? ?? local?.tidyMemories ?? false,
+    tidyMemoriesDevice:
+        data['tidyMemoriesDevice'] as String? ??
+        local?.tidyMemoriesDevice ??
+        '',
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??

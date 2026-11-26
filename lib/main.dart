@@ -78,8 +78,9 @@ Future<void> main([List<String> args = const []]) async {
     );
   }
   // A dev profile registers no hotkeys, and must not drop the normal
-  // instance's.
-  if (devProfile == null) {
+  // instance's. Hotkeys are Windows-only: elsewhere the plugin's event
+  // channel has no implementation, and touching it logs an error (BUG-384).
+  if (devProfile == null && isWindows) {
     try {
       await hotKeyManager.unregisterAll();
     } catch (_) {

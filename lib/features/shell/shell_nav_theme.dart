@@ -15,6 +15,10 @@ import 'package:voyager/features/shell/shell_page_transition.dart';
 const double shellNavItemWidth = 68.0;
 const double shellNavItemHeight = 56.0;
 
+/// The phone shell's status strip (clock, weather, inbox bell) under the
+/// system status bar.
+const double shellCompactStripHeight = 48.0;
+
 /// The resting fill behind a selected destination: the card tone pulled a
 /// third of the way back toward the scaffold, then held just short of opaque
 /// so the paper grain still reads through it. The alpha is shared with dark

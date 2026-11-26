@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/material.dart';
@@ -1337,7 +1338,10 @@ double calendarMorphMonthInnerCellHeight(double outerCellHeight) {
 /// Day-number layout diameter at full month scale — matches [_MorphCell].
 double calendarMorphMonthDayLayoutSize(double innerCellHeight) {
   const fullFontSize = 15.0;
-  return (fullFontSize + 8).clamp(0.0, innerCellHeight);
+  // A cell squeezed below its margin and padding (the offstage Calendar in a
+  // viewport the soft keyboard has shrunk) has a negative inner height, and
+  // clamp throws when its upper bound is below the lower (BUG-386).
+  return (fullFontSize + 8).clamp(0.0, math.max(0.0, innerCellHeight));
 }
 
 /// Pre-computes frozen event metrics for event counts 0…[MorphDayEventStack.maxMonthEvents].

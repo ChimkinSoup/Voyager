@@ -2904,6 +2904,8 @@ class GaiaSettings extends SoftDeletable {
     this.splitGaiaRight = false,
     this.userName = '',
     this.memoryAlertAt = kGaiaDefaultMemoryAlertAt,
+    this.tidyMemories = false,
+    this.tidyMemoriesDevice = '',
   }) : super(id: singletonId);
 
   factory GaiaSettings.initial() {
@@ -2988,6 +2990,14 @@ class GaiaSettings extends SoftDeletable {
   /// (GAIA_SETTINGS_HLD.md §5.5); at least 1.
   final int memoryAlertAt;
 
+  /// Tidy memories weekly: the sweep (GAIA_MEMORY_TOPICS_HLD.md §27.4)
+  /// runs on a desktop at the first idle stretch a week after the last.
+  final bool tidyMemories;
+
+  /// The device [tidyMemories] was turned on on, the one that sweeps: the
+  /// setting syncs, the sweep's state and suggestions don't.
+  final String tidyMemoriesDevice;
+
   /// [tier]'s agent; null when the tier has none, or its agent was removed.
   GaiaAgent? agentFor(GaiaTier tier) =>
       agents.where((agent) => agent.id == tiers[tier]).firstOrNull;
@@ -3014,6 +3024,8 @@ class GaiaSettings extends SoftDeletable {
     bool? splitGaiaRight,
     String? userName,
     int? memoryAlertAt,
+    bool? tidyMemories,
+    String? tidyMemoriesDevice,
   }) => GaiaSettings(
     createdAt: createdAt,
     updatedAt: utcNow(),
@@ -3038,6 +3050,8 @@ class GaiaSettings extends SoftDeletable {
     splitGaiaRight: splitGaiaRight ?? this.splitGaiaRight,
     userName: userName ?? this.userName,
     memoryAlertAt: memoryAlertAt ?? this.memoryAlertAt,
+    tidyMemories: tidyMemories ?? this.tidyMemories,
+    tidyMemoriesDevice: tidyMemoriesDevice ?? this.tidyMemoriesDevice,
   );
 
   /// These with [changes] made: the settings panel's fields, as [toJson]
@@ -3075,6 +3089,8 @@ class GaiaSettings extends SoftDeletable {
     splitGaiaRight: changes['splitGaiaRight'] as bool?,
     userName: changes['userName'] as String?,
     autoAcceptCurator: changes['autoAcceptCurator'] as bool?,
+    tidyMemories: changes['tidyMemories'] as bool?,
+    tidyMemoriesDevice: changes['tidyMemoriesDevice'] as String?,
     memoryAlertAt: switch (changes['memoryAlertAt']) {
       final num at => max(1, at.toInt()),
       _ => null,
@@ -3103,6 +3119,8 @@ class GaiaSettings extends SoftDeletable {
     'splitGaiaRight': splitGaiaRight,
     'userName': userName,
     'memoryAlertAt': memoryAlertAt,
+    'tidyMemories': tidyMemories,
+    'tidyMemoriesDevice': tidyMemoriesDevice,
   };
 }
 
@@ -3291,8 +3309,18 @@ typedef GaiaRecallRow = ({String memoryId, String chatId, DateTime recalledAt});
 /// [GaiaMemoryHint.subject] flagged by the curator as a pin, its pin
 /// suggestion put off until [GaiaMemoryHint.until] (for good once it's
 /// unpinned, with no until), or the two topics
-/// in it ("a|b") kept apart.
-enum GaiaMemoryHintKind { pinCandidate, pinLater, keptApart }
+/// in it ("a|b") kept apart. The sweep's (§27.4) kept apart memories and
+/// topics are keptApart too, keyed as the sweep keys them; [leftUnsorted]
+/// is a memory Leave unsorted was given (§27.5), keyed by its id and text,
+/// and [swept] holds the last sweep's time in [GaiaMemoryHint.until].
+enum GaiaMemoryHintKind {
+  pinCandidate,
+  pinLater,
+  keptApart,
+  leftUnsorted,
+  swept,
+  heldBack,
+}
 
 /// What this device remembers about a pin or merge suggestion; local.
 typedef GaiaMemoryHint = ({
@@ -3300,6 +3328,67 @@ typedef GaiaMemoryHint = ({
   String subject,
   DateTime? until,
 });
+
+/// What a weekly sweep suggests (GAIA_MEMORY_TOPICS_HLD.md §27.4): memories
+/// that say one thing ([same]), two that disagree ([conflict]), one out of
+/// date ([expired]), two topics to merge ([topicMerge]) or one to rename
+/// ([topicRename]), and where an Unsorted memory goes ([place]).
+enum GaiaSuggestionKind {
+  same,
+  conflict,
+  expired,
+  topicMerge,
+  topicRename,
+  place,
+}
+
+/// One of the sweep's suggestions, kept on this desktop only: the memories
+/// and topics it names (a merge's from then into), the merged text or new
+/// name, the model's why, an Unsorted memory's placement, and when the
+/// sweep read what it names, so a change since makes it stale.
+typedef GaiaMemorySuggestion = ({
+  String id,
+  GaiaSuggestionKind kind,
+  List<String> memoryIds,
+  List<String> topicIds,
+  String? text,
+  String? why,
+  GaiaPlacement? placement,
+  DateTime madeAt,
+});
+
+Map<String, Object?> gaiaMemorySuggestionToJson(GaiaMemorySuggestion s) => {
+  'id': s.id,
+  'kind': s.kind.name,
+  'memoryIds': s.memoryIds,
+  'topicIds': s.topicIds,
+  'text': s.text,
+  'why': s.why,
+  'placement': s.placement == null ? null : gaiaPlacementToJson(s.placement!),
+  'madeAt': s.madeAt.toIso8601String(),
+};
+
+/// A [GaiaMemorySuggestion] from JSON; null for a kind this build doesn't
+/// know.
+GaiaMemorySuggestion? gaiaMemorySuggestionFromJson(Object? json) {
+  if (json is! Map) return null;
+  final kind = GaiaSuggestionKind.values
+      .where((kind) => kind.name == json['kind'])
+      .firstOrNull;
+  if (kind == null) return null;
+  return (
+    id: json['id']! as String,
+    kind: kind,
+    memoryIds: gaiaTopicIdsFromJson(json['memoryIds']),
+    topicIds: gaiaTopicIdsFromJson(json['topicIds']),
+    text: json['text'] as String?,
+    why: json['why'] as String?,
+    placement: json['placement'] == null
+        ? null
+        : gaiaPlacementFromJson(json['placement']),
+    madeAt: DateTime.parse(json['madeAt']! as String),
+  );
+}
 
 /// A memory's topics as its card shows them (GAIA_MEMORY_TOPICS_HLD.md
 /// §3.2), and the new topic offered for it, as it reads ("Assignments under

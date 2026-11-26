@@ -640,6 +640,36 @@ class _DebugMenuState extends State<_DebugMenu> {
         value: debug.recallPick,
         onChanged: debug.setRecallPick,
       ),
+      heading('Memory sweep'),
+      Text(
+        "The weekly sweep (GAIA_MEMORY_TOPICS_HLD.md §27.4) now, without "
+        'waiting for the week or Tidy memories weekly: real Haiku calls over '
+        'what changed since the last sweep, everything on the first. Each '
+        'call logs its tokens; what it finds waits in the inbox.',
+        style: muted,
+      ),
+      const SizedBox(height: 8),
+      Align(
+        alignment: Alignment.centerLeft,
+        child: GaiaButton(
+          label: controller.memorySweep == null ? 'Sweep now' : 'Sweeping…',
+          onPressed: controller.memorySweep != null
+              ? null
+              : () async {
+                  final said = controller.sweepMemories(force: true);
+                  setState(() {});
+                  final done = await said;
+                  if (!context.mounted) return;
+                  setState(() {});
+                  showGaiaToast(
+                    context,
+                    mark: GaiaToastMark.done,
+                    title: 'Memory sweep',
+                    body: done ?? 'Nothing changed since the last sweep.',
+                  );
+                },
+        ),
+      ),
     ];
     // A closed section shows its heading alone. Keyed by place in the full
     // list, so the widgets below a closed section keep their own state.

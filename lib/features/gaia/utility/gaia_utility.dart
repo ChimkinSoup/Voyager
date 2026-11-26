@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/features/gaia/adapters/gaia_agent_runner.dart';
+import 'package:voyager/features/gaia/host/gaia_memories.dart'
+    show GaiaSweepLine, GaiaSweepTopic;
 import 'package:voyager/features/gaia/utility/claude_utility_runner.dart';
 
 /// How long the router may hold up a new chat's first message before the
@@ -306,8 +308,9 @@ class GaiaUtility {
   /// it failed. Nothing is applied: the user accepts each.
   Future<Map<String, GaiaPlacement>?> placeMany(
     List<({String id, String text})> memories,
-    List<GaiaTopicLine> topics,
-  ) async {
+    List<GaiaTopicLine> topics, {
+    String? usage,
+  }) async {
     final elapsed = Stopwatch()..start();
     try {
       final answer = await _runner.generate(
@@ -325,6 +328,7 @@ class GaiaUtility {
         'Facts:\n'
             '${[for (final (i, memory) in memories.indexed) '${i + 1}. ${_clip(memory.text.replaceAll(RegExp(r'\s+'), ' ').trim(), 1000)}'].join('\n')}'
             '\n\n${_topicLines(topics)}',
+        usage: usage,
         timeout: _sortTimeout,
         source: 'memory filing',
       );
@@ -451,11 +455,201 @@ class GaiaUtility {
     }
   }
 
+  /// One call of the weekly sweep (GAIA_MEMORY_TOPICS_HLD.md §27.4): what
+  /// [lines], a group of memories, hold that says one thing, disagrees or
+  /// has expired by [today], and with [topics], topics to merge or rename.
+  /// Null when it failed or timed out.
+  Future<List<GaiaSweepFound>?> sweep(
+    List<GaiaSweepLine> lines,
+    DateTime today, {
+    List<GaiaSweepTopic>? topics,
+  }) async {
+    final elapsed = Stopwatch()..start();
+    String day(DateTime at) => at.toLocal().toIso8601String().substring(0, 10);
+    try {
+      final answer = await _runner.generate(
+        "You tidy the memories a user's assistant, Gaia, keeps about them. "
+        'Today is ${day(today)}. The memories in <input> are numbered, each '
+        'with its topics and the day it was saved. Find only clear '
+        'cases of:\n'
+        '- "same": two or more memories that say one thing, however '
+        'worded. Give one text that says it all, every detail kept, in '
+        'the first person as the user would put it.\n'
+        '- "conflict": two memories that can\'t both be true (the user '
+        'moved, or changed their mind). Not two true things about '
+        'different subjects.\n'
+        '- "expired": a memory about a time that has passed, read '
+        'against the day it was saved ("My exam is next week" saved '
+        'months ago). Not one that still holds a day to come, and not '
+        'a habit that repeats ("every November").\n'
+        '${topics == null ? '' : '- "topicMerge": two topics that mean the same thing; "into" is the one to keep.\n- "topicRename": a topic named unlike its siblings ("cs246" beside "CS245 Course"), with the name it should have, without its parents. Never a topic marked (project).\n'}'
+        'Most memories are fine, so usually there is little or nothing to '
+        'suggest. Memories that look alike but are about different '
+        'things are not the same.\n\n'
+        'Reply with only a JSON array, [] for nothing. Items: '
+        '{"kind": "same", "n": [<numbers>], "text": "...", "why": "..."}, '
+        '{"kind": "conflict", "n": [<a>, <b>], "why": "..."}, '
+        '{"kind": "expired", "n": <number>, "why": "..."}'
+        '${topics == null ? '' : ', {"kind": "topicMerge", "from": "T<n>", "into": "T<n>", "why": "..."}, {"kind": "topicRename", "topic": "T<n>", "name": "...", "why": "..."}'}'
+        '. Each why is one short line that names memories and topics by '
+        'what they say, never by their numbers.',
+        [
+          if (lines.isNotEmpty) ...[
+            'Memories:',
+            for (final (i, line) in lines.indexed)
+              '${i + 1}. ${_clip(line.text.replaceAll(RegExp(r'\s+'), ' ').trim(), 1000)}'
+                  ' · topics: ${line.topics.isEmpty ? 'Unsorted' : line.topics.join('; ')}'
+                  ' · saved ${day(line.saved)}${line.pinned ? ' · pinned' : ''}',
+          ],
+          if (topics != null) ...[
+            if (lines.isNotEmpty) '',
+            'Topics:',
+            if (topics.isEmpty) '(none)',
+            for (final (i, topic) in topics.indexed)
+              'T${i + 1}. ${topic.path} (${topic.count})'
+                  '${topic.project ? ' (project)' : ''}',
+          ],
+        ].join('\n'),
+        usage: 'memory sweep',
+        timeout: _curateTimeout,
+        source: 'memory sweep',
+      );
+      final found = parseSweepAnswer(
+        answer,
+        [for (final line in lines) line.id],
+        [for (final topic in topics ?? const <GaiaSweepTopic>[]) topic.id],
+      );
+      debugPrint(
+        '[gaia] memory sweep: ${found.length} found in ${lines.length} lines'
+        '${topics == null ? '' : ' and ${topics.length} topics'} in '
+        '${elapsed.elapsedMilliseconds} ms',
+      );
+      return found;
+    } catch (error) {
+      debugPrint(
+        '[gaia] memory sweep: a call failed after '
+        '${elapsed.elapsedMilliseconds} ms: $error',
+      );
+      return null;
+    }
+  }
+
   static String _clip(String text, int max) =>
       text.length <= max ? text : text.substring(0, max);
 
   static String _topicLines(List<GaiaTopicLine> topics) =>
       'Topics (id · path):\n${topics.isEmpty ? '(none yet)' : [for (final topic in topics) '${topic.id} · ${topic.path}'].join('\n')}';
+}
+
+/// What one sweep call found (GAIA_MEMORY_TOPICS_HLD.md §27.4): its kind,
+/// the memories and topics it names (a merge's from then into), the merged
+/// text or new name, and why.
+typedef GaiaSweepFound = ({
+  GaiaSuggestionKind kind,
+  List<String> memoryIds,
+  List<String> topicIds,
+  String? text,
+  String? why,
+});
+
+/// The suggestions in a sweep [answer]: its JSON array, wherever it is in
+/// the text, each naming memories by number from 1 ([memoryIds]) and topics
+/// as "T" and a number ([topicIds]). One with a number out of range, or
+/// the wrong count of them (same takes two or more, conflict two, expired
+/// one), is dropped. Throws a [FormatException] when there's no array.
+@visibleForTesting
+List<GaiaSweepFound> parseSweepAnswer(
+  String answer,
+  List<String> memoryIds,
+  List<String> topicIds,
+) {
+  final start = answer.indexOf('[');
+  final end = answer.lastIndexOf(']');
+  if (start < 0 || end < start) {
+    throw FormatException('no JSON array', answer);
+  }
+  final list = jsonDecode(answer.substring(start, end + 1));
+  if (list is! List) throw FormatException('not a JSON array', answer);
+  String? topic(Object? n) => switch (n) {
+    final String n when n.trim().toUpperCase().startsWith('T') => _numbered(
+      n.trim().substring(1),
+      topicIds,
+    ),
+    _ => _numbered(n, topicIds),
+  };
+  final found = <GaiaSweepFound>[];
+  for (final item in list) {
+    if (item is! Map) continue;
+    final kind = GaiaSuggestionKind.values
+        .where((kind) => kind.name == item['kind'])
+        .firstOrNull;
+    final numbers = switch (item['n']) {
+      final List n => n,
+      final Object n => [n],
+      null => const [],
+    };
+    final memories = [
+      ...{for (final n in numbers) ?_numbered(n, memoryIds)},
+    ];
+    final whole = memories.length == numbers.length;
+    String? said(Object? text) => switch (text) {
+      final String text when text.trim().isNotEmpty => text.trim(),
+      _ => null,
+    };
+    final why = said(item['why']);
+    // A new name given as a path ("School › CS341 Course") keeps its last part.
+    final name = said(item['name'])?.split('›').last.trim();
+    final GaiaSweepFound? made = switch (kind) {
+      GaiaSuggestionKind.same
+          when whole && memories.length >= 2 && said(item['text']) != null =>
+        (
+          kind: kind!,
+          memoryIds: memories,
+          topicIds: const [],
+          text: said(item['text']),
+          why: why,
+        ),
+      GaiaSuggestionKind.conflict when whole && memories.length == 2 => (
+        kind: kind!,
+        memoryIds: memories,
+        topicIds: const [],
+        text: null,
+        why: why,
+      ),
+      GaiaSuggestionKind.expired when whole && memories.length == 1 => (
+        kind: kind!,
+        memoryIds: memories,
+        topicIds: const [],
+        text: null,
+        why: why,
+      ),
+      GaiaSuggestionKind.topicMerge
+          when topic(item['from']) != null &&
+              topic(item['into']) != null &&
+              topic(item['from']) != topic(item['into']) =>
+        (
+          kind: kind!,
+          memoryIds: const [],
+          topicIds: [topic(item['from'])!, topic(item['into'])!],
+          text: null,
+          why: why,
+        ),
+      GaiaSuggestionKind.topicRename
+          when topic(item['topic']) != null &&
+              name != null &&
+              name.isNotEmpty =>
+        (
+          kind: kind!,
+          memoryIds: const [],
+          topicIds: [topic(item['topic'])!],
+          text: name,
+          why: why,
+        ),
+      _ => null,
+    };
+    if (made != null) found.add(made);
+  }
+  return found;
 }
 
 /// The tier a router answer names; null when it names none.

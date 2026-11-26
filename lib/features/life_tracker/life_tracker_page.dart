@@ -107,6 +107,11 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
 
         final labelWidth = math.min(230.0, size.width * 0.21);
         final labels = leaderLabelLayout(lifeStatBlossoms, size);
+        // Without leaders (a phone) the label columns are too narrow for a
+        // sentence: a "no data yet" value shows as a dash there, and the
+        // birth-date prompt is said once above the tree instead.
+        final askBirthDate =
+            !labels.leaders && settings != null && settings.birthDate == null;
 
         // Around the whole stack rather than on the canvas, so the pointer
         // still stirs the tree over the trunk's and labels' targets.
@@ -150,6 +155,28 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
                   ),
                 ),
               ),
+              if (askBirthDate)
+                Positioned(
+                  left: 16,
+                  right: 16,
+                  bottom:
+                      size.height -
+                      weepingCanvasPoint(const Offset(0, -0.123), size).dy +
+                      48,
+                  child: Text(
+                    'Set your birth date in Settings',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontFamily: labelMonoFamily,
+                      fontFamilyFallback: labelMonoFallback,
+                      fontSize: 13,
+                      height: 1.3,
+                      letterSpacing: 0.2,
+                      fontWeight: FontWeight.w600,
+                      color: ink,
+                    ),
+                  ),
+                ),
               for (var i = 0; i < lifeStatBlossoms.length; i++)
                 () {
                   final blossom = lifeStatBlossoms[i];
@@ -183,7 +210,9 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
                         ),
                         child: StatLeaderLabel(
                           name: resolved.shortLabel,
-                          value: resolved.value,
+                          value: resolved.isPlaceholder && !labels.leaders
+                              ? '—'
+                              : resolved.value,
                           valueIsProse: resolved.isPlaceholder,
                           onLeft: blossom.onLeft,
                           inkColor: ink,

@@ -1009,6 +1009,9 @@ abstract class GaiaRepository {
   Stream<List<GaiaMemoryHint>> watchMemoryHints();
   Future<void> putMemoryHint(GaiaMemoryHint hint);
   Future<void> deleteMemoryHint(GaiaMemoryHintKind kind, String subject);
+  Future<List<GaiaMemorySuggestion>> listMemorySuggestions();
+  Future<void> putMemorySuggestions(List<GaiaMemorySuggestion> suggestions);
+  Future<void> deleteMemorySuggestions(Iterable<String> ids);
 
   /// The prompt queue (§13), in order: waiting items only, unless
   /// [includeDeleted], which adds sent and deleted ones.

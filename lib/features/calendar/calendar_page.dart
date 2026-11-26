@@ -3128,8 +3128,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
                 // group drops to a second line instead of overflowing.
                 _CalendarToolbar(
                   children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
+                    // A Wrap, so on a phone the calendar picker drops below
+                    // the view switch instead of overflowing (BUG-390).
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         _buildViewModeSelector(
                           weekStartsMonday,

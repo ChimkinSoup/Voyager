@@ -12,6 +12,7 @@ import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/data/database/app_database.dart';
@@ -247,6 +248,51 @@ Future<Set<String>> _overflowsFor(
 
 void main() {
   setUpAll(() => driftRuntimeOptions.dontWarnAboutMultipleDatabases = true);
+
+  // The phone the bug was found on: 361 dp wide, at Android density.
+  testWidgets(
+    'BUG-390: the Calendar, LeetCode and Jobs headers fit a 361 dp phone',
+    semanticsEnabled: false,
+    (tester) async {
+      addTearDown(tester.view.reset);
+      await loadRealFonts(tester);
+      tester.view.physicalSize = const Size(361, 680);
+      tester.view.devicePixelRatio = 1.0;
+      final found = <String>[];
+      for (final path in const ['/calendar', '/leetcode', '/jobs']) {
+        final (db, container) = await openHarnessContainer();
+        // Off, as on the phone: the dev-only switches widen the toolbar.
+        final settings = DriftSettingsRepository(db);
+        await settings.saveSettings(
+          (await settings.getSettings()).copyWith(
+            devShowCalendarInstantViewSwitch: false,
+          ),
+        );
+        container.invalidate(settingsProvider);
+        await container.read(settingsProvider.future);
+        final page = shellDestinations.firstWhere((d) => d.path == path).page;
+        for (final overflow in await collectOverflows(() async {
+          await tester.pumpWidget(
+            UncontrolledProviderScope(
+              container: container,
+              child: MaterialApp(
+                theme: VoyagerTheme.forMode(AppThemeMode.dark),
+                home: Scaffold(body: page),
+              ),
+            ),
+          );
+          await settle(tester);
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pump(const Duration(seconds: 1));
+        })) {
+          found.add('$path: $overflow');
+        }
+        container.dispose();
+        await db.close();
+      }
+      expect(found, isEmpty);
+    },
+  );
 
   for (final destination in shellDestinations) {
     testWidgets(
