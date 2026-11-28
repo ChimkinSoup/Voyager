@@ -10,6 +10,8 @@ import 'package:voyager/core/platform/app_data_directory.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
+import 'package:voyager/features/gaia/companion/gaia_routines.dart'
+    show kGaiaHandoffColor;
 import 'package:voyager/features/gaia/gaia_keybinds.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
 import 'package:voyager/features/gaia/gaia_text_settings.dart';
@@ -104,6 +106,8 @@ const kGaiaNotificationBtwSeparator = '#btw:';
 /// text, topics, accept}` (`{made, skipped}`), `reopenRevision {chatId,
 /// cardId, text, topics}`,
 /// `projectTool {chatId, tool, arguments}` (a `project_*` tool's text),
+/// `routines` and `runs` (each one's JSON), `putRoutine {routine}` and `putRun
+/// {run}` (GAIA_ROUTINES_HLD.md §5),
 /// `setSummary {chatId, summary, seq}`,
 /// `remember {chatId, projectId?, text, global?, pin?, same?, replaces?}`
 /// (returns `{saved, memoryId?, project, pinned?, same?, updated?}`), `curated {chatId, seq, memories}`, `setSeeScreen
@@ -1203,29 +1207,91 @@ class GaiaHost {
       _ when _osControl.sessionPaused => ' · Paused',
       _ => ' · Esc to stop',
     };
-    final label = switch (named) {
-      null => null,
-      _ when auto =>
-        ['Gaia · Auto', if (named.isNotEmpty) named].join(' · ') + acting,
-      '' => 'Gaia is in control',
-      _ => 'Gaia is in control: $named',
-    };
+    // A routine run waiting on the user lights it in its own colour
+    // (GAIA_ROUTINES_HLD.md §9.3).
+    final edge = _routineEdge;
+    final accent = edge == null ? _accent : kGaiaHandoffColor;
+    final label =
+        edge ??
+        switch (named) {
+          null => null,
+          _ when auto =>
+            ['Gaia · Auto', if (named.isNotEmpty) named].join(' · ') + acting,
+          '' => 'Gaia is in control',
+          _ => 'Gaia is in control: $named',
+        };
     // Showing repaints the notch (and rebuilds every window for a new accent),
     // and most changes don't touch it.
     if (_borderSynced &&
         label == _borderLabel &&
-        (label == null || _accent == _borderAccent)) {
+        (label == null || accent == _borderAccent)) {
       return;
     }
     _borderSynced = true;
     _borderLabel = label;
-    _borderAccent = _accent;
+    _borderAccent = accent;
     // Not waited for: a chat's save doesn't hang on a window.
     unawaited(
-      Future.sync(() => _showBorder(label, _accent)).catchError((Object error) {
+      Future.sync(() => _showBorder(label, accent)).catchError((Object error) {
         debugPrint('[gaia] border not shown: $error');
       }),
     );
+  }
+
+  /// The border's label while a routine run waits on the user
+  /// (GAIA_ROUTINES_HLD.md §9.3); null otherwise.
+  String? _routineEdge;
+
+  /// The Resume hotkey's combo while a routine run holds it: only while a
+  /// run is paused or waiting on the user (GAIA_ROUTINES_HLD.md §11.2).
+  String? _resumeHeld;
+
+  Future<void> _holdResumeHotkey(bool hold) async {
+    if (!_ownsHotkeys) return;
+    final combo = hold
+        ? gaiaComboFor(GaiaKeybind.resume, _settings.keybinds)
+        : null;
+    if (combo == _resumeHeld) return;
+    if (_resumeHeld case final held?) {
+      _resumeHeld = null;
+      if (parseGaiaCombo(held) case final old?) {
+        await hotKeyManager.unregister(old.hotKey);
+      }
+    }
+    final parsed = combo == null ? null : parseGaiaCombo(combo);
+    if (parsed == null || !parsed.hasModifier) return;
+    try {
+      await hotKeyManager.register(
+        parsed.hotKey,
+        keyDownHandler: onPressOnly((_) => _send('routineResume', {})),
+      );
+      _resumeHeld = combo;
+    } catch (error) {
+      debugPrint('[gaia] resume hotkey $combo not registered: $error');
+    }
+  }
+
+  /// Each browser window's tabs, for a routine's launch card
+  /// (GAIA_ROUTINES_HLD.md §7.2), leaving out excluded apps and sites.
+  Future<List<Map<String, String>>> _browserTabs() async {
+    final exclusions = _settings.contextExclusions;
+    return [
+      for (final listed in gaiaListWindows())
+        if (gaiaIsBrowser(listed.window.exe) &&
+            !gaiaContextExcluded(
+              exclusions,
+              exe: listed.window.exe,
+              app: listed.window.app,
+            ))
+          for (final tab in await gaiaReadBrowserTabs(listed.window.hwnd))
+            if (!gaiaContextExcluded(
+              exclusions,
+              exe: listed.window.exe,
+              app: listed.window.app,
+              url: tab.url,
+            ))
+              {'title': tab.title, 'url': tab.url},
+    ];
   }
 
   /// The settings panel's Memories tab asks again on the `memories` event,
@@ -1272,6 +1338,7 @@ class GaiaHost {
           _tokens?.add((
             account: params['account']! as String,
             source: params['source']! as String,
+            chatId: null,
           ), gaiaTokensFromJson(params['models'])),
         );
       case 'statsSeen':
@@ -1475,6 +1542,16 @@ class GaiaHost {
         await store.createProject(
           GaiaProject.fromJson(_map(params['project'])),
         );
+        return null;
+      case 'routines':
+        return [for (final routine in await store.routines()) routine.toJson()];
+      case 'putRoutine':
+        await store.putRoutine(GaiaRoutine.fromJson(_map(params['routine'])));
+        return null;
+      case 'runs':
+        return [for (final run in await store.runs()) run.toJson()];
+      case 'putRun':
+        await store.putRun(GaiaRoutineRun.fromJson(_map(params['run'])));
         return null;
       case 'renameProject':
         await store.renameProject(
@@ -1773,6 +1850,17 @@ class GaiaHost {
       case 'osResume':
         _osControl.resume(params['chatId'] as String?);
         return null;
+      case 'routineSignals':
+        // An attended routine run waiting on the user, and the Resume
+        // hotkey's hold (GAIA_ROUTINES_HLD.md §9.3, §11.2).
+        _routineEdge = params['edge'] as String?;
+        if (_attached.isCompleted) {
+          unawaited(_attached.future.then(_syncBorder));
+        }
+        await _holdResumeHotkey(params['hotkey'] == true);
+        return null;
+      case 'browserTabs':
+        return await _browserTabs();
       case 'osStop':
         _osControl.stop(
           'The user stopped the reply.',

@@ -1662,6 +1662,10 @@ const _scripts = {
     'Every kind of formatting at once, nested and mixed',
     [GaiaDebugText(_everything)],
   ),
+  '/msg9': GaiaDebugScript(
+    'Themed formatting: accent headings, code and maths tints',
+    [GaiaDebugText(_themed)],
+  ),
   '/card1': GaiaDebugScript('A permission and a question, between text', [
     GaiaDebugText("I'll check the tests before touching anything."),
     GaiaDebugPermission('Bash', {
@@ -1918,6 +1922,38 @@ const _scripts = {
     GaiaDebugHang(),
   ]),
 };
+
+const _themed = r'''# Heading 1: gold
+
+## Heading 2: the text colour
+
+### Heading 3: pale periwinkle
+
+#### Heading 4: a step deeper
+
+##### Heading 5: deeper again, at body size
+
+###### Heading 6: the deepest blue
+
+## Inline tints
+
+Inline code like `dispose()` and `flutter test` sits on a faint accent, and so does inline maths like $e^{i\pi} + 1 = 0$ or $\sum_{n=1}^{\infty} \frac{1}{n^2}$, while display maths stays plain:
+
+$$
+\int_0^1 x^2\,dx = \frac{1}{3}
+$$
+
+## Unchanged, for comparison
+
+- **Bold lead-in:** stays the text colour, only heavier.
+- *Italic* and ***bold italic*** stay the text colour too.
+- A [link](https://example.com) is still the only accent-coloured body text, so it still reads as clickable.
+
+### A heading with `code` and $x^2$ in it
+
+> #### A heading in a quote
+>
+> Quoted text keeps its muted colour; a heading in it still takes its level's colour.''';
 
 const _markdown = r'''# A heading
 

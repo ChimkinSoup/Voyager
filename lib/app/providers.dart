@@ -2109,7 +2109,9 @@ void invalidateProvidersForRemoteChange(Ref ref, String collection) {
         FirestoreCollections.gaiaQueue ||
         FirestoreCollections.gaiaBtw ||
         FirestoreCollections.gaiaProjects ||
-        FirestoreCollections.gaiaMemoryTopics:
+        FirestoreCollections.gaiaMemoryTopics ||
+        FirestoreCollections.gaiaRoutines ||
+        FirestoreCollections.gaiaRuns:
       container.invalidate(syncConflictsProvider);
       container.invalidate(trashItemsProvider);
     default:

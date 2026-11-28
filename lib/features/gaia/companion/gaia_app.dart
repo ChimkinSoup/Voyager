@@ -64,6 +64,8 @@ import 'package:voyager/features/gaia/companion/gaia_orb.dart';
 import 'package:voyager/features/gaia/companion/gaia_orb_materials.dart';
 import 'package:voyager/features/gaia/companion/gaia_pinned_prompt.dart';
 import 'package:voyager/features/gaia/companion/gaia_tier_picker.dart';
+import 'package:voyager/features/gaia/companion/gaia_routine_card.dart';
+import 'package:voyager/features/gaia/companion/gaia_routine_panel.dart';
 import 'package:voyager/features/gaia/companion/gaia_settings_panel.dart';
 import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
 import 'package:voyager/features/gaia/companion/gaia_moon.dart';
@@ -418,6 +420,10 @@ class _GaiaShell extends StatelessWidget {
     }
     if (controller.layout == GaiaMode.pickUp) {
       return _PickUpPill(controller: controller);
+    }
+    // A routine run's side panel (GAIA_ROUTINES_HLD.md §11).
+    if (controller.layout == GaiaMode.panel) {
+      return Scaffold(body: GaiaRoutinePanel(controller: controller));
     }
     final floater = controller.layout != GaiaMode.window;
     // In the Gaia window, floating over the dimmed sidebar and chat
@@ -2944,6 +2950,13 @@ GaiaMessage? _latestReply(List<GaiaMessage> messages) => messages
 
 class _MessagesState extends State<_Messages>
     with SingleTickerProviderStateMixin {
+  /// Whether `/routine`'s card is open over this chat (GAIA_ROUTINES_HLD.md
+  /// §7.1), as the composer shows it.
+  bool get _routineCardShown {
+    final launch = widget.controller.routineLaunch;
+    return launch != null && launch.chatId == widget.controller.currentChatId;
+  }
+
   final _scroll = ScrollController();
 
   /// One per chat, so its orb is carried on from one reply to the next: the
@@ -3798,48 +3811,57 @@ class _MessagesState extends State<_Messages>
                   left: 0,
                   right: 0,
                   height: empty ? constraints.maxHeight : _greetingHeight,
-                  child: AnimatedSwitcher(
-                    duration: GaiaMotion.move,
-                    reverseDuration: GaiaMotion.quick,
-                    // Only going fades here: coming, it rises in itself.
-                    transitionBuilder: (child, animation) => AnimatedBuilder(
-                      animation: animation,
-                      child: child,
-                      builder: (context, child) => Opacity(
-                        opacity: animation.status == AnimationStatus.reverse
-                            ? animation.value
-                            : 1,
+                  // Listening: the card opens and closes with no rebuild here.
+                  child: ListenableBuilder(
+                    listenable: widget.controller,
+                    builder: (context, _) => AnimatedSwitcher(
+                      duration: GaiaMotion.move,
+                      reverseDuration: GaiaMotion.quick,
+                      // Only going fades here: coming, it rises in itself.
+                      transitionBuilder: (child, animation) => AnimatedBuilder(
+                        animation: animation,
                         child: child,
+                        builder: (context, child) => Opacity(
+                          opacity: animation.status == AnimationStatus.reverse
+                              ? animation.value
+                              : 1,
+                          child: child,
+                        ),
                       ),
+                      // Not under `/routine`'s card, which floats over this
+                      // (BUG-443).
+                      child:
+                          greeting != null &&
+                              constraints.maxHeight >= 200 &&
+                              !_routineCardShown
+                          ? _EmptyChat(
+                              key: ValueKey(greeting),
+                              greeting: _greetingLine,
+                              moon: _placedMoon(
+                                widget.controller,
+                                GaiaMoonPlace.greeting,
+                                size: 22,
+                              ),
+                              sendKey: '${_sendCombo(widget.controller)}',
+                              leaving: empty
+                                  ? null
+                                  : _greetingQuick
+                                  ? GaiaMotion.move
+                                  : Duration(
+                                      milliseconds:
+                                          (widget.controller.debug.skyExitTime *
+                                                  1000)
+                                              .round(),
+                                    ),
+                              back: _greetingBack,
+                              onLeft: () {
+                                if (_greetingLeaving == greeting) {
+                                  setState(() => _greetingLeaving = null);
+                                }
+                              },
+                            )
+                          : const SizedBox.shrink(),
                     ),
-                    child: greeting != null && constraints.maxHeight >= 200
-                        ? _EmptyChat(
-                            key: ValueKey(greeting),
-                            greeting: _greetingLine,
-                            moon: _placedMoon(
-                              widget.controller,
-                              GaiaMoonPlace.greeting,
-                              size: 22,
-                            ),
-                            sendKey: '${_sendCombo(widget.controller)}',
-                            leaving: empty
-                                ? null
-                                : _greetingQuick
-                                ? GaiaMotion.move
-                                : Duration(
-                                    milliseconds:
-                                        (widget.controller.debug.skyExitTime *
-                                                1000)
-                                            .round(),
-                                  ),
-                            back: _greetingBack,
-                            onLeft: () {
-                              if (_greetingLeaving == greeting) {
-                                setState(() => _greetingLeaving = null);
-                              }
-                            },
-                          )
-                        : const SizedBox.shrink(),
                   ),
                 ),
                 Positioned(
@@ -6534,7 +6556,7 @@ class _ComposerState extends State<_Composer> {
     super.dispose();
   }
 
-  /// An inline `/quick`, `/std` or `/deep` (§7.3), once completed: taken
+  /// An inline `/quick`, `/standard` or `/deep` (§7.3), once completed: taken
   /// out of the draft whether or not the switch is confirmed. False when
   /// the user turned the switch down.
   Future<bool> _takeTierCommand({bool atEnd = false}) async {
@@ -7420,7 +7442,32 @@ class _ComposerState extends State<_Composer> {
         );
       },
     );
-    return MediaPasteOwnerScope(pasteImage: _pasteImage, child: composer);
+    // `/routine`'s card, above the composer of the chat it was typed in
+    // (GAIA_ROUTINES_HLD.md §7.1).
+    final routine = controller.routineLaunch;
+    return MediaPasteOwnerScope(
+      pasteImage: _pasteImage,
+      child: routine == null || routine.chatId != controller.currentChatId
+          ? composer
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final side = max(
+                      12.0,
+                      (constraints.maxWidth - _column) / 2 - 12,
+                    );
+                    return Padding(
+                      padding: EdgeInsets.fromLTRB(side, 8, side, 0),
+                      child: GaiaRoutineCard(controller: controller),
+                    );
+                  },
+                ),
+                composer,
+              ],
+            ),
+    );
   }
 }
 

@@ -114,6 +114,15 @@ abstract interface class GaiaInputBackend {
   /// Whether what has focus in [hwnd] can't be typed into. Null when UI
   /// Automation didn't answer in time.
   Future<bool?> focusSensitive(int hwnd, {required bool browser});
+
+  /// The names of [hwnd]'s list options on screen, as an open dropdown shows
+  /// them (GAIA_ROUTINES_HLD.md §15.3). Null when the window didn't answer in
+  /// time.
+  Future<List<String>?> listItems(int hwnd, {required bool browser});
+
+  /// [hwnd]'s controls as `os_read_screen` reads them, for what a dialog says
+  /// (GAIA_ROUTINES_HLD.md §15.6). Null when the window didn't answer in time.
+  Future<String?> readText(int hwnd);
   bool modifiersDown();
   bool escapeDown();
 
@@ -245,6 +254,7 @@ class GaiaOsControl {
     this._holdLimit = const Duration(seconds: 5),
     this._pauseBefore = const Duration(seconds: 2),
     this._frontWait = const Duration(seconds: 30),
+    this._controlWait = const Duration(seconds: 10),
   }) : _voyagerPid = voyagerPid ?? pid,
        _backend = backend ?? _Win32InputBackend();
 
@@ -293,6 +303,11 @@ class GaiaOsControl {
   final Duration _pauseBefore;
   final Duration _frontWait;
 
+  /// How long `os_pick` waits for its option, pressing Enter a fifth of the
+  /// way in, and `os_upload` for its dialog to close (GAIA_ROUTINES_HLD.md
+  /// §15.3, §15.6).
+  final Duration _controlWait;
+
   final _plans = <String, _Plan>{};
   _Active? _active;
   _Session? _session;
@@ -308,7 +323,7 @@ class GaiaOsControl {
 
   /// Text this long or longer is pasted: typed, it goes at about 30
   /// characters a second.
-  static const _pasteFrom = 200;
+  static const _pasteFrom = kGaiaPasteFrom;
 
   /// How long an app is given to read a paste, once its thread has handled
   /// the keys, before the user's clipboard is put back: a browser reads it in
@@ -1148,10 +1163,16 @@ class GaiaOsControl {
           end.resolved = true;
           continue;
         }
-        final match = _matchOf(end, await _matches(plan.window!, end));
+        // One out of view is scrolled to as it runs (GAIA_ROUTINES_HLD.md
+        // §15.1).
+        final match = _matchOf(end, [
+          for (final match in await _matches(plan.window!, end))
+            if (!match.offscreen) match,
+        ]);
         end.resolved = match != null;
         end.match = match;
-        if (end.action == _Action.type && (match?.sensitive ?? false)) {
+        if ((end.action == _Action.type || end.action == _Action.pick) &&
+            (match?.sensitive ?? false)) {
           throw GaiaReadException(
             'That is a password, card or one-time code field, which Gaia '
             'never types into.',
@@ -1187,6 +1208,10 @@ class GaiaOsControl {
   /// The one control [step] means. Several with no point to choose by can't be
   /// resolved, and the agent is told where they are.
   GaiaControlMatch? _matchOf(_Step step, List<GaiaControlMatch> matches) {
+    matches = gaiaPreferredMatches(
+      matches,
+      field: step.action == _Action.type || step.action == _Action.pick,
+    );
     if (matches.isEmpty) return null;
     if (step.x case final x?) {
       for (final match in matches) {
@@ -1200,10 +1225,19 @@ class GaiaOsControl {
       return null;
     }
     if (matches.length == 1) return matches.single;
+    // A label tells apart controls sharing a name (§15.4, BUG-441).
+    final pass = matches.any((m) => m.label != null)
+        ? 'Pass the label of the one you mean as its name, or x and y '
+              'inside it.'
+        : 'Pass x and y inside the one you mean, or its type.';
+    String where(GaiaControlMatch m) =>
+        '${m.type}'
+        '${m.label == null ? '' : ' labelled by ${jsonEncode(m.label)}'}'
+        ' at ${m.left},${m.top}';
     throw GaiaReadException(
       '${matches.length} controls are named ${jsonEncode(step.name)}: '
-      '${matches.map((m) => '${m.type} at ${m.left},${m.top}').join('; ')}. '
-      'Pass x and y inside the one you mean, or its type.',
+      '${matches.map(where).join('; ')}. '
+      '$pass',
     );
   }
 
@@ -1231,7 +1265,10 @@ class GaiaOsControl {
     String? url, {
     required bool browser,
   }) {
-    if (browser && url == null && exclusions().any((e) => e.contains('.'))) {
+    if (browser &&
+        url == null &&
+        !gaiaIsDialog(window.hwnd) &&
+        exclusions().any((e) => e.contains('.'))) {
       throw GaiaReadException(
         "Gaia couldn't read this browser's address, so can't tell whether the "
         'user has excluded the site.',
@@ -1318,20 +1355,19 @@ class GaiaOsControl {
       throw _Stopped('The window closed.');
     }
     _checkWindow(now);
+    if (step.action == _Action.upload) {
+      return _upload(window, step, active, session);
+    }
     final GaiaControlMatch? match;
     if (step.name == null) {
       match = null;
       await _checkSite(window);
     } else {
-      match = _matchOf(step, await _matches(window, step));
-      if (match == null) {
-        throw _Stopped(
-          'The control ${jsonEncode(step.name)} is not on screen.',
-        );
-      }
+      match = await _onScreen(window, step, active);
     }
     active.throwIfStopped();
-    if (step.action == _Action.type && (match?.sensitive ?? false)) {
+    if ((step.action == _Action.type || step.action == _Action.pick) &&
+        (match?.sensitive ?? false)) {
       throw _Stopped(
         'That is a password, card or one-time code field, which Gaia never '
         'types into.',
@@ -1346,7 +1382,12 @@ class GaiaOsControl {
       if (_visible(window, at)) {
         flashed = await _flashStep(step, window, match, active, _pasteRead);
       }
-      if (await _callDirect(window, step, at, active, session)) return;
+      if (await _callDirect(window, step, at, active, session)) {
+        if (step.action == _Action.type && !step.append) {
+          await _checkTyped(window, step, at);
+        }
+        return;
+      }
       // Not one a pattern can do: as real input, in front (§13.4).
       if (session != null) {
         final before = window.hwnd;
@@ -1382,7 +1423,18 @@ class GaiaOsControl {
         }
         await _checkFocus(window);
         active.throwIfStopped();
+        // A named field's text is replaced: selected after the click, in this
+        // same step, which a click would undo (GAIA_ROUTINES_HLD.md §15.5).
+        final replace = step.name != null && !step.append;
+        if (replace) {
+          await _waitForModifiers(active);
+          _inFront(window);
+          _send(GaiaKeyChord.parse('Ctrl+A').events, active);
+        }
         await _type(window, step.text!, active);
+        if (replace) await _checkTyped(window, step, point!);
+      case _Action.pick:
+        await _pick(window, step, match!, point!, active, session);
       case _Action.key:
         if (step.keys!.typesText) await _checkFocus(window);
         active.throwIfStopped();
@@ -1394,12 +1446,7 @@ class GaiaOsControl {
         if (to.name == null) {
           toMatch = null;
         } else {
-          toMatch = _matchOf(to, await _matches(window, to));
-          if (toMatch == null) {
-            throw _Stopped(
-              'The control ${jsonEncode(to.name)} is not on screen.',
-            );
-          }
+          toMatch = await _onScreen(window, to, active);
         }
         active.throwIfStopped();
         await _drag(
@@ -1410,11 +1457,344 @@ class GaiaOsControl {
           active,
         );
       // Done above.
-      case _Action.open || _Action.focus || _Action.window:
+      case _Action.open || _Action.focus || _Action.window || _Action.upload:
       case _Action.clipboard:
         break;
     }
     active.throwIfStopped();
+  }
+
+  /// How long a control scrolled into view gets to show there, looked for
+  /// every [_revealPoll], and how often `os_pick` looks for its option.
+  static const _revealWait = Duration(seconds: 3);
+  static const _revealPoll = Duration(milliseconds: 100);
+  static const _listPoll = Duration(milliseconds: 250);
+
+  /// The on-screen control [step] names. One out of view is scrolled into it
+  /// through UI Automation first, and found again (GAIA_ROUTINES_HLD.md §15.1).
+  Future<GaiaControlMatch> _onScreen(
+    GaiaForegroundWindow window,
+    _Step step,
+    _Active active,
+  ) async {
+    var matches = await _matches(window, step);
+    List<GaiaControlMatch> shown() => [
+      for (final match in matches)
+        if (!match.offscreen) match,
+    ];
+    if (_matchOf(step, shown()) case final match?) return match;
+    final what = jsonEncode(step.name);
+    final hidden =
+        _matchOf(step, [
+          for (final match in matches)
+            if (match.offscreen) match,
+        ]) ??
+        (throw _Stopped('The control $what is not on screen.'));
+    final result = await _backend.direct(
+      window.hwnd,
+      browser: gaiaIsBrowser(window.exe),
+      control: (name: step.name!, type: step.type),
+      at: step.aim(_backend.frame(window.hwnd), hidden),
+      act: (
+        kind: GaiaDirectKind.reveal,
+        text: null,
+        direction: null,
+        amount: 0,
+        replace: false,
+      ),
+    );
+    if (result == null || result.miss == GaiaDirectMiss.busy) {
+      throw _Stopped(_stuck);
+    }
+    if (result.miss != null) {
+      throw _Stopped(
+        "The control $what is out of view, and Gaia couldn't scroll to it. "
+        'os_scroll toward it, then try again.',
+      );
+    }
+    final until = DateTime.now().add(_revealWait);
+    while (true) {
+      await Future<void>.delayed(_revealPoll);
+      active.throwIfStopped();
+      matches = await _matches(window, step);
+      if (_matchOf(step, shown()) case final match?) {
+        active.notes.add('scrolled $what into view');
+        return match;
+      }
+      if (DateTime.now().isAfter(until)) {
+        throw _Stopped(
+          'The control $what is still out of view after Gaia '
+          'scrolled to it.',
+        );
+      }
+    }
+  }
+
+  /// [step]'s control as it is now: the one at [at] where several match; null
+  /// when it's gone.
+  Future<GaiaControlMatch?> _fieldAt(
+    GaiaForegroundWindow window,
+    _Step step,
+    ({int x, int y}) at,
+  ) async {
+    final shown = [
+      for (final match in await _matches(window, step))
+        if (!match.offscreen) match,
+    ];
+    for (final match in shown) {
+      if (at.x >= match.left &&
+          at.x < match.right &&
+          at.y >= match.top &&
+          at.y < match.bottom) {
+        return match;
+      }
+    }
+    return shown.length == 1 ? shown.single : null;
+  }
+
+  /// A named field's text, as typed to replace it, read back
+  /// (GAIA_ROUTINES_HLD.md §15.5): what it holds if that's something else.
+  Future<void> _checkTyped(
+    GaiaForegroundWindow window,
+    _Step step,
+    ({int x, int y}) at,
+  ) async {
+    // Tab moves on to another field.
+    if (step.text!.contains('\t')) return;
+    await Future<void>.delayed(_settle);
+    final held = (await _fieldAt(window, step, at))?.text;
+    if (held == null || gaiaTypedMatches(step.text!, held)) return;
+    throw _Stopped(
+      '${jsonEncode(step.name)} holds ${jsonEncode(gaiaCut(held, 200))} after '
+      'typing, not the text sent. Read it, then type it again.',
+    );
+  }
+
+  /// An `os_pick` (GAIA_ROUTINES_HLD.md §15.3) of [step]'s option in [field],
+  /// at [at]: typed into, or clicked to open its list, the best option clicked,
+  /// and the field read back. Once more if it doesn't hold the option, then it
+  /// stops with what it holds and the options seen.
+  Future<void> _pick(
+    GaiaForegroundWindow window,
+    _Step step,
+    GaiaControlMatch field,
+    ({int x, int y}) at,
+    _Active active,
+    _Session? session,
+  ) async {
+    final option = step.text!;
+    final what = jsonEncode(step.name);
+    // A box lists what matches what's typed; anything else opens its list on a
+    // click.
+    final typed = field.type == 'Edit' || field.type == 'ComboBox';
+    final seen = <String>{};
+    String options() => seen.isEmpty
+        ? 'No options showed.'
+        : 'Options seen: ${seen.take(20).map(jsonEncode).join(', ')}.';
+    String? held;
+    for (var round = 0; round < 2; round++) {
+      await _click(window, step, at, plain: true);
+      await Future<void>.delayed(_settle);
+      if (typed) {
+        await _checkFocus(window);
+        active.throwIfStopped();
+        await _waitForModifiers(active);
+        _inFront(window);
+        _send(GaiaKeyChord.parse('Ctrl+A').events, active);
+        await _type(window, option, active);
+      }
+      final picked = await _option(
+        window,
+        step,
+        at,
+        seen,
+        active,
+        session,
+        enter: typed,
+      );
+      if (picked == null) {
+        final now = (await _fieldAt(window, step, at))?.text;
+        throw _Stopped(
+          [
+            'No option with ${jsonEncode(option)} showed for $what within '
+                '${_controlWait.inSeconds} seconds.',
+            if (now != null) 'It holds ${jsonEncode(gaiaCut(now, 200))}.',
+            options(),
+          ].join(' '),
+        );
+      }
+      await Future<void>.delayed(_settle);
+      held = (await _fieldAt(window, step, at))?.text;
+      // Gone or emptied, it shows its choice elsewhere: a button renamed for
+      // it, or a chip beside the box.
+      if (held == null || held.isEmpty) {
+        active.notes.add(
+          'picked ${jsonEncode(picked)} for $what, which shows it outside the '
+          'field, so read it to check',
+        );
+        return;
+      }
+      if (held.toLowerCase().contains(option.toLowerCase())) return;
+    }
+    throw _Stopped(
+      '$what holds ${jsonEncode(gaiaCut(held!, 200))} after picking '
+      '${jsonEncode(option)} twice. ${options()}',
+    );
+  }
+
+  /// Waits up to [_controlWait] for a list option with [step]'s option in its
+  /// name, and clicks the best ([gaiaBestOption]); its name, or null when none
+  /// showed. With [enter], a field still focused with none showing a fifth of
+  /// the way in gets Enter, once, from Gaia: some search fields run only on
+  /// it. An option under another window of the app's, as a browser's list for
+  /// a native select, is selected through UI Automation; one that can't be
+  /// gets that window, as Chrome's address popup, sent Esc, once
+  /// (GAIA_ROUTINES_HLD.md §15.3). Each name is added to [seen].
+  Future<String?> _option(
+    GaiaForegroundWindow window,
+    _Step step,
+    ({int x, int y}) at,
+    Set<String> seen,
+    _Active active,
+    _Session? session, {
+    required bool enter,
+  }) async {
+    final browser = gaiaIsBrowser(window.exe);
+    final started = DateTime.now();
+    var entered = !enter;
+    var escaped = false;
+    while (true) {
+      final items =
+          await _backend.listItems(window.hwnd, browser: browser) ??
+          (throw _Stopped(_stuck));
+      seen.addAll(items);
+      if (gaiaBestOption(step.text!, items) case final best?) {
+        final item = _Step(
+          action: _Action.click,
+          name: best,
+          type: 'ListItem',
+          x: null,
+          y: null,
+          button: 'left',
+          doubleClick: false,
+          direction: null,
+          amount: 0,
+          text: null,
+          keys: null,
+        );
+        final match = await _onScreen(window, item, active);
+        final point = item.aim(_backend.frame(window.hwnd), match);
+        final over = _rootAt(point.x, point.y);
+        if (over != window.hwnd &&
+            over != 0 &&
+            _backend.describe(over)?.pid == window.pid) {
+          // A browser's list for a native select is a window of its own, over
+          // the page, so its option is selected through UI Automation.
+          if (await _callDirect(window, item, point, active, session)) {
+            return best;
+          }
+          if (!escaped) {
+            escaped = true;
+            await _waitForModifiers(active);
+            _inFront(window);
+            _send(GaiaKeyChord.parse('Esc').events, active);
+            await Future<void>.delayed(_settle);
+            continue;
+          }
+        }
+        await _click(window, item, _pointOf(window, item, match), plain: true);
+        return best;
+      }
+      final waited = DateTime.now().difference(started);
+      if (waited >= _controlWait) return null;
+      if (!entered && waited >= _controlWait ~/ 5) {
+        entered = true;
+        // Only in the field: Enter elsewhere could send a form (§8.6).
+        if ((await _fieldAt(window, step, at))?.focused ?? false) {
+          await _waitForModifiers(active);
+          _inFront(window);
+          _send(GaiaKeyChord.parse('Enter').events, active);
+        }
+      }
+      await Future<void>.delayed(_listPoll);
+      active.throwIfStopped();
+    }
+  }
+
+  /// An `os_upload` (GAIA_ROUTINES_HLD.md §15.6): [step]'s path set in the
+  /// file dialog's File name box and its Open button pressed, both through UI
+  /// Automation, then up to [_controlWait] for the dialog to close; if it
+  /// doesn't, a stop with what it says.
+  Future<void> _upload(
+    GaiaForegroundWindow window,
+    _Step step,
+    _Active active,
+    _Session? session,
+  ) async {
+    for (final (action, name, types) in const [
+      (_Action.type, 'File name:', ['Edit']),
+      // A split button since Windows 11, and a button before: the drop-down
+      // buttons in the dialog's boxes are named "Open" too.
+      (_Action.click, 'Open', ['SplitButton', 'Button']),
+    ]) {
+      late _Step part;
+      GaiaControlMatch? match;
+      for (final type in types) {
+        part = _Step(
+          action: action,
+          name: name,
+          type: type,
+          x: null,
+          y: null,
+          button: 'left',
+          doubleClick: false,
+          direction: null,
+          amount: 0,
+          // The dialog takes only backslashes in a path.
+          text: step.text?.replaceAll('/', r'\'),
+          keys: null,
+        );
+        match = _matchOf(part, [
+          for (final match in await _matches(window, part))
+            if (!match.offscreen) match,
+        ]);
+        if (match != null) break;
+      }
+      if (match == null) {
+        throw _Stopped(
+          'There is no file dialog in front: ${window.app} has no '
+          '${jsonEncode(name)} ${action == _Action.type ? 'box' : 'button'}. Open '
+          'the dialog first.',
+        );
+      }
+      final at = part.aim(_backend.frame(window.hwnd), match);
+      if (!await _callDirect(window, part, at, active, session)) {
+        throw _Stopped(
+          "Gaia couldn't use the file dialog's ${jsonEncode(name)} "
+          '${action == _Action.type ? 'box' : 'button'}.',
+        );
+      }
+      active.throwIfStopped();
+    }
+    final until = DateTime.now().add(_controlWait);
+    while (_backend.describe(window.hwnd)?.pid == window.pid) {
+      if (DateTime.now().isAfter(until)) {
+        // A message about the file comes up in front of the dialog.
+        final front = _backend.foreground();
+        final said = await _backend.readText(
+          front != 0 && _backend.describe(front)?.pid == window.pid
+              ? front
+              : window.hwnd,
+        );
+        throw _Stopped(
+          'The file dialog is still open after '
+          '${_controlWait.inSeconds} seconds.'
+          '${said == null || said.isEmpty ? '' : ' It shows:\n${gaiaCut(said, 1000)}'}',
+        );
+      }
+      await Future<void>.delayed(_revealPoll);
+      active.throwIfStopped();
+    }
   }
 
   /// Plays [step]'s flash and waits its lead-in; whether there was one.
@@ -1483,6 +1863,7 @@ class GaiaOsControl {
           text: step.text,
           direction: step.direction,
           amount: step.amount,
+          replace: !step.append,
         ),
       );
     } finally {
@@ -2482,6 +2863,8 @@ class GaiaOsControl {
       'type' => _Action.type,
       'key' => _Action.key,
       'drag' => _Action.drag,
+      'pick' => _Action.pick,
+      'upload' => _Action.upload,
       _ => throw GaiaReadException('Unknown action: $action'),
     };
     if (parsed == _Action.drag) {
@@ -2510,7 +2893,18 @@ class GaiaOsControl {
       doubleClick: args['double'] == true,
       direction: args['direction'] as String?,
       amount: (args['amount'] as num?)?.toInt() ?? 3,
-      text: args['text'] as String?,
+      // An option to pick, or a path to upload (GAIA_ROUTINES_HLD.md §15.3,
+      // §15.6).
+      text:
+          switch (parsed) {
+                _Action.pick => args['option'],
+                _Action.upload => args['path'],
+                _ => args['text'],
+              }
+              as String?,
+      // Adds unless told not to; a routine's item chats replace by default
+      // (gaiaItemArguments).
+      append: args['append'] != false,
       keys: switch (parsed) {
         _Action.key => GaiaKeyChord.parse(args['keys'], windows: auto),
         _ => null,
@@ -2548,6 +2942,26 @@ class GaiaOsControl {
           throw GaiaReadException(
             'os_type takes at most $_maxText characters.',
           );
+        }
+      case _Action.pick:
+        if (step.name == null) {
+          throw GaiaReadException(
+            "os_pick needs the field's name, as os_read_screen shows it.",
+          );
+        }
+        final option = step.text;
+        if (option == null || option.trim().isEmpty) {
+          throw GaiaReadException('os_pick needs an option.');
+        }
+        if (option.length > _maxText || option.contains(RegExp(r'[\r\n\t]'))) {
+          throw GaiaReadException(
+            'An option is one line, at most $_maxText characters.',
+          );
+        }
+      case _Action.upload:
+        final path = step.text;
+        if (path == null || path.trim().isEmpty) {
+          throw GaiaReadException('os_upload needs a path.');
         }
       case _Action.key ||
           _Action.open ||
@@ -2719,7 +3133,19 @@ class _Active {
   }
 }
 
-enum _Action { click, scroll, type, key, open, focus, window, drag, clipboard }
+enum _Action {
+  click,
+  scroll,
+  type,
+  key,
+  open,
+  focus,
+  window,
+  drag,
+  clipboard,
+  pick,
+  upload,
+}
 
 class _Step {
   _Step({
@@ -2735,6 +3161,7 @@ class _Step {
     required this.text,
     required this.keys,
     this.anywhere = false,
+    this.append = false,
   }) : resolved = name == null,
        target = null,
        file = null,
@@ -2769,6 +3196,7 @@ class _Step {
        amount = 0,
        keys = null,
        anywhere = false,
+       append = false,
        resolved = true;
 
   final _Action action;
@@ -2803,6 +3231,10 @@ class _Step {
   /// A click at a point outside the target (§5.5).
   final bool anywhere;
 
+  /// Typing that adds to what a named field holds, rather than replacing it
+  /// (GAIA_ROUTINES_HLD.md §15.5).
+  final bool append;
+
   /// Its control was found as it stands now; always for one that names none.
   bool resolved;
   GaiaControlMatch? match;
@@ -2818,6 +3250,8 @@ class _Step {
       name != null && button == 'left' && !doubleClick && !anywhere,
     _Action.type => name != null && !text!.contains(RegExp(r'[\r\n\t]')),
     _Action.scroll => name != null || x == null,
+    // Only through UI Automation (GAIA_ROUTINES_HLD.md §15.6).
+    _Action.upload => true,
     _ => false,
   };
 
@@ -2900,6 +3334,12 @@ class _Step {
         'label': ?label,
       },
       _Action.type when aimed => {'kind': preview ? 'mark' : 'click', ...at},
+      _Action.pick => {
+        'kind': preview ? 'mark' : 'click',
+        ...at,
+        if (preview) ...?rect,
+        'label': ?label,
+      },
       _Action.type => {'kind': 'key', ..._rectOf(frame), 'label': 'Typing'},
       _Action.key => {'kind': 'key', ..._rectOf(frame), 'label': keys!.label},
       // A card marks where it starts. Run, its trail plays from `_drag`, once
@@ -2913,7 +3353,7 @@ class _Step {
       _Action.drag => null,
       // Its window's outline plays once it's up, or where it was.
       _Action.open || _Action.focus || _Action.window => null,
-      _Action.clipboard => null,
+      _Action.clipboard || _Action.upload => null,
     };
   }
 
@@ -2945,6 +3385,8 @@ class _Step {
     _Action.type =>
       'Type ${jsonEncode(text)} into ${aimed ? _target : 'what has focus'}',
     _Action.key => 'Press ${keys!.label}',
+    _Action.pick => 'Pick ${jsonEncode(text)} in $_target',
+    _Action.upload => 'Upload ${jsonEncode(text)} in the file dialog',
     _Action.open => 'Open $target',
     _Action.focus => 'Bring $target to the front',
     _Action.drag => 'Drag from $_end to ${to!._end}',
@@ -3014,6 +3456,59 @@ Map<String, Object?> _rectOf(
   'right': frame.left + frame.width,
   'bottom': frame.top + frame.height,
 };
+
+/// Of the controls a step's name matched, those it means (GAIA_ROUTINES_HLD.md
+/// §15.4, §15.7): those matched by their own name over those matched by a label
+/// or a cut-off name; and for a [field], typed into, not a Text when there's
+/// another, as a question's text and the box labelled by it.
+List<GaiaControlMatch> gaiaPreferredMatches(
+  List<GaiaControlMatch> matches, {
+  required bool field,
+}) {
+  final fields = [
+    for (final match in matches)
+      if (match.type != 'Text') match,
+  ];
+  final pool = field && fields.isNotEmpty ? fields : matches;
+  final exact = [
+    for (final match in pool)
+      if (match.exact) match,
+  ];
+  return exact.isEmpty ? pool : exact;
+}
+
+/// The one of a list's [items] to pick for [option] (GAIA_ROUTINES_HLD.md
+/// §15.3), ignoring case: the same text, else one starting with it, else the
+/// shortest with it in. Null when none has it.
+String? gaiaBestOption(String option, List<String> items) {
+  final wanted = option.trim().toLowerCase();
+  String? best;
+  for (final item in items) {
+    final name = item.trim().toLowerCase();
+    if (name == wanted) return item;
+    if (!name.contains(wanted)) continue;
+    final than = best?.trim().toLowerCase();
+    if (than == null ||
+        (name.startsWith(wanted) && !than.startsWith(wanted)) ||
+        (name.startsWith(wanted) == than.startsWith(wanted) &&
+            name.length < than.length)) {
+      best = item;
+    }
+  }
+  return best;
+}
+
+/// Whether a field [held] what was typed into it, [typed] (GAIA_ROUTINES_HLD.md
+/// §15.5), spaces and line breaks aside. A phone number, which a field may
+/// reformat, by its digits.
+bool gaiaTypedMatches(String typed, String held) {
+  String spaced(String text) => text.trim().replaceAll(RegExp(r'\s+'), ' ');
+  if (spaced(typed) == spaced(held)) return true;
+  String digits(String text) => text.replaceAll(RegExp('[^0-9]'), '');
+  return RegExp(r'^[0-9+\-().\s]+$').hasMatch(typed) &&
+      digits(typed).length >= 7 &&
+      digits(typed) == digits(held);
+}
 
 /// [text] as one press and release per character: Enter and Tab as their keys,
 /// which many apps want, the rest as UTF-16 units, which no keyboard layout or
@@ -3328,6 +3823,19 @@ class _Win32InputBackend implements GaiaInputBackend {
       ),
     );
   }
+
+  @override
+  Future<List<String>?> listItems(int hwnd, {required bool browser}) =>
+      gaiaScreenWork<List<String>?>(
+        hwnd,
+        () => gaiaListItems(hwnd, browser: browser),
+      );
+
+  @override
+  Future<String?> readText(int hwnd) => gaiaScreenWork<String?>(
+    hwnd,
+    () => gaiaReadWindow(hwnd, browser: false)?.tree,
+  );
 
   @override
   bool cloaked(int hwnd) => gaiaWindowCloaked(hwnd);

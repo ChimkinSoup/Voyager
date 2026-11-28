@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:uuid/uuid.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
+import 'package:voyager/features/gaia/companion/gaia_routines.dart';
 import 'package:voyager/features/gaia/tools/gaia_mcp.dart';
 import 'package:voyager/features/gaia/tools/gaia_proposals.dart';
 
@@ -125,6 +126,7 @@ class GaiaChatTools implements GaiaTurnTools, GaiaResultKeeper {
     this.onActivity,
     this.resume,
     this.onResult,
+    this.routine,
     this.hold = kGaiaCardHold,
   });
 
@@ -162,6 +164,10 @@ class GaiaChatTools implements GaiaTurnTools, GaiaResultKeeper {
   final GaiaControlHost control;
   final bool Function() aborted;
   final Duration hold;
+
+  /// A routine's item turn's gate (GAIA_ROUTINES_HLD.md §8.3 to §8.6, §14):
+  /// every call goes through it. Null outside an item chat.
+  final GaiaRoutineGate? routine;
 
   static const _aborted = GaiaToolResult(
     text: 'aborted: Gaia is aborted.',
@@ -256,6 +262,30 @@ class GaiaChatTools implements GaiaTurnTools, GaiaResultKeeper {
     Map<String, Object?> arguments,
   ) async {
     if (aborted()) return _aborted;
+    final routine = this.routine;
+    if (isGaiaRoutineTool(name)) {
+      return routine == null
+          ? GaiaToolResult(
+              text: "$name is only for a routine's item chats.",
+              isError: true,
+            )
+          : routine.call(name, arguments);
+    }
+    if (routine == null) return _call(name, arguments);
+    if (await routine.refuse(name, arguments) case final refusal?) {
+      return refusal;
+    }
+    return routine.ran(
+      name,
+      arguments,
+      await _call(name, gaiaItemArguments(name, arguments)),
+    );
+  }
+
+  Future<GaiaToolResult> _call(
+    String name,
+    Map<String, Object?> arguments,
+  ) async {
     if (name == 'ask_user') return _ask(arguments);
     if (kGaiaProposalTools.containsKey(name)) return _propose(name, arguments);
     if (isGaiaOsControl(name, arguments)) return _control(name, arguments);
@@ -668,6 +698,13 @@ class GaiaChatTools implements GaiaTurnTools, GaiaResultKeeper {
     // second card in front of it.
     if (tool.startsWith('mcp__${kGaiaMcpServer}__')) {
       return (allow: true, message: '');
+    }
+    // An item chat has no shell, file edits or web tools, whatever the hand
+    // (GAIA_ROUTINES_HLD.md §14).
+    if (routine case final routine?) {
+      return routine.permits(tool, input)
+          ? (allow: true, message: '')
+          : (allow: false, message: "Item chats can't use $tool.");
     }
     // Read now, so a chat taken out of Auto mid-turn asks again (§5.7). The
     // activity card still shows what ran.

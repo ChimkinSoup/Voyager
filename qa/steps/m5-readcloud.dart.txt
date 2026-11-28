@@ -1,0 +1,3 @@
+final repo = c.read(syncRepositoryProvider);
+final d = await repo.getDocument('journal_entries', 'm5-seed-38');
+debugPrint('M5 CLOUD v' + d!['version'].toString() + ' body ' + d['body'].toString());

@@ -10,7 +10,8 @@ import 'package:window_manager/window_manager.dart';
 /// The companion window's modes (GAIA_HLD.md §3.3), the overlay that
 /// covers a monitor for a region capture's crop (§3.2), and pick-up mode's
 /// "selecting" pill (§15.3).
-enum GaiaMode { small, large, window, overlay, pickUp }
+/// [panel] is a routine run's side panel (GAIA_ROUTINES_HLD.md §11).
+enum GaiaMode { small, large, window, overlay, pickUp, panel }
 
 /// A window frame in physical pixels.
 typedef GaiaFrame = ({int left, int top, int width, int height});
@@ -21,6 +22,9 @@ const _smallSize = Size(560, 720);
 const _largeSize = Size(980, 760);
 const _windowSize = Size(1200, 820);
 const _pickUpSize = Size(460, 48);
+
+/// The routine panel's width; it's as tall as the work area.
+const _panelWidth = 340.0;
 
 /// How far the user can shrink any mode: the Gaia window's sidebar plus a
 /// usable chat. No larger than [_smallSize], so it never clamps a mode.
@@ -148,7 +152,9 @@ class GaiaWindow {
     bool activate = true,
   }) async {
     final hwnd = _hwnd;
-    final focusless = mode == GaiaMode.pickUp || !activate;
+    // The routine panel never takes the run's foreground (§11.1).
+    final focusless =
+        mode == GaiaMode.pickUp || mode == GaiaMode.panel || !activate;
     final moving = frame != null || (fullScreen ?? _fullScreen) != _fullScreen;
     // Already up in this mode, as a hotkey pressed again finds it: only
     // brought to the front. Going through the hide and re-show would flash.
@@ -165,7 +171,7 @@ class GaiaWindow {
     final back = _cameFrom;
     behind = behind && IsWindowVisible(back) != 0 && IsIconic(back) == 0;
     // The chat's minimum size would hold the pill at the size of one.
-    final unsized = mode == GaiaMode.pickUp;
+    final unsized = mode == GaiaMode.pickUp || mode == GaiaMode.panel;
     if (unsized != _minimumOff) {
       _minimumOff = unsized;
       await windowManager.setMinimumSize(
@@ -457,16 +463,23 @@ class GaiaWindow {
         // Always given its monitor's frame.
         GaiaMode.overlay => _largeSize,
         GaiaMode.pickUp => _pickUpSize,
+        GaiaMode.panel => const Size(_panelWidth, 0),
       };
       final width = (size.width * scale).round().clamp(1, workWidth);
-      final height = (size.height * scale).round().clamp(1, workHeight);
-      final left = work.left + (workWidth - width) ~/ 2;
+      final height = mode == GaiaMode.panel
+          ? workHeight
+          : (size.height * scale).round().clamp(1, workHeight);
+      // The routine panel docks to the right edge (§11.1).
+      final left = mode == GaiaMode.panel
+          ? work.right - width
+          : work.left + (workWidth - width) ~/ 2;
       // The small floater sits in the upper third, out of the way of what
       // the user was looking at, and the pick-up pill at the very top; the
       // others are centred.
       final top = switch (mode) {
         GaiaMode.small => work.top + (workHeight - height) ~/ 4,
         GaiaMode.pickUp => work.top + (16 * scale).round(),
+        GaiaMode.panel => work.top,
         _ => work.top + (workHeight - height) ~/ 2,
       };
       return (left: left, top: top, width: width, height: height);
@@ -772,6 +785,20 @@ class GaiaWindow {
       free(owner);
       free(className);
     }
+  }
+}
+
+/// How long since the user's last keyboard or mouse input anywhere in the
+/// session (GAIA_ROUTINES_HLD.md §9.3).
+Duration gaiaUserIdle() {
+  final info = calloc<LASTINPUTINFO>()..ref.cbSize = sizeOf<LASTINPUTINFO>();
+  try {
+    if (GetLastInputInfo(info) == 0) return Duration.zero;
+    return Duration(
+      milliseconds: (GetTickCount() - info.ref.dwTime).toUnsigned(32),
+    );
+  } finally {
+    free(info);
   }
 }
 

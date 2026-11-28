@@ -184,6 +184,22 @@ void main() {
       expect(find.text('Flag as misspelling…'), findsNothing);
     });
 
+    testWidgets('a Shift slip offers its fix but not Add to dictionary', (
+      tester,
+    ) async {
+      // AUTOCORRECT.md §4.7: `never` is already known, so adding it does nothing.
+      await pumpField(
+        tester,
+        text: 'NEver mind',
+        dictionary: const {'never', 'mind'},
+      );
+      await rightClick(tester);
+
+      expect(find.text('Never'), findsOneWidget);
+      expect(find.text('Add to dictionary'), findsNothing);
+      expect(find.text('Flag as misspelling…'), findsNothing);
+    });
+
     testWidgets('a flagged word gets Stop flagging and its pair first', (
       tester,
     ) async {

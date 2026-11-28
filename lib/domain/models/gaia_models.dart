@@ -166,15 +166,21 @@ GaiaAccount gaiaCurrentAccount(
 /// How much model a message wants (§7.1), each pointing at an agent.
 enum GaiaTier {
   quick('Quick', '/quick'),
-  standard('Standard', '/std'),
+  standard('Standard', '/standard', aliases: {'std'}),
   deep('Deep', '/deep');
 
-  const GaiaTier(this.label, this.command);
+  const GaiaTier(this.label, this.command, {this.aliases = const {}});
 
   final String label;
 
   /// Its inline command (§7.3).
   final String command;
+
+  /// Other names its command goes by, without the slash.
+  final Set<String> aliases;
+
+  /// [command] without its slash, and [aliases]: every `/word` it takes.
+  Set<String> get names => {command.substring(1), ...aliases};
 }
 
 /// A configured model on an adapter (§2), e.g. "Sonnet 5.5 via Claude Code".
@@ -3499,6 +3505,517 @@ String _memoryTag(String tag) => tag
     .trim()
     .toLowerCase()
     .replaceAll(RegExp(r'\s+'), '-');
+
+/// How a routine's items end at the submit button (GAIA_ROUTINES_HLD.md
+/// §5.1): [auto] submits when the gate passes (§8.6), [review] always stops
+/// there.
+enum GaiaRoutineSubmit { auto, review }
+
+/// A saved set of instructions Gaia runs over a list of items
+/// (GAIA_ROUTINES_HLD.md §5.1).
+class GaiaRoutine extends SoftDeletable {
+  const GaiaRoutine({
+    required super.id,
+    required super.createdAt,
+    required super.updatedAt,
+    super.version,
+    super.deletedAt,
+    required this.name,
+    required this.instructions,
+    required this.projectId,
+    this.materials = kGaiaRoutineMaterials,
+    this.uploads = kGaiaRoutineUploads,
+    this.skipRules = '',
+    this.submit = GaiaRoutineSubmit.review,
+    this.tier = GaiaTier.standard,
+    this.budgetCalls = 80,
+    this.budgetMinutes = 15,
+    this.budgetContext = 400000,
+    this.googleAccount,
+    this.domains = kGaiaRoutineDomains,
+    this.jobSeasonId,
+    this.jobStage = 'Applied',
+    this.tokenCap = 1000000,
+    this.wrapAt = 0.95,
+  });
+
+  /// Unique: `/routine <name>` finds it.
+  final String name;
+
+  /// Markdown: what to do with one item.
+  final String instructions;
+
+  /// The project whose folder holds the materials; item chats go in it.
+  final String projectId;
+
+  /// File names in the project folder, inlined into every item's prompt.
+  final List<String> materials;
+
+  /// File names in the project folder Gaia may upload.
+  final List<String> uploads;
+
+  /// Markdown list, checked against the posting first (§8.3).
+  final String skipRules;
+  final GaiaRoutineSubmit submit;
+
+  /// The tier item turns run on.
+  final GaiaTier tier;
+
+  /// Per item: tool calls, minutes, and the most context (§8.5).
+  final int budgetCalls;
+  final int budgetMinutes;
+  final int budgetContext;
+
+  /// The address to pick in Google's account chooser (§9.4).
+  final String? googleAccount;
+
+  /// Hosts an item may go to besides its own (§14).
+  final List<String> domains;
+
+  /// Where tracker entries are filed (§13).
+  final String? jobSeasonId;
+  final String jobStage;
+
+  /// Per run: input, output and cache-write tokens (§8.8.1).
+  final int tokenCap;
+
+  /// The share of any plan window where a run wraps up (§8.8.2).
+  final double wrapAt;
+
+  GaiaRoutine copyWith({
+    String? name,
+    String? instructions,
+    String? projectId,
+    List<String>? materials,
+    List<String>? uploads,
+    String? skipRules,
+    GaiaRoutineSubmit? submit,
+    GaiaTier? tier,
+    int? budgetCalls,
+    int? budgetMinutes,
+    int? budgetContext,
+    String? googleAccount,
+    bool clearGoogleAccount = false,
+    List<String>? domains,
+    String? jobStage,
+    int? tokenCap,
+    double? wrapAt,
+    DateTime? deletedAt,
+  }) => GaiaRoutine(
+    id: id,
+    createdAt: createdAt,
+    updatedAt: utcNow(),
+    version: version + 1,
+    deletedAt: deletedAt ?? this.deletedAt,
+    name: name ?? this.name,
+    instructions: instructions ?? this.instructions,
+    projectId: projectId ?? this.projectId,
+    materials: materials ?? this.materials,
+    uploads: uploads ?? this.uploads,
+    skipRules: skipRules ?? this.skipRules,
+    submit: submit ?? this.submit,
+    tier: tier ?? this.tier,
+    budgetCalls: budgetCalls ?? this.budgetCalls,
+    budgetMinutes: budgetMinutes ?? this.budgetMinutes,
+    budgetContext: budgetContext ?? this.budgetContext,
+    googleAccount: clearGoogleAccount
+        ? null
+        : (googleAccount ?? this.googleAccount),
+    domains: domains ?? this.domains,
+    jobSeasonId: jobSeasonId,
+    jobStage: jobStage ?? this.jobStage,
+    tokenCap: tokenCap ?? this.tokenCap,
+    wrapAt: wrapAt ?? this.wrapAt,
+  );
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'name': name,
+    'instructions': instructions,
+    'projectId': projectId,
+    'materials': materials,
+    'uploads': uploads,
+    'skipRules': skipRules,
+    'submit': submit.name,
+    'tier': tier.name,
+    'budgetCalls': budgetCalls,
+    'budgetMinutes': budgetMinutes,
+    'budgetContext': budgetContext,
+    'googleAccount': googleAccount,
+    'domains': domains,
+    'jobSeasonId': jobSeasonId,
+    'jobStage': jobStage,
+    'tokenCap': tokenCap,
+    'wrapAt': wrapAt,
+    'createdAt': createdAt.toIso8601String(),
+    'updatedAt': updatedAt.toIso8601String(),
+    'version': version,
+    'deletedAt': deletedAt?.toIso8601String(),
+  };
+
+  factory GaiaRoutine.fromJson(Map<String, Object?> json) {
+    final createdAt = DateTime.parse(json['createdAt']! as String);
+    List<String> strings(Object? value, List<String> or) =>
+        value is List ? [for (final item in value) '$item'] : or;
+    int number(String key, int or) => (json[key] as num?)?.toInt() ?? or;
+    return GaiaRoutine(
+      id: json['id']! as String,
+      name: json['name'] as String? ?? '',
+      instructions: json['instructions'] as String? ?? '',
+      projectId: json['projectId'] as String? ?? '',
+      materials: strings(json['materials'], kGaiaRoutineMaterials),
+      uploads: strings(json['uploads'], kGaiaRoutineUploads),
+      skipRules: json['skipRules'] as String? ?? '',
+      submit:
+          GaiaRoutineSubmit.values
+              .where((s) => s.name == json['submit'])
+              .firstOrNull ??
+          GaiaRoutineSubmit.review,
+      tier:
+          GaiaTier.values.where((t) => t.name == json['tier']).firstOrNull ??
+          GaiaTier.standard,
+      budgetCalls: number('budgetCalls', 80),
+      budgetMinutes: number('budgetMinutes', 15),
+      budgetContext: number('budgetContext', 400000),
+      googleAccount: json['googleAccount'] as String?,
+      domains: strings(json['domains'], kGaiaRoutineDomains),
+      jobSeasonId: json['jobSeasonId'] as String?,
+      jobStage: json['jobStage'] as String? ?? 'Applied',
+      tokenCap: number('tokenCap', 1000000),
+      wrapAt: (json['wrapAt'] as num?)?.toDouble() ?? 0.95,
+      createdAt: createdAt,
+      updatedAt: _date(json['updatedAt']) ?? createdAt,
+      version: (json['version'] as num?)?.toInt() ?? 0,
+      deletedAt: _date(json['deletedAt']),
+    );
+  }
+}
+
+const kGaiaRoutineMaterials = ['profile.md', 'answers.md'];
+const kGaiaRoutineUploads = ['resume.pdf'];
+
+/// Applicant-tracking sites an item may reach from its own (§14).
+const kGaiaRoutineDomains = [
+  'greenhouse.io',
+  'lever.co',
+  'ashbyhq.com',
+  'myworkdayjobs.com',
+  'myworkdaysite.com',
+  'workday.com',
+  'icims.com',
+  'smartrecruiters.com',
+  'jobvite.com',
+  'eightfold.ai',
+  'taleo.net',
+  'successfactors.com',
+  'accounts.google.com',
+];
+
+enum GaiaRunMode { unattended, attended }
+
+/// [done] ran every item; [ended] was ended before that (§5.2).
+enum GaiaRunState { running, paused, done, ended }
+
+enum GaiaRunItemStatus {
+  waiting,
+  running,
+  submitted,
+  ready,
+  needsYou,
+  skipped,
+  failed,
+}
+
+/// One item of a run (GAIA_ROUTINES_HLD.md §5.2).
+class GaiaRunItem {
+  const GaiaRunItem({
+    required this.url,
+    this.status = GaiaRunItemStatus.waiting,
+    this.reason,
+    this.chatId,
+    this.posting,
+    this.outcome,
+    this.notes,
+    this.screenshot,
+    this.attempts = 0,
+    this.submittedByYou = false,
+  });
+
+  final String url;
+  final GaiaRunItemStatus status;
+
+  /// Why it ended as it did, one line.
+  final String? reason;
+
+  /// Its item chat, once started.
+  final String? chatId;
+
+  /// The `report_posting` and `report_outcome` payloads (§8.3, §8.4).
+  final Map<String, Object?>? posting;
+  final Map<String, Object?>? outcome;
+  final String? notes;
+
+  /// The final screenshot's file on the device that ran it (§8.4).
+  final String? screenshot;
+  final int attempts;
+  final bool submittedByYou;
+
+  /// The company and role, or the host until they're known.
+  String get label {
+    final from = outcome ?? posting;
+    final company = from?['company'];
+    final role = from?['role'];
+    if (company is String && company.isNotEmpty) {
+      return role is String && role.isNotEmpty ? '$company — $role' : company;
+    }
+    return Uri.tryParse(url)?.host ?? url;
+  }
+
+  GaiaRunItem copyWith({
+    GaiaRunItemStatus? status,
+    String? reason,
+    bool clearReason = false,
+    String? chatId,
+    Map<String, Object?>? posting,
+    Map<String, Object?>? outcome,
+    String? notes,
+    String? screenshot,
+    int? attempts,
+    bool? submittedByYou,
+  }) => GaiaRunItem(
+    url: url,
+    status: status ?? this.status,
+    reason: clearReason ? null : (reason ?? this.reason),
+    chatId: chatId ?? this.chatId,
+    posting: posting ?? this.posting,
+    outcome: outcome ?? this.outcome,
+    notes: notes ?? this.notes,
+    screenshot: screenshot ?? this.screenshot,
+    attempts: attempts ?? this.attempts,
+    submittedByYou: submittedByYou ?? this.submittedByYou,
+  );
+
+  Map<String, Object?> toJson() => {
+    'url': url,
+    'status': status.name,
+    'reason': ?reason,
+    'chatId': ?chatId,
+    'posting': ?posting,
+    'outcome': ?outcome,
+    'notes': ?notes,
+    'screenshot': ?screenshot,
+    'attempts': attempts,
+    if (submittedByYou) 'submittedByYou': true,
+  };
+
+  factory GaiaRunItem.fromJson(Map<String, Object?> json) => GaiaRunItem(
+    url: json['url']! as String,
+    status:
+        GaiaRunItemStatus.values
+            .where((s) => s.name == json['status'])
+            .firstOrNull ??
+        GaiaRunItemStatus.waiting,
+    reason: json['reason'] as String?,
+    chatId: json['chatId'] as String?,
+    posting: (json['posting'] as Map?)?.cast<String, Object?>(),
+    outcome: (json['outcome'] as Map?)?.cast<String, Object?>(),
+    notes: json['notes'] as String?,
+    screenshot: json['screenshot'] as String?,
+    attempts: (json['attempts'] as num?)?.toInt() ?? 0,
+    submittedByYou: json['submittedByYou'] == true,
+  );
+}
+
+/// What a run spent (§5.2): tokens summed from its item turns, and each
+/// account's plan use at its start and end, by account key, as
+/// `{'fiveHour': share, 'weekly': share}`.
+class GaiaRunUsage {
+  const GaiaRunUsage({
+    this.input = 0,
+    this.output = 0,
+    this.cacheRead = 0,
+    this.cacheWrite = 0,
+    this.planStart = const {},
+    this.planEnd = const {},
+  });
+
+  final int input;
+  final int output;
+  final int cacheRead;
+  final int cacheWrite;
+  final Map<String, Map<String, double>> planStart;
+  final Map<String, Map<String, double>> planEnd;
+
+  /// What the token cap counts: not cache reads (§8.8.1).
+  int get counted => input + output + cacheWrite;
+
+  GaiaRunUsage copyWith({
+    int? input,
+    int? output,
+    int? cacheRead,
+    int? cacheWrite,
+    Map<String, Map<String, double>>? planStart,
+    Map<String, Map<String, double>>? planEnd,
+  }) => GaiaRunUsage(
+    input: input ?? this.input,
+    output: output ?? this.output,
+    cacheRead: cacheRead ?? this.cacheRead,
+    cacheWrite: cacheWrite ?? this.cacheWrite,
+    planStart: planStart ?? this.planStart,
+    planEnd: planEnd ?? this.planEnd,
+  );
+
+  Map<String, Object?> toJson() => {
+    'input': input,
+    'output': output,
+    'cacheRead': cacheRead,
+    'cacheWrite': cacheWrite,
+    'planStart': planStart,
+    'planEnd': planEnd,
+  };
+
+  factory GaiaRunUsage.fromJson(Object? json) {
+    if (json is! Map) return const GaiaRunUsage();
+    int count(String key) => (json[key] as num?)?.toInt() ?? 0;
+    Map<String, Map<String, double>> plan(Object? value) => {
+      if (value is Map)
+        for (final MapEntry(:key, :value) in value.entries)
+          if (value is Map)
+            '$key': {
+              for (final MapEntry(:key, :value) in value.entries)
+                if (value is num) '$key': value.toDouble(),
+            },
+    };
+    return GaiaRunUsage(
+      input: count('input'),
+      output: count('output'),
+      cacheRead: count('cacheRead'),
+      cacheWrite: count('cacheWrite'),
+      planStart: plan(json['planStart']),
+      planEnd: plan(json['planEnd']),
+    );
+  }
+}
+
+/// One routine applied to a list of items (GAIA_ROUTINES_HLD.md §5.2),
+/// written only by the device running it.
+class GaiaRoutineRun extends SoftDeletable {
+  const GaiaRoutineRun({
+    required super.id,
+    required super.createdAt,
+    required super.updatedAt,
+    super.version,
+    super.deletedAt,
+    required this.routineId,
+    required this.deviceId,
+    this.chatId,
+    this.mode = GaiaRunMode.unattended,
+    this.state = GaiaRunState.running,
+    this.items = const [],
+    required this.startedAt,
+    this.endedAt,
+    this.usage = const GaiaRunUsage(),
+    this.stopReason,
+    this.tokenCap,
+  });
+
+  final String routineId;
+  final String deviceId;
+
+  /// The launch chat, where its card lives; null for a new chat's.
+  final String? chatId;
+  final GaiaRunMode mode;
+  final GaiaRunState state;
+  final List<GaiaRunItem> items;
+  final DateTime startedAt;
+  final DateTime? endedAt;
+  final GaiaRunUsage usage;
+
+  /// Why it paused or ended.
+  final String? stopReason;
+
+  /// A cap raised for this run only (§8.8.1); the routine's otherwise.
+  final int? tokenCap;
+
+  GaiaRoutineRun copyWith({
+    GaiaRunState? state,
+    List<GaiaRunItem>? items,
+    DateTime? endedAt,
+    bool clearEndedAt = false,
+    GaiaRunUsage? usage,
+    String? stopReason,
+    bool clearStopReason = false,
+    int? tokenCap,
+    DateTime? deletedAt,
+  }) => GaiaRoutineRun(
+    id: id,
+    createdAt: createdAt,
+    updatedAt: utcNow(),
+    version: version + 1,
+    deletedAt: deletedAt ?? this.deletedAt,
+    routineId: routineId,
+    deviceId: deviceId,
+    chatId: chatId,
+    mode: mode,
+    state: state ?? this.state,
+    items: items ?? this.items,
+    startedAt: startedAt,
+    endedAt: clearEndedAt ? null : (endedAt ?? this.endedAt),
+    usage: usage ?? this.usage,
+    stopReason: clearStopReason ? null : (stopReason ?? this.stopReason),
+    tokenCap: tokenCap ?? this.tokenCap,
+  );
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'routineId': routineId,
+    'deviceId': deviceId,
+    'chatId': chatId,
+    'mode': mode.name,
+    'state': state.name,
+    'items': [for (final item in items) item.toJson()],
+    'startedAt': startedAt.toIso8601String(),
+    'endedAt': endedAt?.toIso8601String(),
+    'usage': usage.toJson(),
+    'stopReason': stopReason,
+    'tokenCap': tokenCap,
+    'createdAt': createdAt.toIso8601String(),
+    'updatedAt': updatedAt.toIso8601String(),
+    'version': version,
+    'deletedAt': deletedAt?.toIso8601String(),
+  };
+
+  factory GaiaRoutineRun.fromJson(Map<String, Object?> json) {
+    final createdAt = DateTime.parse(json['createdAt']! as String);
+    return GaiaRoutineRun(
+      id: json['id']! as String,
+      routineId: json['routineId'] as String? ?? '',
+      deviceId: json['deviceId'] as String? ?? '',
+      chatId: json['chatId'] as String?,
+      mode:
+          GaiaRunMode.values.where((m) => m.name == json['mode']).firstOrNull ??
+          GaiaRunMode.unattended,
+      state:
+          GaiaRunState.values
+              .where((s) => s.name == json['state'])
+              .firstOrNull ??
+          GaiaRunState.paused,
+      items: [
+        for (final item in json['items'] as List? ?? const [])
+          if (item is Map) GaiaRunItem.fromJson(item.cast()),
+      ],
+      startedAt: _date(json['startedAt']) ?? createdAt,
+      endedAt: _date(json['endedAt']),
+      usage: GaiaRunUsage.fromJson(json['usage']),
+      stopReason: json['stopReason'] as String?,
+      tokenCap: (json['tokenCap'] as num?)?.toInt(),
+      createdAt: createdAt,
+      updatedAt: _date(json['updatedAt']) ?? createdAt,
+      version: (json['version'] as num?)?.toInt() ?? 0,
+      deletedAt: _date(json['deletedAt']),
+    );
+  }
+}
 
 DateTime? _date(Object? value) =>
     value is String ? DateTime.parse(value) : null;

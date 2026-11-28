@@ -82,6 +82,11 @@ void main() {
       HotKeyModifier.control,
       HotKeyModifier.alt,
     ]);
+    // The same combo parsed again unregisters what it registered.
+    expect(
+      parseGaiaCombo('Ctrl+Alt+Shift+R')!.hotKey.identifier,
+      parseGaiaCombo('ctrl+alt+shift+r')!.hotKey.identifier,
+    );
     expect(parseGaiaCombo('Shift+K')!.hasModifier, isFalse);
     expect('${parseGaiaCombo('Win+F5')}', 'Win+F5');
     expect('${parseGaiaCombo('Alt+7')}', 'Alt+7');

@@ -158,4 +158,77 @@ void main() {
     }
     expect(shown(), 1);
   });
+
+  // BUG-443: `/routine`'s card floats over where the line and its keys sit.
+  testWidgets('the line and its keys give way to the routine card', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1000, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('window_manager'),
+      (call) async => false,
+    );
+    late FakeGaiaPipe companion;
+    final now = DateTime.utc(2026, 11, 27);
+    final routine = GaiaRoutine(
+      id: 'r1',
+      createdAt: now,
+      updatedAt: now,
+      name: 'Job applier',
+      instructions: 'Apply.',
+      projectId: 'p1',
+      skipRules: '',
+    );
+    final main = FakeGaiaPipe.main();
+    main
+      ..onLaunch = (end, _) {
+        companion = end;
+      }
+      ..onRequest = (method, params) async => switch (method) {
+        'hello' => {
+          'aborted': false,
+          'accent': 0xFF7C9EFF,
+          'deviceId': 'laptop',
+          'settings': GaiaSettings.initial()
+              .copyWith(userName: 'Juno')
+              .toJson(),
+        },
+        'chats' || 'messages' || 'btws' || 'drafts' || 'runs' => <Object?>[],
+        'routines' => [routine.toJson()],
+        _ => null,
+      };
+    await main.startCompanion();
+    final controller = GaiaController(
+      pipe: companion,
+      window: FakeGaiaWindow(),
+      runners: {kGaiaClaudeCodeAdapter: FakeClaudeRunner()},
+      cliVersions: {kGaiaClaudeCodeAdapter: () async => (2, 1, 310)},
+      exit: (_) {},
+    );
+    await tester.runAsync(() async {
+      await controller.start();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    // On screen, so its animations run.
+    controller.onScreen.value = true;
+    await tester.pumpWidget(GaiaApp(controller: controller));
+    await tester.pump(const Duration(seconds: 1));
+    final line = controller.greetingFor(GaiaDraft.newChatId);
+    expect(find.text(line), findsOneWidget);
+    expect(find.text('paste an image'), findsOneWidget);
+
+    await tester.runAsync(() => controller.openRoutineLaunch('job applier'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('Routine: Job applier'), findsOneWidget);
+    expect(find.text(line), findsNothing);
+    expect(find.text('paste an image'), findsNothing);
+
+    controller.closeRoutineLaunch();
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text(line), findsOneWidget);
+  });
 }

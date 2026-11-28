@@ -83,11 +83,16 @@ void main() {
         'os_type',
         'os_key',
         'os_steps',
+        'os_pick',
+        'os_upload',
         'os_open',
         'os_focus',
         'os_window',
         'os_drag',
         'os_clipboard',
+        'report_posting',
+        'routine_submit_check',
+        'report_outcome',
       ]);
       for (final tool in tools) {
         expect(tool['name'], matches(RegExp(r'^[a-zA-Z0-9_-]{1,64}$')));
@@ -831,7 +836,7 @@ void main() {
       });
 
       test(
-        'read_after is on by default for click, type, key and steps',
+        'read_after is on by default for click, type, key, steps, pick and upload',
         () async {
           planAuto = true;
           runAnswer = (_) => {'ran': 2, 'steps': steps};
@@ -842,7 +847,7 @@ void main() {
               endsWith('The screen now:\nscreen os_read_screen'),
             );
           }
-          expect(screenReads, hasLength(4));
+          expect(screenReads, hasLength(kGaiaReadAfterByDefault.length));
           final off = await tools().call('os_key', {
             'keys': 'A',
             'read_after': false,
@@ -850,7 +855,7 @@ void main() {
           expect(off.text, isNot(contains('os_read_screen')));
           final scroll = await tools().call('os_scroll', const {});
           expect(scroll.text, isNot(contains('os_read_screen')));
-          expect(screenReads, hasLength(4));
+          expect(screenReads, hasLength(kGaiaReadAfterByDefault.length));
         },
       );
 

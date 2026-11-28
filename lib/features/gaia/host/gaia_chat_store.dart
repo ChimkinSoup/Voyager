@@ -454,6 +454,15 @@ class GaiaChatStore {
 
   Future<List<GaiaProject>> projects() => _repository.listProjects();
 
+  /// Routines and their runs (GAIA_ROUTINES_HLD.md §5), tombstones left out.
+  Future<List<GaiaRoutine>> routines() => _repository.listRoutines();
+  Future<List<GaiaRoutineRun>> runs() => _repository.listRuns();
+
+  /// Saves a routine or run as the companion has it now.
+  Future<void> putRoutine(GaiaRoutine routine) =>
+      _serial(() => _repository.upsertRoutine(routine));
+  Future<void> putRun(GaiaRoutineRun run) => _serial(() => _repository.upsertRun(run));
+
   /// Saves a project the companion just made. One already stored is left
   /// as it is.
   Future<void> createProject(GaiaProject project) => _serial(() async {

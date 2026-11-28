@@ -171,6 +171,13 @@ Future<void> gaiaCompanionMain({bool dev = false}) async {
       ),
     ),
   );
+  // A routine's item turns count against its token cap
+  // (GAIA_ROUTINES_HLD.md §8.8.1).
+  final countTokens = gaiaTokensUsed;
+  gaiaTokensUsed = (tokensFor, byModel) {
+    countTokens?.call(tokensFor, byModel);
+    controller.routineRunner.tokens(tokensFor.chatId, byModel);
+  };
   // Diagnostic for the to-bottom button stuck on screen: its animations
   // stop while this is off.
   controller.onScreen.addListener(

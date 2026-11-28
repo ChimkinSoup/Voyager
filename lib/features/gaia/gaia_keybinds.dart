@@ -18,7 +18,10 @@ enum GaiaKeybind {
   screen('Screenshot the screen', 'Ctrl+Alt+Shift+S'),
   selection('Quote the selection', 'Ctrl+Alt+Q'),
   pickUp('Pick up a selection', 'Ctrl+Alt+Shift+Q'),
-  abort('Abort', 'Ctrl+Alt+Backspace');
+  abort('Abort', 'Ctrl+Alt+Backspace'),
+  // Held only while a routine run is paused or waiting on the user
+  // (GAIA_ROUTINES_HLD.md §11.2). Not Ctrl+Alt+R, Voyager's reminder.
+  resume('Resume a routine run', 'Ctrl+Alt+Shift+R');
 
   const GaiaKeybind(this.label, this.defaultCombo, {this.global = true});
 
@@ -132,8 +135,10 @@ class GaiaCombo {
     includeRepeats: false,
   );
 
-  /// For a system-wide hotkey.
+  /// For a system-wide hotkey. Its identifier is the combo, so a later
+  /// unregister of the same combo releases this registration.
   HotKey get hotKey => HotKey(
+    identifier: 'gaia:$this',
     key: physical,
     modifiers: [
       if (control) HotKeyModifier.control,

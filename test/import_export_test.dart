@@ -1094,6 +1094,29 @@ Future<void> seedOneOfEverything(AppDatabase db) async {
       version: 1,
     ),
   );
+  await gaiaRepo.upsertRoutine(
+    GaiaRoutine(
+      id: 'gaia-routine-1',
+      name: 'Job applier',
+      instructions: 'Apply.',
+      projectId: 'gaia-project-1',
+      createdAt: now,
+      updatedAt: now,
+      version: 1,
+    ),
+  );
+  await gaiaRepo.upsertRun(
+    GaiaRoutineRun(
+      id: 'gaia-run-1',
+      routineId: 'gaia-routine-1',
+      deviceId: 'device-1',
+      startedAt: now,
+      items: const [GaiaRunItem(url: 'https://jobs.lever.co/acme/1')],
+      createdAt: now,
+      updatedAt: now,
+      version: 1,
+    ),
+  );
 }
 
 void main() {
@@ -1475,6 +1498,8 @@ void main() {
         'gaia_btw_table',
         'gaia_projects_table',
         'gaia_memory_topics_table',
+        'gaia_routines_table',
+        'gaia_runs_table',
         // Not a collection of records, but exported as its own document.
         'settings_table',
       };

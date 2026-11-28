@@ -1,0 +1,31 @@
+final now = DateTime.now().toUtc();
+final r = c.read(remoteSyncServiceProvider);
+final jr = c.read(journalRepositoryProvider);
+final beta = Journal(id: 'm5-journal-beta', createdAt: now, updatedAt: now, version: 1, name: 'Beta', colorValue: 0xFF8FB8E0);
+await jr.upsertJournal(beta); r.pushJournal(beta);
+final alphaId = (await jr.listJournals()).firstWhere((j) => j.name == 'Alpha').id;
+final wx = ['sunny', 'cloudy', 'rain', 'snow'];
+final specs = <List<Object>>[
+  ['a', 2026, 10, 26, 9, 'OTD month Oct26', 'Exactly one month ago.'],
+  ['a', 2026, 10, 25, 9, 'NOT OTD Oct25', 'Should never show on Nov 26.'],
+  ['a', 2025, 11, 26, 8, 'OTD one year Alpha', 'One year ago today in Alpha.'],
+  ['a', 2024, 11, 26, 7, 'OTD two years Alpha', 'Two years ago today.'],
+  ['a', 2025, 11, 26, 22, 'OTD late evening 2025', 'Ten at night local, next day in UTC.'],
+  ['a', 2025, 11, 25, 7, 'NOT OTD Nov25 2025', 'Day before, last year.'],
+  ['a', 2025, 11, 27, 7, 'NOT OTD Nov27 2025', 'Day after, last year.'],
+  ['b', 2025, 11, 26, 12, 'OTD one year Beta', 'One year ago today in Beta.'],
+];
+var n = 0;
+for (final s in specs) {
+  final d = DateTime(s[1] as int, s[2] as int, s[3] as int, s[4] as int).toUtc();
+  final en = JournalEntry(id: 'm5-otd-$n', createdAt: now, updatedAt: now, version: 1, journalId: s[0] == 'a' ? alphaId : 'm5-journal-beta', title: s[5] as String, body: s[6] as String, entryDate: d, timestamp: d, mood: n % 11, weatherIcon: wx[n % 4], tags: const []);
+  await jr.upsertEntry(en); r.pushJournalEntryNow(en); n++;
+}
+for (var i = 0; i < 40; i++) {
+  final jid = i.isEven ? alphaId : 'm5-journal-beta';
+  final d = DateTime(2024, 12, 3).add(Duration(days: i * 17 + 3, hours: 6 + (i % 12))).toUtc();
+  final en = JournalEntry(id: 'm5-seed-${i.toString().padLeft(2, '0')}', createdAt: now, updatedAt: now, version: 1, journalId: jid, title: 'Seed ${i.toString().padLeft(2, '0')} ${i.isEven ? 'alpha' : 'beta'}', body: 'Seeded body number $i. Second sentence here for preview.', entryDate: d, timestamp: d, mood: i % 11, weatherIcon: wx[i % 4], tags: const []);
+  await jr.upsertEntry(en); r.pushJournalEntryNow(en);
+}
+c.invalidate(journalsProvider); c.invalidate(journalEntriesProvider); c.invalidate(journalListEntriesProvider); c.invalidate(journalEntryCountsProvider);
+debugPrint('M5 seeded');

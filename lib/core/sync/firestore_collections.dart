@@ -138,6 +138,10 @@ abstract final class FirestoreCollections {
   /// Named groups of chats (GAIA_PROJECTS_HLD.md §2).
   static const gaiaProjects = 'gaia_projects';
 
+  /// Routines and their runs (GAIA_ROUTINES_HLD.md §5).
+  static const gaiaRoutines = 'gaia_routines';
+  static const gaiaRuns = 'gaia_runs';
+
   /// The topics memories are filed under (GAIA_MEMORY_TOPICS_HLD.md §3.1).
   static const gaiaMemoryTopics = 'gaia_memory_topics';
 
@@ -270,6 +274,8 @@ abstract final class FirestoreCollections {
     gaiaBtw,
     gaiaProjects,
     gaiaMemoryTopics,
+    gaiaRoutines,
+    gaiaRuns,
   };
 
   /// The only collections whose documents carry text two devices can edit at

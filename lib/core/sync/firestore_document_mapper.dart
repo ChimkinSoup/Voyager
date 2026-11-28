@@ -5006,6 +5006,82 @@ GaiaProject mergeGaiaProjectFromRemote(
   );
 }
 
+/// A routine's or run's JSON (GAIA_ROUTINES_HLD.md §5), its dates as
+/// Firestore's.
+Map<String, dynamic> _gaiaRoutineDocument(Map<String, Object?> json) => {
+  ...json,
+  'createdAt': _dateToFirestoreRequired(DateTime.parse(json['createdAt']! as String)),
+  'updatedAt': _dateToFirestoreRequired(DateTime.parse(json['updatedAt']! as String)),
+  'deletedAt': _dateToFirestore(switch (json['deletedAt']) {
+    final String at => DateTime.parse(at),
+    _ => null,
+  }),
+};
+
+/// A document [_gaiaRoutineDocument] wrote, back as JSON with [id].
+Map<String, Object?> _gaiaRoutineJson(Map<String, dynamic> data, String id) {
+  final updated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  return {
+    ...data,
+    'id': id,
+    'createdAt': (parseFirestoreDate(data['createdAt']) ?? updated)
+        .toIso8601String(),
+    'updatedAt': updated.toIso8601String(),
+    'version': parseVersion(data),
+    'deletedAt': parseFirestoreDate(data['deletedAt'])?.toIso8601String(),
+  };
+}
+
+Map<String, dynamic> gaiaRoutineToFirestore(GaiaRoutine routine) =>
+    _gaiaRoutineDocument(routine.toJson());
+
+GaiaRoutine mergeGaiaRoutineFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  GaiaRoutine? local,
+}) {
+  if (!_remoteRecordWins(
+    data,
+    localVersion: local?.version,
+    localUpdatedAt: local?.updatedAt,
+    localDeletedAt: local?.deletedAt,
+  )) {
+    return local!;
+  }
+  return GaiaRoutine.fromJson({
+    ..._gaiaRoutineJson(data, id),
+    'deletedAt': mergeDeletedAtFromRemote(
+      data,
+      local?.deletedAt,
+    )?.toIso8601String(),
+  });
+}
+
+Map<String, dynamic> gaiaRunToFirestore(GaiaRoutineRun run) =>
+    _gaiaRoutineDocument(run.toJson());
+
+GaiaRoutineRun mergeGaiaRunFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  GaiaRoutineRun? local,
+}) {
+  if (!_remoteRecordWins(
+    data,
+    localVersion: local?.version,
+    localUpdatedAt: local?.updatedAt,
+    localDeletedAt: local?.deletedAt,
+  )) {
+    return local!;
+  }
+  return GaiaRoutineRun.fromJson({
+    ..._gaiaRoutineJson(data, id),
+    'deletedAt': mergeDeletedAtFromRemote(
+      data,
+      local?.deletedAt,
+    )?.toIso8601String(),
+  });
+}
+
 Map<String, dynamic> gaiaMemoryToFirestore(GaiaMemory memory) => {
   'id': memory.id,
   'text': memory.text,

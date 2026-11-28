@@ -8,6 +8,7 @@ import 'package:voyager/features/gaia/companion/gaia_controller.dart';
 import 'package:voyager/features/gaia/companion/gaia_style.dart';
 import 'package:voyager/features/gaia/companion/gaia_text_field.dart';
 import 'package:voyager/features/gaia/companion/settings/gaia_actions_tab.dart';
+import 'package:voyager/features/gaia/companion/settings/gaia_routines_tab.dart';
 import 'package:voyager/features/gaia/companion/settings/gaia_memories_tab.dart';
 import 'package:voyager/features/gaia/companion/settings/gaia_queue_tab.dart';
 import 'package:voyager/features/gaia/companion/settings/gaia_settings_tab.dart';
@@ -22,7 +23,8 @@ enum GaiaPanelTab {
   queue('Queue'),
   status('Status'),
   setup('Setup'),
-  settings('Settings');
+  settings('Settings'),
+  routines('Routines');
 
   const GaiaPanelTab(this.label);
 
@@ -164,6 +166,9 @@ class _GaiaSettingsPanelViewState extends State<GaiaSettingsPanelView> {
                 GaiaPanelTab.memories => GaiaMemoriesTab(
                   controller: controller,
                   askChat: widget.askChat,
+                ),
+                GaiaPanelTab.routines => GaiaRoutinesTab(
+                  controller: controller,
                 ),
               },
             ),
@@ -442,7 +447,6 @@ class GaiaPanelField extends StatefulWidget {
     this.minLines,
     this.maxLines = 1,
     this.onSubmitted,
-    this.trailing,
   });
 
   final TextEditingController controller;
@@ -450,9 +454,6 @@ class GaiaPanelField extends StatefulWidget {
   final int? minLines;
   final int maxLines;
   final VoidCallback? onSubmitted;
-
-  /// Inside the box at its bottom right, such as Save.
-  final Widget? trailing;
 
   @override
   State<GaiaPanelField> createState() => _GaiaPanelFieldState();
@@ -488,7 +489,6 @@ class _GaiaPanelFieldState extends State<GaiaPanelField> {
     hintText: widget.hintText,
     minLines: widget.minLines,
     maxLines: widget.maxLines,
-    trailing: widget.trailing,
     style: kGaiaPanelFieldStyle,
     fill: gaiaPanelFieldFill(context),
   );

@@ -30,6 +30,8 @@ import 'package:voyager/features/gaia/companion/gaia_greetings.dart';
 import 'package:voyager/features/gaia/companion/gaia_handoff.dart';
 import 'package:voyager/features/gaia/companion/gaia_image_render.dart';
 import 'package:voyager/features/gaia/companion/gaia_memory_review.dart';
+import 'package:voyager/features/gaia/companion/gaia_routine_runner.dart';
+import 'package:voyager/features/gaia/companion/gaia_routines.dart';
 import 'package:voyager/features/gaia/companion/gaia_settings_panel.dart';
 import 'package:voyager/features/gaia/companion/gaia_sidebar.dart';
 import 'package:voyager/features/gaia/companion/gaia_sky.dart';
@@ -38,6 +40,7 @@ import 'package:voyager/features/gaia/companion/gaia_tool_results.dart';
 import 'package:voyager/features/gaia/companion/gaia_window.dart';
 import 'package:voyager/domain/models/gaia_models.dart';
 import 'package:voyager/domain/models/media_models.dart';
+import 'package:voyager/features/gaia/gaia_keybinds.dart';
 import 'package:voyager/features/gaia/gaia_pipe.dart';
 import 'package:win32/win32.dart' show AllowSetForegroundWindow;
 import 'package:voyager/features/gaia/gaia_text_settings.dart';
@@ -781,13 +784,9 @@ class GaiaController extends ChangeNotifier {
   /// [chatId]'s draft's key, here and in the main instance's store.
   static String _keyOf(String? chatId) => chatId ?? GaiaDraft.newChatId;
 
-  /// A chat, or a new one, has been brought into view this run.
-  var _chatViewed = false;
-
   /// Brings [chatId] into view with its own draft, the one in view put
   /// away for when its chat is back.
   void _viewChat(String? chatId) {
-    _chatViewed = true;
     if (chatId == currentChatId) return;
     _sentFrom = null;
     // A search's message left unreached isn't scrolled to later.
@@ -1482,6 +1481,10 @@ class GaiaController extends ChangeNotifier {
   /// Null for a new chat not yet sent.
   String? currentChatId;
   final _messages = <String, List<GaiaMessage>>{};
+
+  /// How each routine item's turn ended, by chat, for [_sendItem]: the
+  /// chat's messages may be dropped from [_messages] by then (BUG-442).
+  final _itemEnded = <String, GaiaMessageStatus>{};
 
   /// What the content is laid out for; [GaiaWindow.show] says when it
   /// changes.
@@ -2514,6 +2517,7 @@ class GaiaController extends ChangeNotifier {
     await _loadDrafts();
     unawaited(_loadQueue());
     unawaited(_curateMissed());
+    unawaited(loadRoutines());
     _syncStatusWatch();
   }
 
@@ -2883,6 +2887,9 @@ class GaiaController extends ChangeNotifier {
   }
 
   void _usageChanged() {
+    // A run's item wraps up at its routine's plan line (GAIA_ROUTINES_HLD.md
+    // §8.8.2).
+    unawaited(routineRunner.planChanged());
     _limitDismissed.removeWhere((key) => !_limitReached(key));
     _watchResets();
     notifyListeners();
@@ -3284,6 +3291,9 @@ class GaiaController extends ChangeNotifier {
         // Never sent from Gaia itself: whether it was hidden, behind, or
         // the pick-up pill, the user was last in the summoning app.
         _window.returnTo = params['returnTo']! as int;
+      case 'routineResume':
+        // The Resume hotkey (GAIA_ROUTINES_HLD.md §11.2).
+        unawaited(resumeRoutine());
       case 'hotkey':
         unawaited(
           onHotkey(
@@ -3623,7 +3633,6 @@ class GaiaController extends ChangeNotifier {
       case 'window':
         await openWindow();
       case 'fullScreen':
-        await _openLastChat();
         await _show(GaiaMode.window, fullScreen: true);
     }
     _summoned.add(null);
@@ -3647,25 +3656,6 @@ class GaiaController extends ChangeNotifier {
     _dropPickUp();
     await _show(GaiaMode.window, frame: half, fullScreen: false);
     _summoned.add(null);
-  }
-
-  /// The chat left in view stays there. Nothing has been in view yet this
-  /// run, as after a restart: the one last active, since what was in view
-  /// isn't kept across runs. A new chat's draft is something in view.
-  Future<void> _openLastChat() async {
-    if (currentChatId != null ||
-        _chatViewed ||
-        chats.isEmpty ||
-        draft.text.isNotEmpty ||
-        draftImages.isNotEmpty ||
-        draftFiles.isNotEmpty) {
-      return;
-    }
-    await selectChat(
-      chats
-          .reduce((a, b) => b.lastMessageAt.isAfter(a.lastMessageAt) ? b : a)
-          .id,
-    );
   }
 
   /// Leaves full screen, for where the Gaia window was before it.
@@ -3723,6 +3713,8 @@ class GaiaController extends ChangeNotifier {
         await checkSetup();
       case GaiaPanelTab.memories:
         await _loadMemories();
+      case GaiaPanelTab.routines:
+        await loadRoutines();
       default:
     }
   }
@@ -5969,7 +5961,456 @@ class GaiaController extends ChangeNotifier {
         );
       case GaiaBuiltin.window:
         toggleWindowContext();
+      case GaiaBuiltin.routine:
+        await openRoutineLaunch('');
     }
+  }
+
+  /// Routines and their runs (GAIA_ROUTINES_HLD.md §5), as the main instance
+  /// last gave them.
+  List<GaiaRoutine> routines = const [];
+  List<GaiaRoutineRun> routineRuns = const [];
+
+  /// The card `/routine` posted (§7.1): its routine, and the chat it was
+  /// typed in, the run's home; null for a new chat. The run it started, once
+  /// it has, which the card goes on showing.
+  ({GaiaRoutine routine, String? chatId, String? runId})? routineLaunch;
+
+  /// Runs this device's routine runs, one at a time (§8).
+  late final routineRunner = GaiaRoutineRunner(
+    save: (run) async {
+      routineRuns = [
+        for (final kept in routineRuns)
+          if (kept.id != run.id) kept,
+        run,
+      ];
+      notifyListeners();
+      try {
+        await _pipe.request('putRun', {'run': run.toJson()});
+      } on GaiaPipeException catch (error) {
+        debugPrint('[gaia] routine run not saved: $error');
+      }
+    },
+    sendItem: _sendItem,
+    stopItem: (chatId, why) => stop(chatId, why: why),
+    focused: _itemAddress,
+    materials: _routineMaterials,
+    planUsage: _routinePlan,
+    submitted: () => gaiaSubmittedUrls(routineRuns),
+    idle: gaiaUserIdle,
+  )..addListener(_routineChanged);
+
+  void _routineChanged() {
+    _syncRoutineSignals();
+    notifyListeners();
+  }
+
+  /// What the main instance was last told to show for routines: the lit
+  /// edge's label and whether the Resume hotkey is held.
+  ({String? edge, bool hotkey})? _routineSignals;
+
+  /// The screen edge lights while an attended run waits on the user (§9.3),
+  /// and the Resume hotkey is held while a run is paused or waiting (§11.2).
+  void _syncRoutineSignals() {
+    final run = routineRunner.run;
+    final waiting = routineRunner.waitingOnYou;
+    final signals = (
+      edge: waiting == null
+          ? null
+          : 'Your turn: ${waiting.isEmpty ? 'Gaia needs you' : waiting} · '
+                '${_resumeCombo.isEmpty ? 'Resume' : _resumeCombo} to resume',
+      hotkey: waiting != null || run?.state == GaiaRunState.paused,
+    );
+    if (signals == _routineSignals) return;
+    _routineSignals = signals;
+    unawaited(
+      _pipe
+          .request('routineSignals', {
+            'edge': signals.edge,
+            'hotkey': signals.hotkey,
+          })
+          .then<void>(
+            (_) {},
+            onError: (Object error) {
+              debugPrint('[gaia] routine signals not sent: $error');
+            },
+          ),
+    );
+  }
+
+  /// The Resume hotkey's combo (§11.2), as the settings have it.
+  String get _resumeCombo => gaiaComboFor(GaiaKeybind.resume, keybinds);
+
+  /// The Resume hotkey or the panel's button (§9.3, §11.2): an attended
+  /// handoff goes on with [notes], or a paused run resumes.
+  Future<void> resumeRoutine({String? notes}) =>
+      routineRunner.resume(notes: notes);
+
+  /// A note on parked [item] of [run] (§10.2): kept on the item, added to
+  /// the routine's `answers.md` under its question when [toBank], and the
+  /// item queued to run again. Why it can't, when it can't.
+  Future<String?> noteRoutineItem(
+    GaiaRoutineRun run,
+    GaiaRunItem item,
+    String note, {
+    required bool toBank,
+  }) async {
+    final routine = routines.firstWhereOrNull((r) => r.id == run.routineId);
+    if (routine == null) return 'Its routine is gone.';
+    // Refused before the bank is written, or each try adds the note again.
+    if (run.deviceId != _deviceId) return 'That run was on another device.';
+    if (routineRunner.run case final current? when current.id != run.id) {
+      return 'Another run is running or paused on this device. Resume or end '
+          'it first.';
+    }
+    if (toBank && note.trim().isNotEmpty) {
+      final folder = projectFolder(routine.projectId);
+      if (folder == null) {
+        return "The routine's project has no folder on this device.";
+      }
+      try {
+        await File(p.join(folder, 'answers.md')).writeAsString(
+          '\n\n## ${gaiaNoteQuestion(item)}\n\n${note.trim()}\n',
+          mode: FileMode.append,
+          flush: true,
+        );
+      } on FileSystemException catch (error) {
+        return 'answers.md not written: ${error.message}';
+      }
+    }
+    return retryRoutineItem(run, item, note: note);
+  }
+
+  /// Runs parked [item] of [run] again (§10.2), with [note] added.
+  Future<String?> retryRoutineItem(
+    GaiaRoutineRun run,
+    GaiaRunItem item, {
+    String? note,
+  }) async {
+    // Its tab is on the device that ran it.
+    if (run.deviceId != _deviceId) return 'That run was on another device.';
+    final routine = routines.firstWhereOrNull((r) => r.id == run.routineId);
+    if (routine == null) return 'Its routine is gone.';
+    final error = await routineRunner.retry(routine, run, item, note: note);
+    if (error == null) {
+      // A finished run opened again shows on its card as live.
+      if (routineLaunch case final launch? when launch.runId == run.id) {
+        routineLaunch = (
+          routine: routine,
+          chatId: launch.chatId,
+          runId: run.id,
+        );
+      }
+      // Back to the run's window, which the note's typing took the front
+      // from (§10.2).
+      unawaited(_giveBackToRun());
+    }
+    return error;
+  }
+
+  /// The side panel (§11): the Gaia window docked to the right edge, on top,
+  /// without the focus.
+  Future<void> openRoutinePanel() => _show(GaiaMode.panel);
+
+  Future<void> closeRoutinePanel() async {
+    if (_window.shown != GaiaMode.panel) return;
+    _window.hide();
+    onScreen.value = false;
+    layout = GaiaMode.small;
+    notifyListeners();
+  }
+
+  /// An item's chat, opened in the Gaia window, where an attended
+  /// `ask_user` waits for its answer (§9.1).
+  Future<void> openRoutineItemChat(String chatId) async {
+    await selectChat(chatId);
+    await _show(GaiaMode.window);
+  }
+
+  /// The panel took the front from the run: the item's session goes on in
+  /// its window.
+  Future<void> _giveBackToRun() async {
+    if (_window.shown != GaiaMode.panel || !_window.foreground) return;
+    try {
+      await _pipe.request('osResume', {'chatId': routineRunner.itemChat});
+    } on GaiaPipeException catch (error) {
+      debugPrint('[gaia] run not given the front back: $error');
+    }
+  }
+
+  /// The open tabs of the browser windows, for the launch card (§7.2): each
+  /// one's title and address. Reading one that isn't in front selects it,
+  /// and the tab that was is selected again after.
+  Future<List<({String title, String url})>> browserTabs() async {
+    final listed = await _pipe.request('browserTabs') as List? ?? const [];
+    return [
+      for (final tab in listed)
+        if (tab is Map && tab['url'] is String)
+          (title: '${tab['title'] ?? ''}', url: tab['url'] as String),
+    ];
+  }
+
+  /// Reads the routines and runs; a run this device was running when Gaia
+  /// went away is paused, its running item needing you (§8.7).
+  Future<void> loadRoutines() async {
+    try {
+      final (listed, runs) = await (
+        _pipe.request('routines'),
+        _pipe.request('runs'),
+      ).wait;
+      routines = [
+        for (final json in listed! as List)
+          GaiaRoutine.fromJson((json as Map).cast()),
+      ];
+      routineRuns = [
+        for (final json in runs! as List)
+          GaiaRoutineRun.fromJson((json as Map).cast()),
+      ];
+    } catch (error) {
+      debugPrint('[gaia] routines not read: $error');
+      return;
+    }
+    if (routineRunner.run == null) {
+      for (final run in routineRuns.reversed) {
+        if (run.deviceId != _deviceId ||
+            (run.state != GaiaRunState.running &&
+                run.state != GaiaRunState.paused)) {
+          continue;
+        }
+        final routine = routines.firstWhereOrNull((r) => r.id == run.routineId);
+        if (routine == null) continue;
+        final paused = run.state == GaiaRunState.running
+            ? gaiaRestartedRun(run)
+            : run;
+        routineRunner.adopt(routine, paused);
+        if (!identical(paused, run)) await routineRunner.save(paused);
+        break;
+      }
+    }
+    notifyListeners();
+  }
+
+  /// Saves [routine], new, edited or deleted (§6). A new one's setup
+  /// interview starts in its project, and opens.
+  Future<void> saveRoutine(GaiaRoutine routine) async {
+    final isNew = routines.every((kept) => kept.id != routine.id);
+    routines = [
+      for (final kept in routines)
+        if (kept.id != routine.id) kept,
+      if (!routine.isDeleted) routine,
+    ];
+    notifyListeners();
+    await _pipe.request('putRoutine', {'routine': routine.toJson()});
+    if (!isNew) return;
+    final chatId = _uuid.v4();
+    final started = Completer<String?>();
+    unawaited(
+      send(
+        gaiaSetupInterviewPrompt(routine),
+        remote: (
+          chatId: chatId,
+          tier: routine.tier,
+          projectId: routine.projectId,
+        ),
+        started: started,
+      ),
+    );
+    if (await started.future == null) await selectChat(chatId);
+  }
+
+  /// `/routine <name>` (§7.1): the launch card in the chat in view, or
+  /// a note when there's no such routine.
+  Future<void> openRoutineLaunch(String name) async {
+    await loadRoutines();
+    final wanted = name.trim().toLowerCase();
+    final routine = routines.firstWhereOrNull(
+      (routine) => routine.name.toLowerCase() == wanted,
+    );
+    if (routine == null && routineRunner.run == null) {
+      return _note(
+        wanted.isEmpty ? 'Which routine?' : 'No routine named "${name.trim()}"',
+        routines.isEmpty
+            ? 'Make one in the Routines tab of the settings panel.'
+            : 'Type /routine and one of: ${routines.map((r) => r.name).join(', ')}.',
+        error: wanted.isNotEmpty,
+      );
+    }
+    // One run at a time: its card instead, here (§7.1).
+    final active = routineRunner.run;
+    routineLaunch = (
+      routine: routineRunner.routine ?? routine!,
+      chatId: currentChatId,
+      runId: active?.id,
+    );
+    notifyListeners();
+  }
+
+  void closeRoutineLaunch() {
+    routineLaunch = null;
+    notifyListeners();
+  }
+
+  /// Starts the launch card's run over [urls] (§7.1); why it can't, when it
+  /// can't.
+  Future<String?> startRoutine(
+    List<String> urls, {
+    required GaiaRunMode mode,
+    String? googleAccount,
+  }) async {
+    final launch = routineLaunch;
+    if (launch == null) return null;
+    if (urls.isEmpty) return 'Paste at least one link.';
+    if (routineRunner.run != null) {
+      return 'Another run is running or paused on this device. Resume or '
+          'end it first.';
+    }
+    if (!await autoConsented()) {
+      return "Item chats run in Auto: pick Auto from the hand's menu once to "
+          'read its notice.';
+    }
+    final folder = projectFolder(launch.routine.projectId);
+    if (folder == null) {
+      return "The routine's project has no folder on this device.";
+    }
+    final missing = [
+      for (final name in [
+        ...launch.routine.materials,
+        ...launch.routine.uploads,
+      ])
+        if (!await File(p.join(folder, name)).exists()) name,
+    ];
+    if (missing.isNotEmpty) {
+      return 'Missing from the project folder: ${missing.join(', ')}.';
+    }
+    final account = googleAccount?.trim() ?? '';
+    final routine = account == (launch.routine.googleAccount ?? '')
+        ? launch.routine
+        : account.isEmpty
+        ? launch.routine.copyWith(clearGoogleAccount: true)
+        : launch.routine.copyWith(googleAccount: account);
+    final now = utcNow();
+    final run = GaiaRoutineRun(
+      id: _uuid.v4(),
+      createdAt: now,
+      updatedAt: now,
+      routineId: routine.id,
+      deviceId: _deviceId,
+      chatId: launch.chatId,
+      mode: mode,
+      items: [for (final url in urls) GaiaRunItem(url: url)],
+      startedAt: now,
+      usage: GaiaRunUsage(
+        planStart: gaiaPlanShares(await _routinePlan(routine)),
+      ),
+    );
+    routineLaunch = (
+      routine: launch.routine,
+      chatId: launch.chatId,
+      runId: run.id,
+    );
+    await routineRunner.start(routine, run);
+    unawaited(openRoutinePanel());
+    return null;
+  }
+
+  /// One item's turn (§8.1): a fresh temporary chat in the routine's
+  /// project, in Auto, on its tier, its tools through the item's gate.
+  /// Titled for the posting once it's known.
+  Future<GaiaMessageStatus?> _sendItem(GaiaItemTurn turn) async {
+    // A retry or a Resume goes on in the item's chat (§9.3, §10.2), unless
+    // it's gone: then the item starts afresh.
+    final resume = turn.resume;
+    _itemEnded.remove(turn.chatId);
+    await send(
+      resume != null && _chat(turn.chatId) != null ? resume : turn.prompt,
+      remote: (
+        chatId: turn.chatId,
+        tier: turn.routine.tier,
+        projectId: turn.routine.projectId,
+      ),
+      routine: turn,
+    );
+    final reported = turn.gate.outcome ?? turn.gate.posting;
+    if (reported?['company'] case final String company
+        when company.trim().isNotEmpty) {
+      final role = '${reported!['role'] ?? ''}'.trim();
+      await renameChat(
+        turn.chatId,
+        _clipTitle(role.isEmpty ? company : '$company — $role'),
+      );
+    }
+    // Null when the turn didn't start.
+    return _itemEnded.remove(turn.chatId);
+  }
+
+  /// The address of the window [chatId]'s os_ tools work on; null off a
+  /// browser page, or when it can't be read.
+  Future<String?> _itemAddress(String chatId) async {
+    try {
+      final answer =
+          (await _pipe.request('osRead', {
+                'chatId': chatId,
+                'tool': 'os_focused_window',
+                'arguments': <String, Object?>{},
+              }))!
+              as Map;
+      return RegExp(
+        r'^Address: (.+)$',
+        multiLine: true,
+      ).firstMatch(answer['text']! as String)?.group(1)?.trim();
+    } on GaiaPipeException {
+      return null;
+    }
+  }
+
+  /// [routine]'s materials, read from its project's folder by name, and its
+  /// uploads' paths there (§8.2).
+  Future<GaiaRoutineMaterials> _routineMaterials(GaiaRoutine routine) async {
+    final folder = projectFolder(routine.projectId) ?? '';
+    Future<String> read(String name) async {
+      try {
+        return await File(p.join(folder, name)).readAsString();
+      } on FileSystemException {
+        return '(missing)';
+      }
+    }
+
+    return (
+      files: {for (final name in routine.materials) name: await read(name)},
+      uploads: {for (final name in routine.uploads) name: p.join(folder, name)},
+    );
+  }
+
+  /// The plan windows of the account [routine]'s tier runs on (§8.8.2),
+  /// read again unless they were within the minute. A limit a run hit
+  /// counts as full.
+  Future<Map<String, List<GaiaPlanWindow>>> _routinePlan(
+    GaiaRoutine routine,
+  ) async {
+    final agent = agentFor(routine.tier);
+    if (agent == null) return const {};
+    final account = currentAccount(agent.adapter);
+    final checked = _usageCheckedAt[account.key];
+    if (checked == null ||
+        DateTime.now().difference(checked) > const Duration(minutes: 1)) {
+      await _readUsage(account);
+    }
+    final known = _trackedUsage(account);
+    final model = agent.model.toLowerCase();
+    return {
+      account.key: [
+        if (_hitLimit(account.key))
+          (name: 'plan', used: 1.0, resetsAt: _limitHits[account.key]),
+        for (final window in known?.windows ?? const <GaiaUsageWindow>[])
+          if (window.kind != GaiaUsageKind.weeklyModel ||
+              model.contains((window.model ?? '').toLowerCase()))
+            (
+              name: gaiaLimitName(window),
+              used: window.usedNow,
+              resetsAt: window.resetsAt,
+            ),
+      ],
+    };
   }
 
   /// The hand's toast, after a command set it.
@@ -7253,6 +7694,7 @@ class GaiaController extends ChangeNotifier {
       GaiaElementPart? control,
     })?
     resent,
+    GaiaItemTurn? routine,
   }) async {
     void notStarted(String why) {
       if (started != null && !started.isCompleted) started.complete(why);
@@ -7262,6 +7704,9 @@ class GaiaController extends ChangeNotifier {
       if (gaiaBuiltinIn(text) case final builtin?) return runBuiltin(builtin);
       if (gaiaRememberText(text) case final memory?) return remember(memory);
       if (gaiaBtwText(text) case final question?) return askBtw(question);
+      if (gaiaRoutineText(text) case final name?) {
+        return openRoutineLaunch(name);
+      }
     }
     // A command the CLI runs itself goes as typed, alone: the CLI reads one
     // only when it starts the message (GAIA_NATIVE_COMMANDS.md §5). Only the
@@ -7410,7 +7855,13 @@ class GaiaController extends ChangeNotifier {
             : remote == null
             ? project(newChatProject)?.id
             : remote.projectId,
-        title: about == null
+        // An item chat goes by its host until the posting names it
+        // (GAIA_ROUTINES_HLD.md §8.1).
+        title: routine != null
+            ? _clipTitle(
+                Uri.tryParse(routine.item.url)?.host ?? routine.item.url,
+              )
+            : about == null
             ? _firstLineTitle(prompt, files, quotes)
             : _clipTitle(about.label),
         createdAt: sentAt,
@@ -7418,7 +7869,11 @@ class GaiaController extends ChangeNotifier {
         lastMessageAt: sentAt,
         archivedAt: about == null ? null : sentAt,
         // After `/temp` in the new chat (GAIA_TEMP_HLD.md §3.2).
-        temporaryAt: remote == null && newChatTemporary ? sentAt : null,
+        // An item chat too: off the sidebar, never read for memories
+        // (GAIA_ROUTINES_HLD.md §8.1).
+        temporaryAt: (remote == null && newChatTemporary) || routine != null
+            ? sentAt
+            : null,
         tier:
             remote?.tier ??
             (remote == null ? nextTier : defaultTier ?? lastTier),
@@ -7428,6 +7883,16 @@ class GaiaController extends ChangeNotifier {
                   seeScreen: _newChatSeesScreen,
                   canControl: _newChatCanControl,
                   auto: _newChatAuto != null,
+                  at: sentAt,
+                ),
+              }
+            // An item chat acts in Auto (GAIA_ROUTINES_HLD.md §8.1).
+            : routine != null
+            ? {
+                _deviceId: GaiaGrant(
+                  seeScreen: true,
+                  canControl: true,
+                  auto: true,
                   at: sentAt,
                 ),
               }
@@ -7832,6 +8297,7 @@ class GaiaController extends ChangeNotifier {
       // reply's toast have it; unless renamed while it was unsaved.
       if (!debug.dummyMode &&
           about == null &&
+          routine == null &&
           _titledOnSend(prompt) &&
           chat.title == _firstLineTitle(prompt, files, quotes)) {
         unawaited(_retitle(chatId, topic));
@@ -8011,7 +8477,9 @@ class GaiaController extends ChangeNotifier {
       // The pass begun beside the router serves a first session only.
       final early = toldRecalled.isEmpty ? recalling : null;
       recalling = null;
-      final recalled = native != null
+      // Nor in an item chat, whose facts are the routine's materials
+      // (GAIA_ROUTINES_HLD.md §14).
+      final recalled = native != null || routine != null
           ? const <GaiaRecalledMemory>[]
           : await (early ??
                 _recall(
@@ -8126,6 +8594,8 @@ class GaiaController extends ChangeNotifier {
       }
       if (event is GaiaContextUpdate) {
         _liveContext[chatId] = event;
+        // An item's context ceiling (GAIA_ROUTINES_HLD.md §8.5).
+        routineRunner.context(chatId, event.tokens);
         notifyListeners();
       }
       if (event is GaiaRetrying) {
@@ -8424,6 +8894,7 @@ class GaiaController extends ChangeNotifier {
         }
       },
       hold: _cardHold,
+      routine: routine?.gate,
     );
     _turnTools[chatId] = tools;
 
@@ -8491,7 +8962,9 @@ class GaiaController extends ChangeNotifier {
               tools: tools,
               // A resumed session keeps the pins and topics it started
               // with, and a fork its source's.
-              sessionInstructions: session == null && fork == null
+              // An item chat has no memories (GAIA_ROUTINES_HLD.md §14).
+              sessionInstructions:
+                  session == null && fork == null && routine == null
                   ? await newSessionPrompt()
                   : '',
               account: account,
@@ -8536,7 +9009,7 @@ class GaiaController extends ChangeNotifier {
           images: imageInputs,
           directories: directories,
           tools: tools,
-          sessionInstructions: await newSessionPrompt(),
+          sessionInstructions: routine == null ? await newSessionPrompt() : '',
           account: account,
           promptId: question.id,
           tier: tier,
@@ -8714,6 +9187,7 @@ class GaiaController extends ChangeNotifier {
       _reportRuns();
       notifyListeners();
     }
+    if (routine != null) _itemEnded[chatId] = reply.status;
     if (takeBackCopies case final copies?) {
       final done = Completer<void>();
       _takingBack[chatId] = done.future;
@@ -8757,9 +9231,11 @@ class GaiaController extends ChangeNotifier {
     if (keptBecause case final why?) {
       _note('The stopped message stays in the chat', why, error: true);
     }
-    _reportDone(chatId, reply);
+    // A run's items report on its card, not one toast each.
+    if (routine == null) _reportDone(chatId, reply);
     if (reply.status == GaiaMessageStatus.complete &&
         !debug.dummyMode &&
+        routine == null &&
         _awaitsTitle(chatId, reply)) {
       unawaited(_retitle(chatId, topic, reply.text));
     }

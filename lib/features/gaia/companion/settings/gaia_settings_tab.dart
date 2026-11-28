@@ -139,8 +139,7 @@ class GaiaSettingsTab extends StatelessWidget {
                   _SavedText(
                     key: const ValueKey('memoryAlertAt'),
                     stored: '${controller.memoryAlertAt}',
-                    // Room for Save inside it.
-                    width: 170,
+                    width: 80,
                     digitsOnly: true,
                     valid: (text) => (int.tryParse(text) ?? 0) >= 1,
                     onSave: (text) => save({'memoryAlertAt': int.parse(text)}),
@@ -277,34 +276,50 @@ class _SavedTextState extends State<_SavedText> {
 
   @override
   Widget build(BuildContext context) {
-    // Save shows in the box only while there's something to save.
     final field = GaiaPanelField(
       controller: _text,
       hintText: widget.hint,
       minLines: widget.minLines,
       maxLines: widget.maxLines,
       onSubmitted: _submit,
-      trailing: AnimatedSwitcher(
+    );
+    // Save sits beside the box, at its bottom, and shows only while there's
+    // something to save. Its room is kept so the box doesn't change width.
+    // Centred on a one-line box; on a taller box, as far from its bottom
+    // edge (4, past the box's 2 ring) as it is on a one-line box.
+    final oneLine = widget.maxLines == 1;
+    final save = Padding(
+      padding: EdgeInsets.only(bottom: oneLine ? 0 : 6),
+      child: AnimatedOpacity(
         duration: GaiaMotion.quick,
-        child: _dirty
-            ? GaiaButton(
-                key: const ValueKey('save'),
-                label: 'Save',
-                size: 28,
-                padding: 10,
-                onPressed: _submit,
-              )
-            : const SizedBox(width: 8),
+        opacity: _dirty ? 1 : 0,
+        child: ExcludeSemantics(
+          excluding: !_dirty,
+          child: GaiaButton(
+            key: const ValueKey('save'),
+            label: 'Save',
+            size: 28,
+            padding: 10,
+            onPressed: _dirty ? _submit : null,
+          ),
+        ),
       ),
     );
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
-      child: widget.width == null
-          ? field
-          : Align(
-              alignment: Alignment.centerLeft,
-              child: SizedBox(width: widget.width, child: field),
-            ),
+      child: Row(
+        crossAxisAlignment: oneLine
+            ? CrossAxisAlignment.center
+            : CrossAxisAlignment.end,
+        children: [
+          if (widget.width == null)
+            Expanded(child: field)
+          else
+            SizedBox(width: widget.width, child: field),
+          const SizedBox(width: 8),
+          save,
+        ],
+      ),
     );
   }
 }

@@ -1,0 +1,12 @@
+final now = DateTime.now().toUtc();
+final r = c.read(remoteSyncServiceProvider);
+final jr = c.read(journalRepositoryProvider);
+final alphaId = (await jr.listJournals()).firstWhere((j) => j.name == 'Alpha').id;
+final sb = StringBuffer();
+var i = 0;
+while (sb.length < 41000) { sb.write('Line ${i.toString().padLeft(4, '0')} of the long entry, with some words to wrap across the phone width. '); if (i % 5 == 4) sb.write('\n\n'); i++; }
+sb.write('مرحبا بالعالم 你好世界 😀🎉 end.');
+final en = JournalEntry(id: 'm5-long', createdAt: now, updatedAt: now, version: 1, journalId: alphaId, title: 'M5 long 41k entry', body: sb.toString(), entryDate: now, timestamp: now, mood: 5, weatherIcon: 'sunny', tags: const []);
+await jr.upsertEntry(en); r.pushJournalEntryNow(en);
+c.invalidate(journalEntriesProvider); c.invalidate(journalListEntriesProvider); c.invalidate(journalEntryCountsProvider);
+debugPrint('M5 long ${sb.length}');

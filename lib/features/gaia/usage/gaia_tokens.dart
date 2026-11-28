@@ -47,8 +47,10 @@ const kGaiaTokensOther = 'other';
 
 /// Who the tokens of a model call are counted for: an account by its
 /// [GaiaAccount.key], and their source, a tier's name, a utility job
-/// ([kGaiaTokensUtility]) or [kGaiaTokensOther].
-typedef GaiaTokensFor = ({String account, String source});
+/// ([kGaiaTokensUtility]) or [kGaiaTokensOther]. [chatId] is the chat's turn
+/// they were spent in, for a routine's token cap (GAIA_ROUTINES_HLD.md
+/// §8.8.1); null outside one.
+typedef GaiaTokensFor = ({String account, String source, String? chatId});
 
 /// One line of the lifetime count: an account's tokens on a model, for a
 /// source.

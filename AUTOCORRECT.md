@@ -158,6 +158,12 @@ squiggle inside half-written code (EMPHASIS_FORMATTING.md §6.1).
 
 If the token matches `^[A-Z]+$` (length ≥ 3), skip autocorrect (acronyms).
 
+### 4.7 Shift held too long
+
+A known word typed with exactly two leading capitals and the rest lowercase (`THe`, `WHat`) is a Shift slip: it squiggles, offers the recased word (`The`) as its only suggestion, and autocorrect rewrites it on the boundary like any other typo, under the same toggle and gates. "Add to dictionary" is not offered for it, since the lowercase word is already known.
+
+Left alone: a lone `s` tail (`IDs`, `PCs`, plural acronyms whose lowercase forms are in the bundled list; this also spares `ITs`), a `Hz` ending (`MHz`), and three or more leading capitals (`URLs`). `stuckShiftFix` in `word_token.dart`.
+
 ---
 
 ## 5. Snippet integration
@@ -358,6 +364,7 @@ Clicking into an existing word and **only deleting** characters (no insertions) 
 | 2026-08-31 | Inline-code exclusion applies to **autocorrect only**, not to squiggles: one stray backtick would otherwise take the squiggles off everything below it in a long entry, which is a change to spell-check that autocorrect has no business making. |
 | 2026-09-16 | A word run holding a **digit** is out of spell-check entirely — no squiggle, no correction. Scanning for letters alone read `3D` as the word `D` and `XM6's` as `XM` and `s`, three squiggles under a model number; the dictionary cannot hold an alphanumeric either, so there was no way to dismiss them. The cost is that a typo with a digit stuck to it (`wtih2`) goes unflagged. |
 | 2026-09-16 | A **possessive** leans on its base word: `dog's` is known when `dog` is (`isKnownWord`). The bundled list has no possessives, so they squiggled — and `dogs` is one deletion away, so the cascade was rewriting the apostrophe out of them. |
+| 2026-11-27 | **Shift slips** (`THe` → `The`) are squiggled and corrected (§4.7). Lookups lowercase everything, so a known word with a stray second capital used to pass silently. One lowercase letter is enough (`THe` is the common case); plural acronyms and `Hz` units are carved out. |
 | 2026-08-31 | Tab is **not** an autocorrect boundary (§2's list wins over §5.1's "Space or Tab"). Tab inserts no character in Voyager's fields — it advances a tabstop, indents a list line or moves focus — so there is no boundary keystroke to gate on. |
 
 ---

@@ -266,6 +266,7 @@ class _Main {
             message.toJson(),
         ];
       case 'putMessage':
+        await holdPutMessage?.future;
         final message = GaiaMessage.fromJson(
           (params['message']! as Map).cast<String, Object?>(),
         );
@@ -661,6 +662,9 @@ class _Main {
   /// Each `putChat` waits on it while it's set.
   Completer<void>? holdPutChat;
 
+  /// Each `putMessage` waits on it while it's set.
+  Completer<void>? holdPutMessage;
+
   /// Each `attachImage`, in order.
   final attached = <({String chatId, String path})>[];
 
@@ -762,6 +766,62 @@ void main() {
     runner = FakeClaudeRunner();
     window = FakeGaiaWindow();
     exits = [];
+  });
+
+  group('routines', () {
+    test("a stopped item's turn pauses the run, though its chat's messages "
+        'were let go before the turn ended (BUG-442)', () async {
+      await startCompanion();
+      // A turn that hangs until it's stopped.
+      runner.turns.add([const ClaudeTextStart(), const ClaudeTextDelta('Hm')]);
+      final now = DateTime.utc(2026, 11, 27);
+      final routine = GaiaRoutine(
+        id: 'r1',
+        createdAt: now,
+        updatedAt: now,
+        name: 'Job applier',
+        instructions: 'Apply.',
+        projectId: 'p1',
+        skipRules: '',
+      );
+      await controller.routineRunner.start(
+        routine,
+        GaiaRoutineRun(
+          id: 'run1',
+          createdAt: now,
+          updatedAt: now,
+          routineId: 'r1',
+          deviceId: 'laptop',
+          startedAt: now,
+          items: const [
+            GaiaRunItem(url: 'https://a.io/1'),
+            GaiaRunItem(url: 'https://a.io/2'),
+          ],
+        ),
+      );
+      String? chatId;
+      while ((chatId = controller.routineRunner.itemChat) == null ||
+          !runner.isRunning(chatId!)) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+
+      // The stopped reply's save is slow, and a refresh meanwhile lets
+      // go of the chat's messages, as it's neither running nor shown.
+      main.holdPutMessage = Completer();
+      await controller.stop(chatId, why: 'The user pressed Esc.');
+      main.pipe.notify('changed');
+      await settle();
+      main.holdPutMessage!.complete();
+      main.holdPutMessage = null;
+      await settle();
+
+      final run = controller.routineRuns.single;
+      expect(run.state, GaiaRunState.paused);
+      expect(run.stopReason, 'stopped by you');
+      expect(run.items.first.status, GaiaRunItemStatus.needsYou);
+      expect(run.items.first.reason, 'stopped by you');
+      expect(run.items.last.status, GaiaRunItemStatus.waiting);
+    }, timeout: const Timeout(Duration(seconds: 30)));
   });
 
   group('chat menu', () {
@@ -1282,26 +1342,34 @@ void main() {
       expect(controller.newChatTemporary, isTrue);
     });
 
-    test('/temp throws out the waiting suggestions from the chat, and '
-        'setTemporary off with them restores them (GAIA_TEMP_HLD.md §6)',
-        () async {
-      await startCompanion();
-      runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
-      await controller.send('Hi');
-      await settle();
-      final chatId = (await main.chat()).id;
-      final waiting = await main.memories.save(
-        'Likes jazz',
-        chatId: chatId,
-        status: GaiaMemoryStatus.proposed,
-      );
-      final thrown = await controller.toggleTemporary();
-      expect(thrown, [waiting!.id]);
-      expect((await main.repository.getMemory(waiting.id))!.isDeleted, isTrue);
-      await controller.setTemporary(chatId, false, restore: thrown!);
-      await settle();
-      expect((await main.repository.getMemory(waiting.id))!.isDeleted, isFalse);
-    });
+    test(
+      '/temp throws out the waiting suggestions from the chat, and '
+      'setTemporary off with them restores them (GAIA_TEMP_HLD.md §6)',
+      () async {
+        await startCompanion();
+        runner.turns.addAll(claudeFixtureTurns('single_turn.jsonl'));
+        await controller.send('Hi');
+        await settle();
+        final chatId = (await main.chat()).id;
+        final waiting = await main.memories.save(
+          'Likes jazz',
+          chatId: chatId,
+          status: GaiaMemoryStatus.proposed,
+        );
+        final thrown = await controller.toggleTemporary();
+        expect(thrown, [waiting!.id]);
+        expect(
+          (await main.repository.getMemory(waiting.id))!.isDeleted,
+          isTrue,
+        );
+        await controller.setTemporary(chatId, false, restore: thrown!);
+        await settle();
+        expect(
+          (await main.repository.getMemory(waiting.id))!.isDeleted,
+          isFalse,
+        );
+      },
+    );
 
     test('/temp not saved puts the chat back as stored, and says so', () async {
       await startCompanion();
@@ -4798,21 +4866,18 @@ void main() {
       expect(controller.messages, hasLength(2));
     });
 
-    test(
-      "openPanel opens the Gaia window's settings panel at that tab "
-      '(GAIA_SETTINGS_HLD.md §9)',
-      () async {
-        main.pipe.notify('openPanel', {'tab': 'status'});
-        await settle();
-        expect(window.shown, GaiaMode.window);
-        expect(controller.panel.open, isTrue);
-        expect(controller.panel.tab, GaiaPanelTab.status);
-        main.pipe.notify('openPanel', {'tab': 'queue'});
-        await settle();
-        expect(controller.panel.open, isTrue);
-        expect(controller.panel.tab, GaiaPanelTab.queue);
-      },
-    );
+    test("openPanel opens the Gaia window's settings panel at that tab "
+        '(GAIA_SETTINGS_HLD.md §9)', () async {
+      main.pipe.notify('openPanel', {'tab': 'status'});
+      await settle();
+      expect(window.shown, GaiaMode.window);
+      expect(controller.panel.open, isTrue);
+      expect(controller.panel.tab, GaiaPanelTab.status);
+      main.pipe.notify('openPanel', {'tab': 'queue'});
+      await settle();
+      expect(controller.panel.open, isTrue);
+      expect(controller.panel.tab, GaiaPanelTab.queue);
+    });
   });
 
   group('GAIA.md', () {
@@ -5813,13 +5878,16 @@ void main() {
       expect(controller.currentChatId, 'older');
     });
 
-    test('with nothing viewed yet, it opens the last active chat', () async {
-      await main.store.createChat(chatAt('older', 1));
-      await main.store.createChat(chatAt('newer', 2));
-      await startCompanion();
-      await fullScreen();
-      expect(controller.currentChatId, 'newer');
-    });
+    test(
+      'with nothing viewed yet, as after a restart, it opens a new chat',
+      () async {
+        await main.store.createChat(chatAt('older', 1));
+        await main.store.createChat(chatAt('newer', 2));
+        await startCompanion();
+        await fullScreen();
+        expect(controller.currentChatId, isNull);
+      },
+    );
 
     test('a new chat the user started stays in view', () async {
       await main.store.createChat(chatAt('older', 1));

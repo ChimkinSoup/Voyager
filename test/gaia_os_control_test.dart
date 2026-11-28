@@ -26,6 +26,34 @@ GaiaControlMatch _button({bool sensitive = false, int left = 10}) => (
   top: 10,
   right: left + 20,
   bottom: 30,
+  offscreen: false,
+  exact: true,
+  focused: false,
+  text: null,
+  label: null,
+);
+
+/// A field as [_Backend.find] gives it: [text] what it holds.
+GaiaControlMatch _field({
+  String type = 'Edit',
+  String? text,
+  bool offscreen = false,
+  bool exact = true,
+  bool focused = true,
+  int top = 10,
+  String? label,
+}) => (
+  type: type,
+  sensitive: false,
+  left: 10,
+  top: top,
+  right: 30,
+  bottom: top + 20,
+  offscreen: offscreen,
+  exact: exact,
+  focused: focused,
+  text: text,
+  label: label,
 );
 
 class _Backend implements GaiaInputBackend {
@@ -77,8 +105,12 @@ class _Backend implements GaiaInputBackend {
 
   @override
   GaiaForegroundWindow? target(int gaiaPid) => window;
+
+  /// Windows that have closed.
+  final closed = <int>{};
   @override
-  GaiaForegroundWindow? describe(int hwnd) => windows[hwnd] ?? window;
+  GaiaForegroundWindow? describe(int hwnd) =>
+      closed.contains(hwnd) ? null : windows[hwnd] ?? window;
   @override
   int foreground() {
     onForeground?.call();
@@ -294,6 +326,10 @@ class _Backend implements GaiaInputBackend {
   @override
   ({int left, int top, int width, int height}) frame(int hwnd) =>
       (left: 0, top: 0, width: 800, height: 600);
+
+  /// What [find] gives for a name, or for "name/type", where it isn't
+  /// [matches].
+  final named = <String, List<GaiaControlMatch>>{};
   @override
   Future<GaiaWindowScan?> find(
     int hwnd, {
@@ -305,7 +341,10 @@ class _Backend implements GaiaInputBackend {
     cut: false,
     sensitive: const <({int left, int top, int right, int bottom})>[],
     unjudged: const <({int left, int top, int right, int bottom})>[],
-    matches: matches,
+    matches:
+        named['${control.name}/${control.type}'] ??
+        named[control.name] ??
+        matches,
     controls: 0,
     hasDocument: false,
     sensitiveFocused: false,
@@ -314,12 +353,26 @@ class _Backend implements GaiaInputBackend {
   @override
   Future<String?> address(int hwnd) async => url;
 
+  /// What [listItems] gives (GAIA_ROUTINES_HLD.md §15.3).
+  var items = <String>[];
+  @override
+  Future<List<String>?> listItems(int hwnd, {required bool browser}) async =>
+      items;
+
+  /// What [readText] gives, by hwnd.
+  final texts = <int, String>{};
+  @override
+  Future<String?> readText(int hwnd) async => texts[hwnd];
+
   /// What [direct] answers (GAIA_AUTONOMY_HLD.md §13.3); null for an app that
   /// didn't answer in time. No pattern by default, so a step goes as input.
   GaiaDirectResult? directAnswer = (ran: null, miss: GaiaDirectMiss.noPattern);
 
   /// Each direct call, as its kind, control and point.
   final directs = <(GaiaDirectKind, String?, ({int x, int y}))>[];
+
+  /// The text each direct call typed.
+  final typed = <String?>[];
 
   /// Runs once per [direct], before it answers: a dialog the call opened.
   void Function()? onDirect;
@@ -336,6 +389,7 @@ class _Backend implements GaiaInputBackend {
     required GaiaDirectAct act,
   }) async {
     directs.add((act.kind, control?.name, at));
+    typed.add(act.text);
     onDirect?.call();
     await Future<void>.delayed(directHold);
     return directAnswer;
@@ -1676,16 +1730,7 @@ void main() {
       });
 
       test('typing, a scroll and a selection say how they ran', () async {
-        backend.matches = [
-          (
-            type: 'Edit',
-            sensitive: false,
-            left: 10,
-            top: 10,
-            right: 30,
-            bottom: 30,
-          ),
-        ];
+        backend.matches = [_field(focused: false)];
         backend.directAnswer = (ran: GaiaDirectRan.setValue, miss: null);
         final typed = await act('os_type', {'name': 'Subject', 'text': 'Hi'});
         expect(typed['how'], ['typed into "Subject" directly']);
@@ -1734,16 +1779,7 @@ void main() {
       test(
         'a field with text is typed into as real input (§13.10 q4)',
         () async {
-          backend.matches = [
-            (
-              type: 'Edit',
-              sensitive: false,
-              left: 10,
-              top: 10,
-              right: 30,
-              bottom: 30,
-            ),
-          ];
+          backend.matches = [_field(focused: false)];
           backend.directAnswer = (ran: null, miss: GaiaDirectMiss.hasText);
           backend.onDirect = () => backend.rootUnder = _target.hwnd;
           final result = await act('os_type', {
@@ -3964,6 +4000,462 @@ void main() {
         );
       });
     });
+  });
+
+  group('control fixes (GAIA_ROUTINES_HLD.md §15)', () {
+    late GaiaOsControl fixes;
+    setUp(() {
+      fixes = GaiaOsControl(
+        companionPid: () => 1,
+        exclusions: () => excluded,
+        vaultUnlocked: () => vault,
+        voyagerPid: 70,
+        backend: backend,
+        settle: Duration.zero,
+        modifierWait: const Duration(milliseconds: 40),
+        activateWait: const Duration(milliseconds: 200),
+        controlWait: const Duration(milliseconds: 500),
+      );
+    });
+
+    Future<Map<String, Object?>> go(
+      String tool,
+      Map<String, Object?> arguments,
+    ) async {
+      await fixes.plan('chat', 'card', tool, arguments);
+      return fixes.run('card', once: true, check: () async {});
+    }
+
+    bool pressed(int vk) => backend.sent.contains(GaiaKeyEvent(vk, up: false));
+
+    group('os_type replaces (§15.5)', () {
+      test('a named field holding text ends with only the new text', () async {
+        backend.matches = [_field(text: 'Juno Sung')];
+        backend.onSend = () => backend.matches = [_field(text: 'Alex')];
+        final result = await go('os_type', {
+          'name': 'Name',
+          'text': 'Alex',
+          'append': false,
+        });
+        expect(result['stopped'], isNull);
+        // Selected after the click, in the same step.
+        expect(pressed(VK_CONTROL) && pressed(0x41), isTrue);
+        expect(backend.calls.first.first, isA<GaiaMouseEvent>());
+      });
+
+      test(
+        'a field that holds something else stops with what it holds',
+        () async {
+          backend.matches = [_field(text: 'Juno Sung')];
+          backend.onSend = () =>
+              backend.matches = [_field(text: 'Juno SungAlex')];
+          final result = await go('os_type', {
+            'name': 'Name',
+            'text': 'Alex',
+            'append': false,
+          });
+          expect(result['stopped'], contains('holds "Juno SungAlex"'));
+        },
+      );
+
+      for (final append in [true, null]) {
+        test('append ${append ?? 'unset'} keeps the old text, and checks '
+            'nothing', () async {
+          backend.matches = [_field(text: 'Juno Sung')];
+          final result = await go('os_type', {
+            'name': 'Name',
+            'text': 'Alex',
+            'append': ?append,
+          });
+          expect(result['stopped'], isNull);
+          expect(pressed(VK_CONTROL), isFalse);
+        });
+      }
+
+      test('a reformatted phone number matches on its digits', () async {
+        backend.matches = [_field(text: '')];
+        backend.onSend = () =>
+            backend.matches = [_field(text: '(416) 555-0134')];
+        final result = await go('os_type', {
+          'name': 'Phone',
+          'text': '416 555 0134',
+          'append': false,
+        });
+        expect(result['stopped'], isNull);
+        expect(gaiaTypedMatches('416-555-0134', '4165550134'), isTrue);
+        expect(gaiaTypedMatches('416-555-0134', '416555'), isFalse);
+        expect(gaiaTypedMatches('Alex', 'alex'), isFalse);
+        expect(gaiaTypedMatches('a  b\n', 'a b'), isTrue);
+      });
+
+      test(
+        'direct, a replace sets the value whatever the field holds',
+        () async {
+          backend.matches = [_field(text: 'Alex')];
+          backend.directAnswer = (ran: GaiaDirectRan.setValue, miss: null);
+          final result = await go('os_type', {'name': 'Name', 'text': 'Alex'});
+          expect(result['stopped'], isNull);
+          expect(backend.directs.single.$1, GaiaDirectKind.type);
+          expect(backend.calls.where((c) => c.first is GaiaKeyEvent), isEmpty);
+        },
+      );
+    });
+
+    group('os_pick (§15.3)', () {
+      GaiaControlMatch option() => _field(type: 'ListItem', top: 100);
+
+      test('a field whose list shows only after Enter gets Enter once, and '
+          'the option is picked and read back', () async {
+        backend.matches = [_field(text: '')];
+        backend.named['University of Toronto'] = [option()];
+        backend.onSend = () {
+          final last = backend.calls.last;
+          if (last.contains(const GaiaKeyEvent(VK_RETURN, up: false))) {
+            backend.items = [
+              'University of Toronto Mississauga',
+              'University of Toronto',
+            ];
+          } else if (last.first is GaiaMouseEvent &&
+              backend.cursor.last == (20, 110)) {
+            backend.matches = [_field(text: 'University of Toronto')];
+          }
+        };
+        final card = await fixes.plan('chat', 'card', 'os_pick', {
+          'name': 'School',
+          'option': 'University of Toronto',
+        });
+        expect(
+          stepsOf(card).single['label'],
+          'Pick "University of Toronto" in Edit "School" [10,10 20x20]',
+        );
+        final result = await fixes.run('card', once: true, check: () async {});
+        expect(result['stopped'], isNull);
+        expect(
+          backend.sent
+              .where((e) => e == const GaiaKeyEvent(VK_RETURN, up: false))
+              .length,
+          1,
+        );
+        expect(backend.cursor.last, (20, 110));
+      });
+
+      test('no Enter outside the field', () async {
+        backend.matches = [_field(text: '', focused: false)];
+        final result = await go('os_pick', {'name': 'School', 'option': 'X'});
+        expect(result['stopped'], contains('No option with "X"'));
+        expect(pressed(VK_RETURN), isFalse);
+      });
+
+      test('a list with no such option stops with the options seen', () async {
+        backend.matches = [_field(type: 'Button', text: 'Select One')];
+        backend.items = ['Mobile', 'Home'];
+        final result = await go('os_pick', {
+          'name': 'Phone Device Type',
+          'option': 'Pager',
+        });
+        expect(result['stopped'], contains('Options seen: "Mobile", "Home"'));
+        // Clicked to open, not typed into.
+        expect(backend.sent.whereType<GaiaUnicodeEvent>(), isEmpty);
+      });
+
+      test(
+        'a field still holding something else after two tries stops',
+        () async {
+          backend.matches = [_field(type: 'Button', text: 'Select One')];
+          backend.items = ['Mobile'];
+          backend.named['Mobile'] = [option()];
+          final result = await go('os_pick', {
+            'name': 'Phone Device Type',
+            'option': 'Mobile',
+          });
+          expect(result['stopped'], contains('holds "Select One"'));
+        },
+      );
+
+      test("an option in the app's own list window, as a browser's for a "
+          'native select, is selected directly, with no Esc', () async {
+        backend.matches = [_field(type: 'ComboBox', text: 'Select One')];
+        backend.items = ['Select One', 'Yes', 'No'];
+        backend.named['Yes'] = [option()];
+        // The click opens the list, a window of the app's over the page.
+        backend.onSend = () => backend.rootUnder = 99;
+        backend.directAnswer = (ran: GaiaDirectRan.select, miss: null);
+        backend.onDirect = () =>
+            backend.matches = [_field(type: 'ComboBox', text: 'Yes')];
+        final result = await go('os_pick', {
+          'name': 'Authorized to work?',
+          'option': 'Yes',
+        });
+        expect(result['stopped'], isNull);
+        expect(backend.directs.map((d) => (d.$1, d.$2)), [
+          (GaiaDirectKind.click, 'Yes'),
+        ]);
+        expect(pressed(VK_ESCAPE), isFalse);
+      });
+
+      test('needs a name and a one-line option', () async {
+        await expectLater(
+          fixes.plan('chat', 'card', 'os_pick', {'option': 'X'}),
+          refused("field's name"),
+        );
+        await expectLater(
+          fixes.plan('chat', 'card', 'os_pick', {
+            'name': 'A',
+            'option': 'a\nb',
+          }),
+          refused('one line'),
+        );
+      });
+    });
+
+    group('os_upload (§15.6)', () {
+      setUp(() {
+        backend.named['File name:'] = [_field()];
+        backend.named['Open'] = [_button()];
+        backend.directAnswer = (ran: GaiaDirectRan.invoke, miss: null);
+      });
+
+      test(
+        'sets the path, presses Open, and waits for the dialog to close',
+        () async {
+          backend.onDirect = () {
+            if (backend.directs.length == 2) backend.closed.add(_target.hwnd);
+          };
+          final result = await go('os_upload', {'path': r'C:\cv.pdf'});
+          expect(result['stopped'], isNull);
+          expect(backend.directs.map((d) => (d.$1, d.$2)), [
+            (GaiaDirectKind.type, 'File name:'),
+            (GaiaDirectKind.click, 'Open'),
+          ]);
+          expect(backend.calls, isEmpty);
+        },
+      );
+
+      test("presses the split button Open, not the boxes' drop-down "
+          'buttons of that name', () async {
+        backend.named['Open'] = [_button(left: 100), _button(left: 300)];
+        backend.named['Open/SplitButton'] = [_button(left: 500)];
+        backend.onDirect = () {
+          if (backend.directs.length == 2) backend.closed.add(_target.hwnd);
+        };
+        final result = await go('os_upload', {'path': r'C:\cv.pdf'});
+        expect(result['stopped'], isNull);
+        expect(backend.directs.last.$3.x, 510);
+      });
+
+      test('types a path with forward slashes with backslashes', () async {
+        backend.onDirect = () {
+          if (backend.directs.length == 2) backend.closed.add(_target.hwnd);
+        };
+        final result = await go('os_upload', {'path': 'C:/files/cv.pdf'});
+        expect(result['stopped'], isNull);
+        expect(backend.typed.first, r'C:\files\cv.pdf');
+      });
+
+      test('a dialog still open stops with what it says', () async {
+        backend.texts[_target.hwnd] = 'Text "File not found."';
+        final result = await go('os_upload', {'path': r'C:\missing.pdf'});
+        expect(result['stopped'], contains('still open'));
+        expect(result['stopped'], contains('File not found.'));
+      });
+
+      test('with no file dialog in front, it says so', () async {
+        backend.named['File name:'] = [];
+        final result = await go('os_upload', {'path': r'C:\cv.pdf'});
+        expect(result['stopped'], contains('no file dialog'));
+      });
+    });
+
+    test('a named control out of view is scrolled into it, then acted on '
+        '(§15.1)', () async {
+      backend.matches = [_field(type: 'Button', offscreen: true, top: 900)];
+      backend.directAnswer = (ran: GaiaDirectRan.invoke, miss: null);
+      backend.onDirect = () {
+        if (backend.directs.last.$1 == GaiaDirectKind.reveal) {
+          backend.matches = [_button()];
+        }
+      };
+      final card = await fixes.plan('chat', 'card', 'os_click', {
+        'name': 'Submit',
+      });
+      expect(stepsOf(card).single['resolved'], isFalse);
+      final result = await fixes.run('card', once: false, check: () async {});
+      expect(result['stopped'], isNull);
+      expect(backend.directs.map((d) => d.$1), [
+        GaiaDirectKind.reveal,
+        GaiaDirectKind.click,
+      ]);
+      expect(backend.directs.first.$3, (x: 20, y: 910));
+      expect(result['how'], contains('scrolled "Submit" into view'));
+    });
+
+    test('one that can not be scrolled to says so', () async {
+      backend.matches = [_field(type: 'Button', offscreen: true, top: 900)];
+      backend.directAnswer = (ran: null, miss: GaiaDirectMiss.noPattern);
+      await fixes.plan('chat', 'card', 'os_click', {'name': 'Submit'});
+      final result = await fixes.run('card', once: false, check: () async {});
+      expect(result['stopped'], contains("couldn't scroll to it"));
+    });
+
+    test('a field is typed into by its label, not the text naming it '
+        '(§15.4)', () async {
+      backend.matches = [
+        (
+          type: 'Text',
+          sensitive: false,
+          left: 10,
+          top: 0,
+          right: 300,
+          bottom: 8,
+          offscreen: false,
+          exact: true,
+          focused: false,
+          text: '9a) Countries of citizenship',
+          label: null,
+        ),
+        _field(exact: false),
+      ];
+      final card = await plan('os_type', {
+        'name': '9a) Countries of citizenship',
+        'text': 'Canada',
+      });
+      expect(stepsOf(card).single['label'], contains('into Edit'));
+      // A click goes by the name itself.
+      final click = await plan('os_click', {
+        'name': '9a) Countries of citizenship',
+      });
+      expect(stepsOf(click).single['label'], contains('Text'));
+    });
+
+    test('several cut-off or labelled matches with none exact need a '
+        'choice (§15.7)', () async {
+      backend.matches = [_field(exact: false), _field(exact: false, top: 50)];
+      await expectLater(
+        plan('os_click', {'name': 'Are you legally authorized…'}),
+        refused('2 controls'),
+      );
+      expect(
+        gaiaPreferredMatches([
+          _field(exact: false),
+          _button(),
+        ], field: false).single.type,
+        'Button',
+      );
+    });
+
+    test('controls sharing a name are told apart by their labels '
+        '(§15.4, BUG-441)', () async {
+      backend.matches = [
+        _field(type: 'CheckBox', label: 'Are you a Canadian citizen? *'),
+        _field(type: 'CheckBox', top: 50, label: 'Do you need sponsorship? *'),
+      ];
+      await expectLater(
+        plan('os_click', {'name': 'Yes', 'type': 'CheckBox'}),
+        refused(
+          'CheckBox labelled by "Are you a Canadian citizen? *" at 10,10; '
+          'CheckBox labelled by "Do you need sponsorship? *" at 10,50. '
+          'Pass the label of the one you mean as its name',
+        ),
+      );
+      // With no labels, the message is as before.
+      backend.matches = [_button(), _button(left: 50)];
+      await expectLater(
+        plan('os_click', {'name': 'Yes'}),
+        refused('Pass x and y inside the one you mean, or its type.'),
+      );
+    });
+  });
+
+  test('cut-off names match by their start, either way (§15.7)', () {
+    bool cut(String wanted, String name) => gaiaControlMatchesCut(
+      (name: wanted, type: null),
+      name: name,
+      type: 'RadioButton',
+    );
+    expect(
+      cut('Are you legally authorized to work here?', 'Are you legally…'),
+      isTrue,
+    );
+    expect(
+      cut('Are you legally…', 'Are you legally authorized to work here?'),
+      isTrue,
+    );
+    expect(cut('Are you legal...', 'Are you legally authorized'), isTrue);
+    expect(cut('Something else', 'Are you legally…'), isFalse);
+    expect(cut('Anything', '…'), isFalse);
+    expect(cut('x' * 300, 'x' * 300), isTrue);
+    expect(cut('Are you', 'Are you legally'), isFalse);
+  });
+
+  test('an unnamed field is labelled by the nearest text above or left of '
+      'it (§15.4)', () {
+    ({int left, int top, int right, int bottom}) box(
+      int left,
+      int top,
+      int right,
+      int bottom,
+    ) => (left: left, top: top, right: right, bottom: bottom);
+    final field = box(100, 200, 400, 230);
+    expect(
+      gaiaInferLabel(field, [
+        (text: 'Personal details', bounds: box(100, 20, 300, 40)),
+        (text: '9a) Countries of citizenship', bounds: box(100, 170, 400, 190)),
+        (text: 'Beside', bounds: box(500, 200, 600, 230)),
+      ]),
+      '9a) Countries of citizenship',
+    );
+    expect(
+      gaiaInferLabel(field, [(text: 'City', bounds: box(20, 205, 90, 225))]),
+      'City',
+    );
+    // Too far, or its own name.
+    expect(
+      gaiaInferLabel(field, [(text: 'Far', bounds: box(100, 0, 300, -1))]),
+      isNull,
+    );
+    expect(
+      gaiaInferLabel(field, [
+        (
+          text: 'I acknowledge the Data Privacy Notice',
+          bounds: box(100, 150, 400, 170),
+        ),
+        (text: 'Yes', bounds: box(100, 180, 140, 195)),
+      ], own: 'Yes'),
+      'I acknowledge the Data Privacy Notice',
+    );
+  });
+
+  test(
+    'the best option is the same text, else one starting with it (§15.3)',
+    () {
+      expect(gaiaBestOption('canada', ['Canada (+1)', 'Canada']), 'Canada');
+      expect(
+        gaiaBestOption('Toronto', ['North Toronto', 'Toronto, ON, Canada']),
+        'Toronto, ON, Canada',
+      );
+      expect(gaiaBestOption('Toronto', ['Ottawa']), isNull);
+    },
+  );
+
+  test('scrolling toward a control brings it a third of the way down '
+      '(§15.1)', () {
+    final to = gaiaScrollPercentToward(
+      at: 0,
+      shown: 25,
+      view: (left: 0, top: 0, right: 100, bottom: 300),
+      target: (left: 0, top: 900, right: 100, bottom: 930),
+    );
+    // 900 pixels down, less a third of the view, of 900 hidden.
+    expect(to, closeTo(100 * 800 / 900, 0.01));
+    expect(
+      gaiaScrollPercentToward(
+        at: 0,
+        shown: 100,
+        view: (left: 0, top: 0, right: 100, bottom: 300),
+        target: (left: 0, top: 900, right: 100, bottom: 930),
+      ),
+      isNull,
+    );
   });
 
   test('gaiaControlMatches goes by the name as os_read_screen shows it', () {

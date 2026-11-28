@@ -1,0 +1,15 @@
+final repo = c.read(syncRepositoryProvider);
+final jr = c.read(journalRepositoryProvider);
+final local = await jr.getEntry('m5-seed-38');
+final remote = await repo.getDocument('journal_entries', 'm5-seed-38');
+final now = DateTime.now().toUtc();
+final payload = Map<String, dynamic>.from(remote!);
+payload['body'] = 'Seeded body number 38 REMOTEM5 written by device B';
+payload['version'] = (local!.version > (remote['version'] as num).toInt() ? local.version : (remote['version'] as num).toInt()) + 1;
+payload['updatedAt'] = now.toIso8601String();
+final opId = 'm5-devB_m5-seed-38_' + now.microsecondsSinceEpoch.toString() + '_40';
+final bytes = const JSONMessageCodec().encodeMessage(payload)!;
+final encoded = String.fromCharCodes(bytes.buffer.asUint8List(bytes.offsetInBytes, bytes.lengthInBytes));
+await repo.appendOperation(SyncOperation(id: opId, documentId: 'm5-seed-38', sequence: 40, payload: encoded, deviceId: 'm5-devB', timestamp: now));
+await repo.upsertDocument('journal_entries', 'm5-seed-38', payload);
+debugPrint('M5 REMOTE wrote v' + payload['version'].toString() + ' local v' + local.version.toString() + ' localbody ' + local.body);

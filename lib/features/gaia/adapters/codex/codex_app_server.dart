@@ -285,6 +285,7 @@ class CodexAppServerClient {
     GaiaTokensFor tokensFor = (
       account: kGaiaCodexAdapter,
       source: kGaiaTokensOther,
+      chatId: null,
     ),
   }) async {
     final String thread;
@@ -1015,6 +1016,7 @@ class CodexAppServerRunner implements GaiaAgentRunner {
         tokensFor: (
           account: account?.key ?? kGaiaCodexAdapter,
           source: tier?.name ?? kGaiaTokensOther,
+          chatId: chatId,
         ),
         onEvent: onEvent,
       );

@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Picklist Co — QA Intern</title>
+<style>body{font-family:sans-serif;max-width:640px;margin:40px auto}label{display:block;margin:14px 0 4px}input,select,textarea{width:100%;padding:6px}button{margin-top:18px;padding:8px 16px}.opts{border:1px solid #999}.opts div{padding:4px;cursor:pointer}</style>
+</head><body>
+<h1>QA Intern, Picklist Co</h1>
+<p>Location: Waterloo, ON. Winter 2027.</p>
+<form onsubmit="event.preventDefault();done('SUBMITTED typeahead: '+document.getElementById('city').value)">
+<label for="name">Name *</label><input id="name" required>
+<label for="city">City *</label><input id="city" role="combobox" aria-autocomplete="list" required autocomplete="off">
+<div id="cities" class="opts" role="listbox" hidden></div>
+<label for="country">Country *</label>
+<select id="country" required><option value="">Select One</option><option>Canada</option><option>United States</option></select>
+<button type="submit">Submit application</button>
+</form>
+<p id="result" role="status"></p>
+<script>
+function done(what){document.getElementById('result').textContent=what;}
+const all=['Toronto, Ontario, Canada','Toronto, Ohio, United States','Waterloo, Ontario, Canada','Vancouver, British Columbia, Canada'];
+const box=document.getElementById('cities'),city=document.getElementById('city');
+city.addEventListener('input',()=>{box.hidden=true;const q=city.value.toLowerCase();
+ setTimeout(()=>{box.innerHTML='';for(const c of all.filter(c=>c.toLowerCase().includes(q))){const d=document.createElement('div');d.setAttribute('role','option');d.textContent=c;d.onclick=()=>{city.value=c;box.hidden=true;};box.appendChild(d);}box.hidden=!box.children.length;},1500);});
+</script>
+</body></html>

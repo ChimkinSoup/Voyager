@@ -270,6 +270,23 @@ void main() {
       expect(controller.text, 'With ');
     });
 
+    _desktopWidgets('Shift held a letter too long is fixed (§4.7)', (
+      tester,
+    ) async {
+      await pumpField(tester);
+      await type(tester, 'THe ');
+      expect(controller.text, 'The ');
+    });
+
+    _desktopWidgets('a plural acronym is not a Shift slip (§4.7)', (
+      tester,
+    ) async {
+      service.updateDictionary({'ids', 'the'});
+      await pumpField(tester);
+      await type(tester, 'IDs ');
+      expect(controller.text, 'IDs ');
+    });
+
     _desktopWidgets('a word edited with keystrokes is corrected', (
       tester,
     ) async {

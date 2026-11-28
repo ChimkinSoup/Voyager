@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/spellcheck/voyager_spell_check_service.dart';
+import 'package:voyager/core/spellcheck/word_token.dart';
 
 /// Flags for [text] as `word -> isKnown` in left-to-right order, used to
 /// describe expected results without hardcoding character offsets.
@@ -78,6 +79,48 @@ void main() {
       // `mind your p's and q's`.
       final service = _serviceWith({'p', 'q', 'and', 'mind', 'your'});
       expect(service.checkTextSync("mind your p's and q's"), isEmpty);
+    });
+  });
+
+  group('Shift held too long (AUTOCORRECT.md §4.7)', () {
+    const known = {'the', 'what', 'ids', 'mhz', 'urls', 'its', 'iphone'};
+
+    test('two capitals then lowercase on a known word is fixed', () {
+      expect(stuckShiftFix('THe', known), 'The');
+      expect(stuckShiftFix('WHat', known), 'What');
+    });
+
+    test('acronym shapes and other casings are left alone', () {
+      for (final word in [
+        'IDs', 'ITs', 'MHz', 'URLs', 'THE', 'The', 'the', 'iPhone', 'tHe',
+        'THeX', // not a known word once lowercased
+      ]) {
+        expect(stuckShiftFix(word, known), isNull, reason: word);
+      }
+    });
+
+    test('is squiggled with the recased word as its one suggestion', () {
+      final service = _serviceWith(known);
+      const text = 'THe IDs';
+      final spans = service.checkTextSync(text, includeSuggestions: true);
+      expect(_flaggedWords(text, spans), ['THe']);
+      expect(spans.single.suggestions, ['The']);
+      expect(
+        service
+            .hydrateSuggestions(text, service.checkTextSync(text).single)
+            .suggestions,
+        ['The'],
+      );
+    });
+
+    test('is squiggled by the incremental check too', () {
+      final service = _serviceWith(known);
+      final spans = service.checkIncremental(
+        oldText: 'TH',
+        oldSpans: const [],
+        newText: 'THe',
+      );
+      expect(_flaggedWords('THe', spans), ['THe']);
     });
   });
 

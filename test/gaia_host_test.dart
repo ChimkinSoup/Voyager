@@ -101,6 +101,11 @@ class _ControlBackend implements GaiaInputBackend {
   Future<bool?> focusSensitive(int hwnd, {required bool browser}) async =>
       false;
   @override
+  Future<List<String>?> listItems(int hwnd, {required bool browser}) async =>
+      const [];
+  @override
+  Future<String?> readText(int hwnd) async => null;
+  @override
   bool modifiersDown() => false;
   @override
   bool escapeDown() => escape;

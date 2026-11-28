@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Twostep Inc — Data Intern</title>
+<style>body{font-family:sans-serif;max-width:640px;margin:40px auto}label{display:block;margin:14px 0 4px}input,select,textarea{width:100%;padding:6px}button{margin-top:18px;padding:8px 16px}.opts{border:1px solid #999}.opts div{padding:4px;cursor:pointer}</style>
+</head><body>
+<h1>Data Intern, Twostep Inc</h1>
+<p>Location: Remote (Canada). Fall 2027.</p>
+<form id="f" onsubmit="event.preventDefault();done('SUBMITTED two-step')">
+<section id="s1"><h2>Step 1 of 2</h2>
+<label for="name">Full name *</label><input id="name" required>
+<label for="email">Email *</label><input id="email" type="email" required>
+<button type="button" onclick="document.getElementById('s1').hidden=true;document.getElementById('s2').hidden=false">Save and Continue</button></section>
+<section id="s2" hidden><h2>Step 2 of 2</h2>
+<label for="school">School *</label><input id="school" required>
+<label for="auth">Are you legally authorized to work in Canada? *</label>
+<select id="auth" required><option value="">Select One</option><option>Yes</option><option>No</option></select>
+<label for="salary">Expected hourly rate (CAD) *</label><input id="salary" required>
+<button type="submit">Submit</button></section>
+</form>
+<p id="result" role="status"></p>
+<script>
+function done(what){document.getElementById('result').textContent=what;}
+
+</script>
+</body></html>

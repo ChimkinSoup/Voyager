@@ -159,8 +159,10 @@ class VoyagerSpellCheckService implements SpellCheckService {
       if (_overlapsAny(skipped, range.start, range.end)) continue;
       final word = text.substring(range.start, range.end);
       final lower = normalizeCustomWord(word);
-      if (isKnownWord(lower, known)) continue;
-      spans.add(_spanFor(range, lower, includeSuggestions: includeSuggestions));
+      if (isKnownWord(lower, known) && stuckShiftFix(word, known) == null) {
+        continue;
+      }
+      spans.add(_spanFor(range, word, includeSuggestions: includeSuggestions));
     }
     return spans;
   }
@@ -249,9 +251,11 @@ class VoyagerSpellCheckService implements SpellCheckService {
       }
       final word = newText.substring(absRange.start, absRange.end);
       final lower = normalizeCustomWord(word);
-      if (isKnownWord(lower, known)) continue;
+      if (isKnownWord(lower, known) && stuckShiftFix(word, known) == null) {
+        continue;
+      }
       spans.add(
-        _spanFor(absRange, lower, includeSuggestions: includeSuggestions),
+        _spanFor(absRange, word, includeSuggestions: includeSuggestions),
       );
     }
 
@@ -281,22 +285,32 @@ class VoyagerSpellCheckService implements SpellCheckService {
     final start = span.range.start.clamp(0, text.length);
     final end = span.range.end.clamp(start, text.length);
     if (start >= end) return span;
-    final lower = normalizeCustomWord(text.substring(start, end));
-    return SuggestionSpan(span.range, _suggestionsFor(lower));
+    return SuggestionSpan(
+      span.range,
+      _suggestionsFor(text.substring(start, end)),
+    );
   }
 
   SuggestionSpan _spanFor(
     TextRange range,
-    String lower, {
+    String word, {
     required bool includeSuggestions,
   }) {
     return SuggestionSpan(
       range,
-      includeSuggestions ? _suggestionsFor(lower) : const <String>[],
+      includeSuggestions ? _suggestionsFor(word) : const <String>[],
     );
   }
 
-  List<String> _suggestionsFor(String lower) {
+  /// A Shift slip (`THe`) has exactly one fix, the word itself recased; any
+  /// other misspelling goes to the edit-distance search.
+  List<String> _suggestionsFor(String word) {
+    final fix = stuckShiftFix(word, _known);
+    if (fix != null) return [fix];
+    return _suggestionsForLower(normalizeCustomWord(word));
+  }
+
+  List<String> _suggestionsForLower(String lower) {
     return _suggestionCache.putIfAbsent(
       lower,
       () => generateSuggestions(lower, _known),

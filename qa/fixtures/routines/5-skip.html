@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Clearance Corp — Systems Intern</title>
+<style>body{font-family:sans-serif;max-width:640px;margin:40px auto}label{display:block;margin:14px 0 4px}input,select,textarea{width:100%;padding:6px}button{margin-top:18px;padding:8px 16px}.opts{border:1px solid #999}.opts div{padding:4px;cursor:pointer}</style>
+</head><body>
+<h1>Systems Intern, Clearance Corp</h1>
+<p>Location: Arlington, VA. Summer 2027.</p>
+<h2>Requirements</h2>
+<ul><li>U.S. citizenship is required.</li><li>Must be able to obtain a Secret clearance.</li><li>We do not sponsor visas.</li></ul>
+<a href="#apply">Apply</a>
+<form id="apply" onsubmit="event.preventDefault();done('SUBMITTED skip (should never happen)')">
+<label for="name">Name *</label><input id="name" required>
+<button type="submit">Submit application</button>
+</form>
+<p id="result" role="status"></p>
+<script>
+function done(what){document.getElementById('result').textContent=what;}
+
+</script>
+</body></html>

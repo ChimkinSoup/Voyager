@@ -74,6 +74,18 @@ GaiaCursorTarget? gaiaCursorTarget() {
   }
 }
 
+/// Whether [hwnd] is a dialog, as the Open dialog a browser shows: no page,
+/// so no address, though its folder box reads as one.
+bool gaiaIsDialog(int hwnd) {
+  final className = wsalloc(256);
+  try {
+    GetClassName(hwnd, className, 256);
+    return className.toDartString() == '#32770';
+  } finally {
+    free(className);
+  }
+}
+
 bool _isControlBorder(int hwnd) {
   final className = wsalloc(256);
   try {
@@ -1109,7 +1121,14 @@ typedef GaiaWindowScan = ({
 });
 
 /// A control [gaiaScanWindow] was asked to find. A sensitive one's [type] and
-/// name stay in the worker's scan: only that it matched comes out.
+/// name stay in the worker's scan: only that it matched comes out. [offscreen]
+/// when UI Automation says it's scrolled out of view (GAIA_ROUTINES_HLD.md
+/// §15.1). [exact] when it matched by its own name, not by its inferred label
+/// (§15.4) or a name cut short (§15.7). [focused] when it holds the keyboard
+/// focus. [text] is what it holds, a field's value or else its name, for
+/// reading it back (§15.3, §15.5); null for a sensitive one. [label] is the
+/// text by it (§15.4), which tells apart matches sharing a name; null for a
+/// sensitive one.
 typedef GaiaControlMatch = ({
   String type,
   bool sensitive,
@@ -1117,6 +1136,11 @@ typedef GaiaControlMatch = ({
   int top,
   int right,
   int bottom,
+  bool offscreen,
+  bool exact,
+  bool focused,
+  String? text,
+  String? label,
 });
 
 /// Whether a control's [name] and [type] are what an agent asked for. Names are
@@ -1132,6 +1156,91 @@ bool gaiaControlMatches(
   }
   final shown = _capped(name, _maxControlName).trim().toLowerCase();
   return shown.isNotEmpty && shown == find.name.trim().toLowerCase();
+}
+
+/// Whether [find]'s name and a control's [name], one of them cut short with an
+/// ellipsis, as UI Automation and `os_read_screen` cut long names, start the
+/// same (GAIA_ROUTINES_HLD.md §15.7). A step takes such a match only when it's
+/// the only one.
+bool gaiaControlMatchesCut(
+  ({String name, String? type}) find, {
+  required String name,
+  required String type,
+}) {
+  if (find.type case final wanted?
+      when wanted.toLowerCase() != type.toLowerCase()) {
+    return false;
+  }
+  String? stem(String text) {
+    for (final cut in const ['…', '...']) {
+      if (text.endsWith(cut)) {
+        final stem = text.substring(0, text.length - cut.length).trim();
+        return stem.isEmpty ? null : stem;
+      }
+    }
+    return null;
+  }
+
+  final shown = _capped(name, _maxControlName).trim().toLowerCase();
+  final asked = find.name.trim().toLowerCase();
+  if (stem(shown) case final start? when asked.startsWith(start)) return true;
+  if (stem(asked) case final start? when shown.startsWith(start)) return true;
+  return false;
+}
+
+/// How far from a control its inferred label can be, in physical pixels.
+const _labelReach = 200;
+
+/// A label for a control at [field] (GAIA_ROUTINES_HLD.md §15.4): a field with
+/// no name, or one sharing its name with others, is named after the nearest of
+/// [texts], those read before it, above it or to its left. Not its [own] name.
+/// Null when none is within [_labelReach].
+String? gaiaInferLabel(
+  ({int left, int top, int right, int bottom}) field,
+  List<({String text, ({int left, int top, int right, int bottom}) bounds})>
+  texts, {
+  String own = '',
+}) {
+  String? label;
+  var nearest = _labelReach;
+  for (final (:text, :bounds) in texts) {
+    if (text.toLowerCase() == own.toLowerCase()) continue;
+    final int gap;
+    if (bounds.bottom <= field.top + 4 &&
+        bounds.right > field.left &&
+        bounds.left < field.right) {
+      gap = field.top - bounds.bottom;
+    } else if (bounds.right <= field.left + 4 &&
+        bounds.bottom > field.top &&
+        bounds.top < field.bottom) {
+      gap = field.left - bounds.right;
+    } else {
+      continue;
+    }
+    // At the same distance, the later one, nearer in reading order.
+    if (gap <= nearest) {
+      nearest = gap;
+      label = text;
+    }
+  }
+  return label;
+}
+
+/// Where a vertical scroll of [view], showing [shown] percent of what it holds
+/// and scrolled [at] percent down, goes to bring [target] a third of the way
+/// down it (GAIA_ROUTINES_HLD.md §15.1). Null when it can't scroll.
+double? gaiaScrollPercentToward({
+  required double at,
+  required double shown,
+  required ({int left, int top, int right, int bottom}) view,
+  required ({int left, int top, int right, int bottom}) target,
+}) {
+  final height = view.bottom - view.top;
+  if (height <= 0 || shown <= 0 || shown >= 100) return null;
+  // What it holds past what it shows, in pixels.
+  final hidden = height * 100 / shown - height;
+  final by = target.top - view.top - height / 3;
+  return (at + by / hidden * 100).clamp(0.0, 100.0);
 }
 
 /// One look at what has focus. Not [held] when UI Automation answered with
@@ -1282,11 +1391,14 @@ GaiaWindowScan? gaiaSettleScan(
 /// name or value, and of those types, each under what it's in; either matches
 /// regardless of case. [offscreen] keeps the controls UI Automation says are
 /// off screen too, as a page's below the fold, marked so. [pageOnly] matches
-/// only controls inside a Document, so not a browser's tabs or address bar. [find] fills [GaiaWindowScan.matches] with the on-screen
+/// only controls inside a Document, so not a browser's tabs or address bar. [find] fills [GaiaWindowScan.matches] with the
 /// controls of that name. Null when its tree couldn't be read at all. [onMatch] is
 /// handed each match's element as it's found, and [onScrollable] each
 /// on-screen control that can scroll, neither inside a sensitive field: what
-/// [gaiaActOnControl] acts on.
+/// [gaiaActOnControl] acts on. A [find] matches off-screen controls too, marked
+/// so, and by a control's inferred label or a cut-off name
+/// (GAIA_ROUTINES_HLD.md §15.1, §15.4, §15.7). [onListItem] is handed the name
+/// of each on-screen list option (§15.3).
 GaiaWindowScan? gaiaScanWindow(
   int hwnd, {
   required bool browser,
@@ -1308,6 +1420,7 @@ GaiaWindowScan? gaiaScanWindow(
     ({int left, int top, int right, int bottom}) bounds,
   )?
   onScrollable,
+  void Function(String name)? onListItem,
 }) {
   CoInitializeEx(nullptr, COINIT_MULTITHREADED);
   final uia = CUIAutomation.createInstance();
@@ -1340,7 +1453,8 @@ GaiaWindowScan? gaiaScanWindow(
         UIA_ToggleToggleStatePropertyId,
         UIA_IsSelectionItemPatternAvailablePropertyId,
         UIA_SelectionItemIsSelectedPropertyId,
-      ],
+      ] else if (onListItem != null)
+        UIA_IsSelectionItemPatternAvailablePropertyId,
     ]) {
       cache.addProperty(property);
     }
@@ -1351,7 +1465,37 @@ GaiaWindowScan? gaiaScanWindow(
       cached.cast(),
     );
     if (FAILED(hr) || cached.ref.isNull) return null;
-    final lines = StringBuffer();
+    final lines = <String>[];
+    var written = 0;
+    // The named text read so far, which labels a control after it (§15.4):
+    // a page's text labels only the page's controls, never the browser's own
+    // (BUG-440), and the browser's text only its own.
+    final pageTexts =
+        <
+          ({String text, ({int left, int top, int right, int bottom}) bounds})
+        >[];
+    final otherTexts =
+        <
+          ({String text, ({int left, int top, int right, int bottom}) bounds})
+        >[];
+    List<({String text, ({int left, int top, int right, int bottom}) bounds})>
+    textsIn(bool page) => page ? pageTexts : otherTexts;
+    // Each printed control with a name: its line, where its name ends there,
+    // how many texts of its group came before it, whether that's the page,
+    // and its type and name, which a control shares with others to be given a
+    // label (§15.4).
+    final named =
+        <
+          ({
+            int line,
+            int head,
+            int before,
+            bool page,
+            String key,
+            String name,
+            ({int left, int top, int right, int bottom}) bounds,
+          })
+        >[];
     final sensitive = <({int left, int top, int right, int bottom})>[];
     final unjudged = <({int left, int top, int right, int bottom})>[];
     final matches = <GaiaControlMatch>[];
@@ -1367,13 +1511,30 @@ GaiaWindowScan? gaiaScanWindow(
       String name,
       ({int left, int top, int right, int bottom}) bounds, {
       required bool isSensitive,
+      required bool inPage,
+      String? label,
     }) {
       if (find == null ||
-          element.cachedIsOffscreen != 0 ||
           bounds.right <= bounds.left ||
-          bounds.bottom <= bounds.top ||
-          !gaiaControlMatches(find, name: name, type: type)) {
+          bounds.bottom <= bounds.top) {
         return;
+      }
+      final exact = gaiaControlMatches(find, name: name, type: type);
+      // By its label: a field's with no name, or one sharing it (§15.4).
+      String? by() =>
+          label ??
+          (type == 'Text' || name.isEmpty
+              ? null
+              : gaiaInferLabel(bounds, textsIn(inPage), own: name));
+      final String? labelled;
+      if (!exact && !gaiaControlMatchesCut(find, name: name, type: type)) {
+        labelled = by();
+        if (labelled == null ||
+            !gaiaControlMatches(find, name: labelled, type: type)) {
+          return;
+        }
+      } else {
+        labelled = by();
       }
       final match = (
         type: type,
@@ -1382,6 +1543,15 @@ GaiaWindowScan? gaiaScanWindow(
         top: bounds.top,
         right: bounds.right,
         bottom: bounds.bottom,
+        offscreen: element.cachedIsOffscreen != 0,
+        exact: exact,
+        focused: element.cachedHasKeyboardFocus != 0,
+        text: isSensitive
+            ? null
+            : _valueControls.contains(type)
+            ? _valueOf(element, type, leaf: false) ?? ''
+            : name,
+        label: isSensitive ? null : labelled,
       );
       matches.add(match);
       onMatch?.call(uia, element, match);
@@ -1410,11 +1580,13 @@ GaiaWindowScan? gaiaScanWindow(
       if (!kept) return;
       for (var i = 0; i < open.length; i++) {
         if (open[i] case final above?) {
-          lines.writeln(above);
+          lines.add(above);
+          written += above.length + 1;
           open[i] = null;
         }
       }
-      lines.writeln(line);
+      lines.add(line);
+      written += line.length + 1;
     }
 
     // The window itself: its title isn't a match, as a wait's text would
@@ -1428,7 +1600,7 @@ GaiaWindowScan? gaiaScanWindow(
     }) {
       final isRoot = atRoot;
       atRoot = false;
-      if (text && lines.length >= _maxTreeText) {
+      if (text && written >= _maxTreeText) {
         cut = true;
         return;
       }
@@ -1437,10 +1609,17 @@ GaiaWindowScan? gaiaScanWindow(
       if (type == 'Document') hasDocument = true;
       final focused = element.cachedHasKeyboardFocus != 0;
       final name = _taken(element.cachedName);
-      if (focused && gaiaFocusNamesControl(type, name, web: web)) {
+      final bounds = _boundsOf(element, cached: true);
+      final sized = bounds.right > bounds.left && bounds.bottom > bounds.top;
+      // A page's field with no name goes by the text beside it, which judges
+      // it as a name would (GAIA_ROUTINES_HLD.md §15.4). With none, it can't be
+      // judged, so isn't read.
+      final label = hideUnnamed && gaiaFieldUnjudged(type, name)
+          ? gaiaInferLabel(bounds, textsIn(inPage))
+          : null;
+      if (focused && gaiaFocusNamesControl(type, label ?? name, web: web)) {
         anyFocused = true;
       }
-      final bounds = _boundsOf(element, cached: true);
       final place =
           '[${bounds.left},${bounds.top} '
           '${bounds.right - bounds.left}x${bounds.bottom - bounds.top}]';
@@ -1449,12 +1628,20 @@ GaiaWindowScan? gaiaScanWindow(
       if (gaiaSensitiveControl(
         isPassword: element.cachedIsPassword != 0,
         type: type,
-        name: name,
+        name: label ?? name,
         automationId: _taken(element.cachedAutomationId),
       )) {
         sensitive.add(bounds);
         if (focused) sensitiveFocused = true;
-        matchIf(element, type, name, bounds, isSensitive: true);
+        matchIf(
+          element,
+          type,
+          name,
+          bounds,
+          isSensitive: true,
+          inPage: inPage,
+          label: label,
+        );
         if (text && inRegion(bounds)) {
           emit(
             '${'  ' * depth}$type (sensitive, not read) $place',
@@ -1463,14 +1650,32 @@ GaiaWindowScan? gaiaScanWindow(
         }
         return;
       }
-      matchIf(element, type, name, bounds, isSensitive: false);
+      matchIf(
+        element,
+        type,
+        name,
+        bounds,
+        isSensitive: false,
+        inPage: inPage,
+        label: label,
+      );
+      if (type == 'Text' && name.isNotEmpty && sized) {
+        textsIn(inPage).add((text: name, bounds: bounds));
+      }
+      if (onListItem != null &&
+          type == 'ListItem' &&
+          name.isNotEmpty &&
+          element.cachedIsOffscreen == 0 &&
+          _cachedFlag(element, UIA_IsSelectionItemPatternAvailablePropertyId)) {
+        onListItem(name);
+      }
       if (onScrollable != null &&
           element.cachedIsOffscreen == 0 &&
           _cachedFlag(element, UIA_IsScrollPatternAvailablePropertyId)) {
         onScrollable(element, bounds);
       }
       // Nor its children, as above.
-      if (hideUnnamed && gaiaFieldUnjudged(type, name)) {
+      if (hideUnnamed && label == null && gaiaFieldUnjudged(type, name)) {
         unjudged.add(bounds);
         if (text &&
             (offscreen || element.cachedIsOffscreen == 0) &&
@@ -1491,29 +1696,51 @@ GaiaWindowScan? gaiaScanWindow(
         if (text &&
             (offscreen || element.cachedIsOffscreen == 0) &&
             inRegion(bounds)) {
-          final value = _valueControls.contains(type) || leaf
+          final read = _valueControls.contains(type) || leaf
               ? _valueOf(element, type, leaf: leaf)
               : null;
-          if (value != null && value.length >= _maxLeafText) cut = true;
+          if (read != null && read.length >= _maxLeafText) cut = true;
           // A name the same as the one it's under only repeats it, as a
           // list row's checkbox and link repeat the row's.
           final shown = name == above ? '' : name;
-          final sized =
-              bounds.right > bounds.left && bounds.bottom > bounds.top;
+          // A name cut short is given whole as the value, so a long option,
+          // the statement a click agrees to, is read in full
+          // (GAIA_ROUTINES_HLD.md §15.7).
+          final value =
+              read ??
+              (shown.length > _maxControlName
+                  ? _capped(shown, _maxLeafText)
+                  : null);
           if (shown.isNotEmpty ||
               value != null ||
               (sized && !_silentControls.contains(type))) {
             // As JSON strings, so what a page says can't pass for another line.
-            final line =
+            final head =
                 '${'  ' * depth}$type'
                 '${shown.isEmpty ? '' : ' ${jsonEncode(_capped(shown, _maxControlName))}'}'
+                '${label == null ? '' : ', labelled by: ${jsonEncode(_capped(label, _maxControlName))}'}';
+            final line =
+                '$head'
                 '${value == null ? '' : ' = ${jsonEncode(value)}'}'
                 '${_stateOf(element)}'
                 '${element.cachedIsOffscreen == 0 ? '' : ' (off screen)'}'
                 ' $place';
             final kept =
-                !isRoot && (!pageOnly || inPage) && keeps(type, name, value);
+                !isRoot &&
+                (!pageOnly || inPage) &&
+                keeps(type, label ?? name, value);
             emit(line, kept: kept);
+            if (kept && shown.isNotEmpty && type != 'Text') {
+              named.add((
+                line: lines.length - 1,
+                head: head.length,
+                before: textsIn(inPage).length,
+                page: inPage,
+                key: '$type\n${name.toLowerCase()}',
+                name: name,
+                bounds: bounds,
+              ));
+            }
             open.add(kept ? null : line);
             printed = true;
             above = name;
@@ -1546,9 +1773,28 @@ GaiaWindowScan? gaiaScanWindow(
     }
 
     walk(_detached(IUIAutomationElement(cached)), 0, '');
+    // Controls sharing a type and name each get their question (§15.4).
+    final sharing = <String, int>{};
+    for (final control in named) {
+      sharing[control.key] = (sharing[control.key] ?? 0) + 1;
+    }
+    for (final control in named) {
+      if (sharing[control.key]! < 2) continue;
+      final label = gaiaInferLabel(
+        control.bounds,
+        textsIn(control.page).sublist(0, control.before),
+        own: control.name,
+      );
+      if (label == null) continue;
+      final line = lines[control.line];
+      lines[control.line] =
+          '${line.substring(0, control.head)}, labelled by: '
+          '${jsonEncode(_capped(label, _maxControlName))}'
+          '${line.substring(control.head)}';
+    }
     return (
       url: url,
-      tree: lines.toString().trimRight(),
+      tree: lines.join('\n').trimRight(),
       cut: cut,
       sensitive: sensitive,
       unjudged: unjudged,
@@ -1572,15 +1818,18 @@ GaiaWindowScan? gaiaScanWindow(
 }
 
 /// What a direct call is asked to do (GAIA_AUTONOMY_HLD.md §13.2): a left
-/// click, typing [text], or scrolling [amount] notches in [direction].
+/// click, typing [text], scrolling [amount] notches in [direction], or
+/// scrolling the control into view (GAIA_ROUTINES_HLD.md §15.1). Typing with
+/// [replace] sets the value whatever the field holds (§15.5).
 typedef GaiaDirectAct = ({
   GaiaDirectKind kind,
   String? text,
   String? direction,
   int amount,
+  bool replace,
 });
 
-enum GaiaDirectKind { click, type, scroll }
+enum GaiaDirectKind { click, type, scroll, reveal }
 
 /// The pattern a direct call ran.
 enum GaiaDirectRan {
@@ -1642,7 +1891,9 @@ GaiaDirectResult gaiaActOnControl(
       text: false,
       find: find,
       onMatch: (uia, element, match) {
+        // Only scrolling into view acts on one out of view.
         if (result != null ||
+            match.offscreen != (act.kind == GaiaDirectKind.reveal) ||
             at.x < match.left ||
             at.x >= match.right ||
             at.y < match.top ||
@@ -1784,8 +2035,9 @@ GaiaDirectResult _directCall(
       final typed = _withPattern(element, UIA_ValuePatternId, (pattern) {
         final value = _detached(IUIAutomationValuePattern(pattern));
         if (value.currentIsReadOnly != 0) return GaiaDirectMiss.noPattern;
-        // A set value replaces the whole value, so only into an empty field.
-        if (_taken(value.currentValue).isNotEmpty) {
+        // A set value replaces the whole value, so only into an empty field,
+        // unless replacing is what's asked.
+        if (!act.replace && _taken(value.currentValue).isNotEmpty) {
           return GaiaDirectMiss.hasText;
         }
         final text = act.text!.toNativeUtf16();
@@ -1800,39 +2052,104 @@ GaiaDirectResult _directCall(
           ? (ran: GaiaDirectRan.setValue, miss: null)
           : (ran: null, miss: typed);
     case GaiaDirectKind.scroll:
-      // The control's nearest scrollable ancestor, itself first.
-      final walker = IUIAutomationTreeWalker(uia.controlViewWalker);
-      final at = calloc<COMObject>()..ref.lpVtbl = element.ptr.ref.lpVtbl;
-      IUnknown(at)
-        ..detach()
-        ..addRef();
-      var current = at;
-      try {
-        while (true) {
-          final scrolled = _scroll(
-            _detached(IUIAutomationElement(current)),
-            act,
-          );
-          if (scrolled.miss != GaiaDirectMiss.noPattern) return scrolled;
-          final parent = calloc<COMObject>();
-          final hr = walker.getParentElement(
-            current.ref.lpVtbl.cast(),
-            parent.cast(),
-          );
-          _releaseFound(current);
-          free(current);
-          current = parent;
-          // Past the window is the desktop, which doesn't scroll.
-          if (FAILED(hr) || parent.ref.isNull) {
-            return (ran: null, miss: GaiaDirectMiss.noPattern);
-          }
-        }
-      } finally {
-        _releaseFound(current);
-        free(current);
-        _release(walker);
+      return _nearestScrollable(uia, element, (view) => _scroll(view, act));
+    case GaiaDirectKind.reveal:
+      final shown = _withPattern(
+        element,
+        UIA_ScrollItemPatternId,
+        (pattern) =>
+            _detached(IUIAutomationScrollItemPattern(pattern)).scrollIntoView(),
+      );
+      if (shown != null && SUCCEEDED(shown)) {
+        return (ran: GaiaDirectRan.scroll, miss: null);
       }
+      // No pattern: its nearest scrollable ancestor, by its offset (§15.1).
+      final target = _boundsOf(element);
+      return _nearestScrollable(
+        uia,
+        element,
+        (view) => _scrollToward(view, target),
+      );
   }
+}
+
+/// [call] on [element]'s nearest scrollable ancestor, itself first: the first
+/// that doesn't answer no pattern.
+GaiaDirectResult _nearestScrollable(
+  IUIAutomation uia,
+  IUIAutomationElement element,
+  GaiaDirectResult Function(IUIAutomationElement view) call,
+) {
+  final walker = IUIAutomationTreeWalker(uia.controlViewWalker);
+  final at = calloc<COMObject>()..ref.lpVtbl = element.ptr.ref.lpVtbl;
+  IUnknown(at)
+    ..detach()
+    ..addRef();
+  var current = at;
+  try {
+    while (true) {
+      final scrolled = call(_detached(IUIAutomationElement(current)));
+      if (scrolled.miss != GaiaDirectMiss.noPattern) return scrolled;
+      final parent = calloc<COMObject>();
+      final hr = walker.getParentElement(
+        current.ref.lpVtbl.cast(),
+        parent.cast(),
+      );
+      _releaseFound(current);
+      free(current);
+      current = parent;
+      // Past the window is the desktop, which doesn't scroll.
+      if (FAILED(hr) || parent.ref.isNull) {
+        return (ran: null, miss: GaiaDirectMiss.noPattern);
+      }
+    }
+  } finally {
+    _releaseFound(current);
+    free(current);
+    _release(walker);
+  }
+}
+
+/// [view] scrolled down or up to bring [target] into it
+/// ([gaiaScrollPercentToward]). No pattern when it can't scroll that way.
+GaiaDirectResult _scrollToward(
+  IUIAutomationElement view,
+  ({int left, int top, int right, int bottom}) target,
+) {
+  final box = _boundsOf(view);
+  final scrolled = _withPattern(view, UIA_ScrollPatternId, (pattern) {
+    final scroller = _detached(IUIAutomationScrollPattern(pattern));
+    if (scroller.currentVerticallyScrollable == 0) {
+      return GaiaDirectMiss.noPattern;
+    }
+    final to = gaiaScrollPercentToward(
+      at: scroller.currentVerticalScrollPercent,
+      shown: scroller.currentVerticalViewSize,
+      view: box,
+      target: target,
+    );
+    if (to == null) return GaiaDirectMiss.noPattern;
+    // UIA_ScrollPatternNoScroll: across stays as it is.
+    final hr = scroller.setScrollPercent(-1.0, to);
+    return SUCCEEDED(hr) ? null : _missOf(hr) ?? GaiaDirectMiss.noPattern;
+  }, unsupported: GaiaDirectMiss.noPattern);
+  return scrolled == null
+      ? (ran: GaiaDirectRan.scroll, miss: null)
+      : (ran: null, miss: scrolled);
+}
+
+/// The names of [hwnd]'s list options on screen, as an open dropdown shows
+/// them (GAIA_ROUTINES_HLD.md §15.3); null when its tree couldn't be read. Call
+/// within [gaiaScreenWork].
+List<String>? gaiaListItems(int hwnd, {required bool browser}) {
+  final names = <String>[];
+  final scan = gaiaScanWindow(
+    hwnd,
+    browser: browser,
+    text: false,
+    onListItem: names.add,
+  );
+  return scan == null ? null : names;
 }
 
 /// [element] scrolled [act]'s notches, each a tenth of what it shows, in one
@@ -2188,6 +2505,7 @@ GaiaWindowUia _readUia(
 /// the page made, and could hold anything, so with no address bar there's no
 /// address.
 String? _addressBar(IUIAutomation uia, int hwnd) {
+  if (gaiaIsDialog(hwnd)) return null;
   final root = calloc<COMObject>();
   final editCondition = calloc<COMObject>();
   final comboCondition = calloc<COMObject>();
@@ -2269,6 +2587,134 @@ String? _addressBar(IUIAutomation uia, int hwnd) {
     free(found);
     free(type);
     free(value);
+  }
+}
+
+/// A browser tab the routine launch card lists (GAIA_ROUTINES_HLD.md §7.2).
+typedef GaiaBrowserTab = ({String title, String url});
+
+/// [hwnd]'s tabs, each with its address (GAIA_ROUTINES_HLD.md §7.2). A tab
+/// shows its address only while it's selected, so each is selected in turn
+/// and the one selected before is selected again after. Off the main
+/// isolate, and longer than other screen work: each tab takes a moment.
+Future<List<GaiaBrowserTab>> gaiaReadBrowserTabs(int hwnd) async {
+  if (_screenWorking.contains(hwnd)) return const [];
+  _screenWorking.add(hwnd);
+  try {
+    return await Isolate.run(
+      () => _browserTabs(hwnd),
+    ).timeout(const Duration(minutes: 1), onTimeout: () => const []);
+  } finally {
+    _screenWorking.remove(hwnd);
+  }
+}
+
+/// An address bar's text as a URL: Chrome's leaves out `https://`.
+String gaiaAddressUrl(String address) =>
+    RegExp(r'^[a-z][a-z0-9+.-]*://', caseSensitive: false).hasMatch(address)
+    ? address
+    : 'https://$address';
+
+List<GaiaBrowserTab> _browserTabs(int hwnd) {
+  CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+  final uia = CUIAutomation.createInstance();
+  final root = calloc<COMObject>();
+  final condition = calloc<COMObject>();
+  final found = calloc<COMObject>();
+  final type = calloc<VARIANT>();
+  final tabs = <IUIAutomationElement>[];
+  try {
+    if (FAILED(uia.elementFromHandle(hwnd, root.cast())) || root.ref.isNull) {
+      return const [];
+    }
+    type.ref
+      ..vt = VT_I4
+      ..lVal = UIA_TabItemControlTypeId;
+    if (FAILED(
+          uia.createPropertyCondition(
+            UIA_ControlTypePropertyId,
+            type.ref,
+            condition.cast(),
+          ),
+        ) ||
+        condition.ref.isNull) {
+      return const [];
+    }
+    final window = _detached(IUIAutomationElement(root));
+    if (FAILED(
+          // The condition itself, not the slot holding it.
+          window.findAll(
+            TreeScope_Descendants,
+            condition.ref.lpVtbl.cast(),
+            found.cast(),
+          ),
+        ) ||
+        found.ref.isNull) {
+      return const [];
+    }
+    final array = _detached(IUIAutomationElementArray(found));
+    for (var i = 0; i < array.length; i++) {
+      final element = calloc<COMObject>();
+      if (SUCCEEDED(array.getElement(i, element.cast())) &&
+          !element.ref.isNull) {
+        tabs.add(_detached(IUIAutomationElement(element)));
+      } else {
+        free(element);
+      }
+    }
+    bool selected(IUIAutomationElement tab) =>
+        _withPattern(
+          tab,
+          UIA_SelectionItemPatternId,
+          (pattern) =>
+              _detached(
+                IUIAutomationSelectionItemPattern(pattern),
+              ).currentIsSelected !=
+              0,
+        ) ??
+        false;
+    bool select(IUIAutomationElement tab) =>
+        _withPattern(
+          tab,
+          UIA_SelectionItemPatternId,
+          (pattern) => SUCCEEDED(
+            _detached(IUIAutomationSelectionItemPattern(pattern)).select(),
+          ),
+        ) ??
+        false;
+    final before = tabs.indexWhere(selected);
+    final addresses = List<String?>.filled(tabs.length, null);
+    var shown = _addressBar(uia, hwnd);
+    if (before >= 0) addresses[before] = shown;
+    for (final (i, tab) in tabs.indexed) {
+      if (i == before || !select(tab)) continue;
+      // Until the address bar shows the tab's, or a second has gone.
+      String? address;
+      for (var waited = 0; waited < 1000; waited += 100) {
+        sleep(const Duration(milliseconds: 100));
+        address = _addressBar(uia, hwnd);
+        if (address != null && address != shown) break;
+      }
+      // Unchanged, it's still the last tab's: this one is left out.
+      if (address != null && address != shown) addresses[i] = shown = address;
+    }
+    if (before >= 0 && tabs.length > 1) select(tabs[before]);
+    return [
+      for (final (i, tab) in tabs.indexed)
+        if (addresses[i] case final address?)
+          (title: _taken(tab.currentName), url: gaiaAddressUrl(address)),
+    ];
+  } on WindowsException {
+    return const [];
+  } finally {
+    tabs.forEach(_release);
+    [root, condition, found].forEach(_releaseFound);
+    free(root);
+    free(condition);
+    free(found);
+    free(type);
+    _release(uia);
+    CoUninitialize();
   }
 }
 

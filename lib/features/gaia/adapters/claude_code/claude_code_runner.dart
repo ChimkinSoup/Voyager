@@ -331,6 +331,7 @@ class ClaudeCodeRunner
       tokensFor: (
         account: account?.key ?? kGaiaClaudeCodeAdapter,
         source: tier?.name ?? kGaiaTokensOther,
+        chatId: chatId,
       ),
       onEvent: (event) {
         if (event is ClaudeTextDelta) streamed = true;
@@ -405,7 +406,11 @@ class ClaudeCodeRunner
     promptId: promptId,
     fork: null,
     toolless: false,
-    tokensFor: (account: kGaiaClaudeCodeAdapter, source: kGaiaTokensOther),
+    tokensFor: (
+      account: kGaiaClaudeCodeAdapter,
+      source: kGaiaTokensOther,
+      chatId: null,
+    ),
     onEvent: onEvent,
   )).$1;
 

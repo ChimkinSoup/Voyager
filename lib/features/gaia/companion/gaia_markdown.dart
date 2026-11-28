@@ -425,17 +425,12 @@ class _BlockState extends State<_Block> {
       }
       widgets.add(switch (node.tag) {
         'p' => _paragraph(context, node.children ?? const [], style),
-        'h1' || 'h2' || 'h3' || 'h4' || 'h5' || 'h6' => Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: _paragraph(
-            context,
-            node.children ?? const [],
-            style.copyWith(
-              fontSize: (style.fontSize ?? 14) * _headingScale[node.tag]!,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
+        'h1' ||
+        'h2' ||
+        'h3' ||
+        'h4' ||
+        'h5' ||
+        'h6' => _heading(context, node, style),
         'ul' || 'ol' => _list(context, node, style, depth),
         'blockquote' => Container(
           padding: const EdgeInsets.only(left: 10),
@@ -602,6 +597,54 @@ class _BlockState extends State<_Block> {
     List<md.Node> nodes,
     TextStyle style,
   ) => Text.rich(TextSpan(children: _spans(context, nodes, style)));
+
+  /// h1 in gold; h2 in the text's colour; h3 to h6 in a periwinkle that
+  /// deepens a step at each level. Darker for a light background, where the
+  /// pale ones wouldn't show.
+  Widget _heading(BuildContext context, md.Element node, TextStyle style) {
+    final light = Theme.of(context).brightness == Brightness.light;
+    final (gold, blues) = light ? _headingColorsOnLight : _headingColors;
+    final color = switch (node.tag) {
+      'h1' => gold,
+      'h2' => style.color,
+      'h3' => blues[0],
+      'h4' => blues[1],
+      'h5' => blues[2],
+      _ => blues[3],
+    };
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: _paragraph(
+        context,
+        node.children ?? const [],
+        style.copyWith(
+          fontSize: (style.fontSize ?? 14) * _headingScale[node.tag]!,
+          fontWeight: FontWeight.w600,
+          color: color,
+        ),
+      ),
+    );
+  }
+
+  /// h1's gold, then h3 to h6's blues.
+  static const _headingColors = (
+    Color(0xFFE0B860),
+    [
+      Color(0xFFA4C0FF),
+      Color(0xFF8CB0FC),
+      Color(0xFF769FF3),
+      Color(0xFF638FE8),
+    ],
+  );
+  static const _headingColorsOnLight = (
+    Color(0xFF8A5F00),
+    [
+      Color(0xFF2C4A8C),
+      Color(0xFF3558A8),
+      Color(0xFF4A6CC0),
+      Color(0xFF5F7FCC),
+    ],
+  );
 
   Widget _codeBlock(md.Element pre) {
     final code = pre.children?.firstOrNull;
@@ -792,9 +835,7 @@ class _BlockState extends State<_Block> {
           final code = node.textContent;
           final codeStyle = style.copyWith(
             fontFamily: AppFonts.monoFamily,
-            backgroundColor: theme.colorScheme.onSurface.withValues(
-              alpha: 0.08,
-            ),
+            backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.1),
           );
           final target = gaiaLinkTarget(code.trim());
           spans.add(
@@ -834,8 +875,18 @@ class _BlockState extends State<_Block> {
                 // its baseline, like `$n$`, rode above the line.
                 alignment: PlaceholderAlignment.baseline,
                 baseline: TextBaseline.alphabetic,
-                // A piece still wider than the line scrolls, not cut off.
-                child: _math(piece, style, scrolls: true),
+                // A faint accent behind it, as inline code has.
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    // A piece still wider than the line scrolls, not cut off.
+                    child: _math(piece, style, scrolls: true),
+                  ),
+                ),
               ),
             );
             if (gap.isNotEmpty) spans.add(TextSpan(text: gap, style: style));

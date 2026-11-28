@@ -9,7 +9,7 @@ import 'package:voyager/features/gaia/companion/gaia_tier_commands.dart';
 /// account's alias can't.
 final kGaiaReservedCommandNames = {
   for (final builtin in GaiaBuiltin.values) ...builtin.names,
-  for (final tier in GaiaTier.values) tier.command.substring(1),
+  for (final tier in GaiaTier.values) ...tier.names,
 };
 
 /// Why [name] can't be a command or alias, or null if it can: an empty one
@@ -89,7 +89,11 @@ enum GaiaBuiltin {
     aliases: {'controlauto'},
   ),
   screen('screen', 'Let Gaia see your screen in this chat, on or off'),
-  window('window', 'Attach or remove the window Gaia was opened from');
+  window('window', 'Attach or remove the window Gaia was opened from'),
+
+  /// Takes the rest of the draft, a routine's name: see [gaiaRoutineText]
+  /// (GAIA_ROUTINES_HLD.md §7.1).
+  routine('routine', 'Run a routine over links you paste');
 
   const GaiaBuiltin(this.name, this.description, {this.aliases = const {}});
 
@@ -131,7 +135,7 @@ List<GaiaPaletteItem> gaiaPaletteItems(
 }) {
   final taken = {
     for (final builtin in GaiaBuiltin.values) ...builtin.names,
-    for (final tier in GaiaTier.values) tier.command.substring(1),
+    for (final tier in GaiaTier.values) ...tier.names,
     for (final account in accounts)
       if (account.alias.isNotEmpty) account.alias,
     for (final command in commands) command.name,
@@ -209,12 +213,14 @@ List<GaiaPaletteItem> filterGaiaPalette(
 }) {
   int? score(String name) => _fuzzyScore(name, query);
 
-  // A built-in's best over its name and aliases. An alias counts only as
-  // the very name or a prefix, so `/s` doesn't bring up `/new` for `reset`.
+  // A built-in's or tier's best over its name and aliases. An alias counts
+  // only as the very name or a prefix, so `/s` doesn't bring up `/new` for
+  // `reset`.
   int? best(GaiaPaletteItem item) {
     final scores = [
       score(item.name),
-      for (final alias in item.builtin?.aliases ?? const <String>{})
+      for (final alias
+          in item.builtin?.aliases ?? item.tier?.aliases ?? const <String>{})
         if (score(alias) case final s? when s <= 0) s,
     ].nonNulls;
     return scores.isEmpty ? null : scores.reduce((a, b) => a < b ? a : b);
@@ -367,6 +373,12 @@ String? gaiaBtwText(String draft) {
   return match?.group(1)!.trim();
 }
 
+/// `/routine` and the routine's name: the name (GAIA_ROUTINES_HLD.md §7.1).
+String? gaiaRoutineText(String draft) {
+  final match = RegExp(r'^/routine\s+(\S.*)$').firstMatch(draft.trim());
+  return match?.group(1)!.trim();
+}
+
 /// `/project` or `/move` and a space starting [draft] (GAIA_PROJECTS_HLD.md
 /// §7.5): the rest of its line, to filter the projects by, and where the
 /// line ends, its newline included, to take it out once one is picked. Null
@@ -442,7 +454,7 @@ TextRange? gaiaDraftCommand(
   if (match == null) return null;
   final word = match.group(1)!;
   final range = TextRange(start: match.end - word.length - 1, end: match.end);
-  if (GaiaTier.values.any((tier) => tier.command == '/$word') ||
+  if (GaiaTier.values.any((tier) => tier.names.contains(word)) ||
       accounts.any((account) => account.alias == word)) {
     return null;
   }
@@ -538,7 +550,9 @@ GaiaNativeCommand? gaiaNativeIn(String draft, List<GaiaNativeCommand> natives) {
   final word = match.group(1)!;
   if (items.any(
     (item) =>
-        item.name == word || (item.builtin?.names.contains(word) ?? false),
+        item.name == word ||
+        (item.builtin?.names.contains(word) ?? false) ||
+        (item.tier?.names.contains(word) ?? false),
   )) {
     return null;
   }

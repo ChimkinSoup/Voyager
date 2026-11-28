@@ -5,9 +5,15 @@
 /// turn it came from.
 library;
 
+import 'package:voyager/features/gaia/companion/gaia_routines.dart';
+
 /// The server's name, which the CLIs put before each tool's
 /// (`mcp__gaia__ask_user`).
 const kGaiaMcpServer = 'gaia';
+
+/// `os_type` text this long or longer is pasted rather than typed, so a line
+/// break in it is no Enter key.
+const kGaiaPasteFrom = 200;
 
 /// The tools a turn can call, bound to its chat and run.
 abstract interface class GaiaTurnTools {
@@ -583,12 +589,16 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
     'description':
         "Read that window's controls as text: each one's type, name, value "
         'and position. Exact, cheap, and it shows what can be clicked, so try '
-        'this before os_screenshot. Password, card and one-time code fields '
-        'are never read. Refused for apps and sites the user has excluded, '
-        'and unless "can see screen" is on for this chat. Asked about a list '
-        'or a long page, read all of it: pass offscreen, and if rows are '
-        'still missing, os_scroll and read again (needs "can control"), or '
-        'ask the user to scroll.',
+        'this before os_screenshot, and use it rather than a screenshot to '
+        'check a value: its text is cheaper on every later turn than an '
+        'image. A field with no name of its own, or sharing it with others, '
+        'shows the text by it as "labelled by", which steps take as its name. '
+        'Password, card and one-time code fields are never read. Refused for '
+        'apps and sites the user has excluded, and unless "can see screen" is '
+        'on for this chat. Asked about a list or a long page, read all of it: '
+        'pass offscreen, and if rows are still missing, os_scroll and read '
+        'again (needs "can control"), or ask the user to scroll. To wait for a '
+        'page, pass until with text the next page shows, never a shell sleep.',
     'inputSchema': {
       'type': 'object',
       'properties': {
@@ -614,7 +624,8 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
     'name': 'os_screenshot',
     'description':
         "Take a picture of that window, for what os_read_screen can't "
-        'describe: canvases, images, games, some Electron apps. Password, card '
+        'describe: canvases, images, games, some Electron apps. Not to check a '
+        'value or a page, which os_read_screen does as text. Password, card '
         'and one-time code fields are blacked out. Refused for apps and sites '
         'the user has excluded, and unless "can see screen" is on for this '
         'chat. Called from a script, its result is a string whose last line '
@@ -639,7 +650,9 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
         "os_read_screen shows it; use x and y alone only for what it can't "
         'describe. A named control can also be pressed without taking the '
         "user's screen, while they work in another window, so name controls "
-        'rather than give points. Runs at once or after the user approves a card, depending '
+        'rather than give points. That goes for checkboxes and radio buttons '
+        'too: one named Yes goes by the question it is labelled by, and a long '
+        'option by its name as shown, never by its position. Runs at once or after the user approves a card, depending '
         "on the chat's mode, and the result says what ran. Works only if the "
         'user has turned on "can control" for this chat, with the hand button '
         'under the composer. After any action, read the screen again rather '
@@ -691,7 +704,13 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
     'name': 'os_type',
     'description':
         'Type text, at most 2000 characters, into a named control, which is '
-        'clicked first, or with none, into whatever has focus. Password, card '
+        'clicked first, or with none, into whatever has focus. A named '
+        "field's text is added to unless append is false, which replaces it "
+        "and reads it back: a mismatch stops with what the field holds (in a "
+        "routine's item chat, replacing is the default). Name the field, by "
+        'its label if it has no name; read a long form once with offscreen, and fields out of '
+        "view are scrolled to. If a named step stops, read again (find the "
+        'field) rather than typing into whatever has focus. Password, card '
         'and one-time code fields are refused. Text of 200 characters or more '
         "is pasted, with the user's clipboard put back after, so its line "
         "breaks and tabs don't press Enter or Tab; outside a console. Approved "
@@ -701,6 +720,7 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
       'properties': {
         ..._controlTarget,
         'text': {'type': 'string'},
+        ..._append,
         ..._readAfterByDefault,
       },
       'required': ['text'],
@@ -727,12 +747,18 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
     'description':
         'Several actions in one list, at most 20, run at once or approved by '
         "the user together or one at a time, depending on the chat's mode. "
-        'Prefer this to calling os_click and the others in turn. A control '
-        "that isn't on screen yet, as in a menu an earlier step opens, can be "
-        'named too, but when approving, each step then needs its own approval. '
-        'When a step opens a dialog, a run that needed approving stops: read '
-        'the screen and send the rest as a new list. One that ran at once acts '
-        'on the dialog from then on, and the result says so.',
+        'Prefer this to calling os_click and the others in turn, and named '
+        'controls to points: read a long form once with offscreen, then fill '
+        'it by name, by label where a field has none or shares it, checkboxes '
+        'and radio buttons included; controls out of view are '
+        "scrolled to. A control that isn't on screen yet, as in a menu an "
+        'earlier step opens, can be named too, but when approving, each step '
+        'then needs its own approval. When a step stops, read the screen '
+        '(find the field) next, rather than clicking points or typing into '
+        'whatever has focus. pick and upload are os_pick and os_upload. When '
+        'a step opens a dialog, a run that needed approving stops: read the '
+        'screen and send the rest as a new list. One that ran at once acts on '
+        'the dialog from then on, and the result says so.',
     'inputSchema': {
       'type': 'object',
       'properties': {
@@ -743,7 +769,15 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
             'properties': {
               'action': {
                 'type': 'string',
-                'enum': ['click', 'scroll', 'type', 'key', 'drag'],
+                'enum': [
+                  'click',
+                  'scroll',
+                  'type',
+                  'key',
+                  'drag',
+                  'pick',
+                  'upload',
+                ],
               },
               ..._controlTarget,
               'button': {
@@ -758,6 +792,9 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
               'amount': {'type': 'integer'},
               'text': {'type': 'string'},
               'keys': {'type': 'string'},
+              ..._append,
+              'option': {'type': 'string', 'description': 'For pick.'},
+              'path': {'type': 'string', 'description': 'For upload.'},
               ..._anywhere,
               ..._dragEnds,
             },
@@ -767,6 +804,49 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
         ..._readAfterByDefault,
       },
       'required': ['steps'],
+    },
+  },
+  {
+    'name': 'os_pick',
+    'description':
+        'Pick an option in a field that lists them: a typeahead (type, then '
+        'pick, as a city, school or phone country) or a list that opens on a '
+        'click (a "Select One" button, a dropdown). Gaia types the option into '
+        'a box, or clicks the field, waits up to 10 seconds for the list, '
+        'pressing Enter in the field once if none shows, clicks the best '
+        'matching option, and reads the field back; a mismatch stops with what '
+        'the field holds and the options seen. Use this rather than typing and '
+        'clicking the list yourself. Also a pick action in os_steps. Approved '
+        'or not like os_click.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        ..._controlTarget,
+        'option': {
+          'type': 'string',
+          'description': 'The option wanted, as the list words it.',
+        },
+        ..._readAfterByDefault,
+      },
+      'required': ['name', 'option'],
+    },
+  },
+  {
+    'name': 'os_upload',
+    'description':
+        'With a file dialog (Open, File Upload) in front, choose a file: Gaia '
+        "sets the dialog's File name box to path, presses Open, and waits up "
+        "to 10 seconds for it to close; if it doesn't, it stops with what the "
+        'dialog says. Use this rather than typing the path and double-clicking '
+        'or pressing Enter. Also an upload action in os_steps. Approved or not '
+        'like os_click.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'path': {'type': 'string', 'description': "The file's full path."},
+        ..._readAfterByDefault,
+      },
+      'required': ['path'],
     },
   },
   {
@@ -886,6 +966,9 @@ const kGaiaToolDefinitions = <Map<String, Object?>>[
       'required': ['action'],
     },
   },
+  // Refused outside a routine's item chats: a CLI lists its tools before a
+  // turn says which chat it's for (GAIA_ROUTINES_HLD.md §8.3).
+  ...kGaiaRoutineToolDefinitions,
 ];
 
 /// A drag's two ends (GAIA_AUTONOMY_HLD.md §8.4).
@@ -907,7 +990,11 @@ const _dragEnds = <String, Object?>{
 const _controlTarget = <String, Object?>{
   'name': {
     'type': 'string',
-    'description': "The control's name, as os_read_screen shows it.",
+    'description':
+        "The control's name, as os_read_screen shows it. For one with no "
+        'name, or sharing it with others (three checkboxes named Yes), its '
+        '"labelled by" text. A long name cut short with an ellipsis works as '
+        'shown.',
   },
   'type': {
     'type': 'string',
@@ -915,6 +1002,16 @@ const _controlTarget = <String, Object?>{
   },
   'x': {'type': 'integer', 'description': 'Physical screen pixels.'},
   'y': {'type': 'integer', 'description': 'Physical screen pixels.'},
+};
+
+/// Typing that keeps a named field's text (GAIA_ROUTINES_HLD.md §15.5).
+const _append = <String, Object?>{
+  'append': {
+    'type': 'boolean',
+    'description':
+        'For type into a named field: true adds to its text, false replaces '
+        "it. Adds by default, except in a routine's item chat.",
+  },
 };
 
 /// A click outside the window (GAIA_AUTONOMY_HLD.md §5.5).
@@ -1018,7 +1115,14 @@ const _readAfterAbout =
     '"can see screen".';
 
 /// The actions whose `read_after` is on unless it's false.
-const kGaiaReadAfterByDefault = {'os_click', 'os_type', 'os_key', 'os_steps'};
+const kGaiaReadAfterByDefault = {
+  'os_click',
+  'os_type',
+  'os_key',
+  'os_steps',
+  'os_pick',
+  'os_upload',
+};
 
 /// The `voyager_*` read tools: the main instance answers them.
 bool isGaiaVoyagerRead(String name) => name.startsWith('voyager_');
@@ -1073,6 +1177,8 @@ bool isGaiaOsControl(
       'os_window',
       'os_drag',
       'os_clipboard',
+      'os_pick',
+      'os_upload',
     }.contains(name) &&
     !isGaiaOsRead(name, arguments);
 

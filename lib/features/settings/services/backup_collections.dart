@@ -1579,6 +1579,32 @@ List<BackupCollection> buildBackupCollections({
       },
     ),
     BackupCollection(
+      name: FirestoreCollections.gaiaRoutines,
+      read: () async => [
+        for (final routine in await gaiaRepository.listRoutines(
+          includeDeleted: true,
+        ))
+          BackupRecord(id: routine.id, data: gaiaRoutineToFirestore(routine)),
+      ],
+      restore: (id, data) async {
+        final routine = mergeGaiaRoutineFromRemote(data, id);
+        await gaiaRepository.upsertRoutine(routine, recordLocalActivity: false);
+        return routine;
+      },
+    ),
+    BackupCollection(
+      name: FirestoreCollections.gaiaRuns,
+      read: () async => [
+        for (final run in await gaiaRepository.listRuns(includeDeleted: true))
+          BackupRecord(id: run.id, data: gaiaRunToFirestore(run)),
+      ],
+      restore: (id, data) async {
+        final run = mergeGaiaRunFromRemote(data, id);
+        await gaiaRepository.upsertRun(run, recordLocalActivity: false);
+        return run;
+      },
+    ),
+    BackupCollection(
       name: FirestoreCollections.gaiaMemories,
       read: () async => [
         for (final memory in await gaiaRepository.listMemories(

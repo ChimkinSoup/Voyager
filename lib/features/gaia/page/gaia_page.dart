@@ -212,6 +212,7 @@ class _OpenInGaia extends StatelessWidget {
                     GaiaPanelTab.status => PhosphorIconsRegular.broadcast,
                     GaiaPanelTab.setup => PhosphorIconsRegular.wrench,
                     GaiaPanelTab.settings => PhosphorIconsRegular.gear,
+                    GaiaPanelTab.routines => PhosphorIconsRegular.repeat,
                   }, size: 13),
                   label: tab.label,
                   dense: true,

@@ -9,9 +9,13 @@ typedef GaiaTierCommand = ({GaiaTier tier, TextEditingValue value});
 /// An account's alias used as a command (§9.2), found the same way.
 typedef GaiaAccountCommand = ({GaiaAccount account, TextEditingValue value});
 
-final _commands = {for (final tier in GaiaTier.values) tier.command: tier};
+final _commands = {
+  for (final tier in GaiaTier.values)
+    for (final name in tier.names) '/$name': tier,
+};
 
-/// The first completed `/quick`, `/std` or `/deep` in [value]: a whole token
+/// The first completed `/quick`, `/standard` or `/deep` in [value]: a whole
+/// token
 /// (at the start or after whitespace) followed by whitespace, or, when
 /// [atEnd], ending the text (the user sent it). Not inside backticks or a
 /// code fence. Null when there's none.

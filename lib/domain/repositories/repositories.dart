@@ -958,6 +958,21 @@ abstract class GaiaRepository {
   /// [listProjects] as it changes.
   Stream<List<GaiaProject>> watchProjects();
 
+  /// Routines (GAIA_ROUTINES_HLD.md §5.1), oldest first; tombstones only with
+  /// [includeDeleted].
+  Future<List<GaiaRoutine>> listRoutines({bool includeDeleted = false});
+  Future<GaiaRoutine?> getRoutine(String id);
+  Future<void> upsertRoutine(
+    GaiaRoutine routine, {
+    bool recordLocalActivity = true,
+  });
+
+  /// Routine runs (GAIA_ROUTINES_HLD.md §5.2), oldest first; tombstones only
+  /// with [includeDeleted].
+  Future<List<GaiaRoutineRun>> listRuns({bool includeDeleted = false});
+  Future<GaiaRoutineRun?> getRun(String id);
+  Future<void> upsertRun(GaiaRoutineRun run, {bool recordLocalActivity = true});
+
   /// Memories (§11), oldest first; tombstones only with [includeDeleted].
   Future<List<GaiaMemory>> listMemories({bool includeDeleted = false});
   Future<GaiaMemory?> getMemory(String id);

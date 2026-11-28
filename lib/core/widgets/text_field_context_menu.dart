@@ -134,6 +134,23 @@ class _TextFieldContextMenuState extends ConsumerState<TextFieldContextMenu> {
         : null;
   }
 
+  /// Whether the misspelling under the cursor is only a Shift slip (`THe`):
+  /// its lowercase form is already known, so "Add to dictionary" would do
+  /// nothing (AUTOCORRECT.md §4.7).
+  bool get _isCaseSlip {
+    final range = widget.span!.range;
+    final word = normalizeCustomWord(
+      widget.editableTextState.widget.controller.text.substring(
+        range.start,
+        range.end,
+      ),
+    );
+    return isKnownWord(
+      word,
+      ref.read(voyagerSpellCheckServiceProvider).knownWords,
+    );
+  }
+
   /// Allow wins (`FLAGGED_WORDS.md` §4): whichever label the item carries,
   /// the flag and its replacement go, and a word the bundled list already has
   /// stops there rather than gaining a redundant custom row.
@@ -219,13 +236,14 @@ class _TextFieldContextMenuState extends ConsumerState<TextFieldContextMenu> {
             label: suggestion,
             onTap: () => _applySuggestion(suggestion),
           ),
-        ContextMenuItem(
-          label: showStopFlagging ? 'Stop flagging' : 'Add to dictionary',
-          icon: showStopFlagging
-              ? PhosphorIconsRegular.flag
-              : PhosphorIconsRegular.plusCircle,
-          onTap: _addToDictionary,
-        ),
+        if (!_isCaseSlip)
+          ContextMenuItem(
+            label: showStopFlagging ? 'Stop flagging' : 'Add to dictionary',
+            icon: showStopFlagging
+                ? PhosphorIconsRegular.flag
+                : PhosphorIconsRegular.plusCircle,
+            onTap: _addToDictionary,
+          ),
       ],
       if (span == null && widget.flaggableWord != null)
         ContextMenuItem(

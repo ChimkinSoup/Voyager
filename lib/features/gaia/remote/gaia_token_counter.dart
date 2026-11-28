@@ -58,7 +58,7 @@ class GaiaTokenCounter {
   ) async {
     final uid = _uid;
     if (uid == null) return;
-    final (:account, :source) = tokensFor;
+    final (:account, :source, chatId: _) = tokensFor;
     try {
       await Future.wait([
         for (final MapEntry(key: model, value: count) in byModel.entries)

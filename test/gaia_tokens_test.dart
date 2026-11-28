@@ -74,7 +74,7 @@ void main() {
       tools: null,
       onEvent: (_) {},
       onNewThread: (_) async {},
-      tokensFor: (account: 'codex/work', source: 'deep'),
+      tokensFor: (account: 'codex/work', source: 'deep', chatId: null),
     );
     unawaited(
       first.then((_) {
@@ -86,7 +86,7 @@ void main() {
           ],
           tools: null,
           onEvent: (_) {},
-          tokensFor: (account: 'codex/work', source: 'quick'),
+          tokensFor: (account: 'codex/work', source: 'quick', chatId: null),
         );
       }),
     );
@@ -115,8 +115,8 @@ void main() {
     expect(sum.total, total['totalTokens']);
     // Each turn's under its own tier.
     expect(counted, {
-      (account: 'codex/work', source: 'deep'),
-      (account: 'codex/work', source: 'quick'),
+      (account: 'codex/work', source: 'deep', chatId: null),
+      (account: 'codex/work', source: 'quick', chatId: null),
     });
   });
 
@@ -127,8 +127,12 @@ void main() {
     final old = firestore.doc('users/u1/gaia_tokens/claude-x');
     await old.set({'input': 5});
     final counter = GaiaTokenCounter(firestore);
-    const quick = (account: 'claude_code', source: 'quick');
-    const title = (account: 'claude_code/work', source: 'utility:chat title');
+    const quick = (account: 'claude_code', source: 'quick', chatId: null);
+    const title = (
+      account: 'claude_code/work',
+      source: 'utility:chat title',
+      chatId: null,
+    );
     await counter.add(quick, {'claude-x': const GaiaTokenCount(input: 99)});
     counter.setUser('u1');
     await counter.add(quick, {

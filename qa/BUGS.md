@@ -880,6 +880,7 @@ Entry format:
 - Actual: ten rows, all `title` '' and `body` '', each with its own quote and timestamp 0.3 s apart, listed as ten "Untitled" entries (`qa/shots/p7-83-rapid10.png`, Alpha 31 → 41). They stay after switching entries and after restart, sync to the cloud, and count in the journal totals (On This Day skips them, since both title and body are blank). Nothing ever cleans them up; each has to be deleted by hand, with a confirm dialog each time.
 - Notes: by design in the code the row is written at once (`_createEntryOptimistic`, and `_finalizeNewEntry`'s comment explains the write is what schedules the upload). No FlutterError; the ten were created in order with distinct ids. JOURNAL_DATA_LOSS_POSTMORTEM.md's incident began while "empty test entries were being deleted in quick succession", i.e. clearing exactly this kind of leftover.
 - Notes (2026-10-05): skipped for now; listed under "Skipped bugs" in the summary.
+- Notes (2026-11-26, Mobile M5, OnePlus 12R, qa-130): on the phone each New entry opens the editor, and Back from it without typing leaves a blank "Untitled" in the list (2 blanks after two tries). Creating a journal also makes a blank entry, but on the compact shell it doesn't open it: the list shows "Untitled" and the user then taps New entry for a second one. Three taps on New entry in 0.1 s made one entry (the editor covers the button after the first).
 
 ### BUG-054 [Phase 7] With "Only my quotes" just turned on, the next new entry still gets a bundled quote
 - Severity: Minor
@@ -966,6 +967,8 @@ Entry format:
 
 - Notes (2026-10-06, verified in the running app, FV-17 passed; qa-042, Dark): dream "FX17 dream" (typed body, note "zzopen FX17 NOTE text") and "FX17 tags" (pasted body, no note). After stop.ps1 + launch.ps1 (pull "dream_entries (2)") and then a cold re-login (reset -Force, "61 pulled whole"), SQLite kept both notes as they were: the note intact, the other still NULL. Before the fix the first restart overwrote both.
 - Notes (2026-10-06, code-review follow-up, re-verified in the app, FV-17 follow-up; qa-042): the `entryDate` test is replaced: the caller names the text field by collection (`FirestoreCollections.crdtTextField`, `notes` for tasks, `body` otherwise) through the resolver, compaction and `applyMergedPayload`, and char ops without a snapshot now write only that field (before, `body` and `notes` both). After a restart and a cold re-login a journal body, a dream body + note, a note-less dream and a task's notes all came back as saved.
+- Notes (2026-11-27, Mobile M6, OnePlus 12R, qa-130): **holds on the phone.** A dream with a typed body and a typed note ("M6 TYPED BODY …" / "M6 real note") and a seeded dream with a note and a typed body edit ("m6 note 0") kept their notes after a force-stop → relaunch and after a cold re-login (sign out → `pm clear` → sign in): `sum(notes = body)` = 0 of 45, and the md5 of every dream row matched before and after.
+
 ### BUG-062 [Phase 8] Opening the dream sticky note doesn't put the caret in it; what's typed next is lost, and the note can't be opened from the keyboard
 - Severity: Minor
 - Found: 2026-09-30, Phase 8 (qa-012)
@@ -988,6 +991,8 @@ Entry format:
 
 - Notes (2026-10-06, verified in the running app, FV-17 passed; qa-042, Dark): pasted "tags #夢 #café #naïve #día-de-muertos end" into a new dream body: four whole pills (`fx17-07-tags.png`), SQLite `tags_json` ["夢","café","naïve","día-de-muertos"], unchanged after a cold re-login.
 - Notes (2026-10-06, code-review follow-up): the spell checker's boundary-widening change mentioned above is reverted; it isn't needed for tags, and with it unspaced CJK/Thai prose made every edit scan to the 200-character cap. Tag extraction and tag completion keep the Unicode change.
+- Notes (2026-11-27, Mobile M6, OnePlus 12R, qa-130): holds on the phone: " #夢 #café #naïve" pasted into a dream body (Gboard clipboard chip) → `tags_json` `["夢","café","naïve"]`.
+
 ### BUG-064 [Phase 8] Shrinking the window on the Dreams page overflows the editor's date/delete row (RenderFlex overflowed by 70 px)
 - Severity: Cosmetic
 - Found: 2026-09-30, Phase 8 (qa-012)
@@ -2504,6 +2509,7 @@ Entry format:
 - Notes: control case `p26-je-012`, never opened in this run: the same remote write was applied in full (body REMOTEE). So the editing session that opening an entry creates wins over the incoming snapshot. Caveat: the remote edit here carries no character operations; a second device's editor would normally send character ops, which can't be produced on one PC, so whether a real two-device edit hits this is unconfirmed. Snapshot-only body writes do exist in the app (seeding, restores, imports, and the first save of an entry with no op chain). Related: SAVING.md §10 (self-echo suppression discarding concurrent remote changes).
 - Notes (2026-10-10, confirmed in the running app and by tests, fixed in the working tree, uncommitted; verified in the running app, FV-39; qa-063): two causes. (1) Opening an entry whose log holds snapshots only seeds a character session whose characters are all pending; the pull counted them as text this device owed, so the row kept the old body under the new version, and the next keystroke uploaded it over the change. Reproduced in the app with this build before the fix: `editing=false`, row v2, old body. A session now knows when its pending ops are only that seed (`onlySeedPending`, `character_op_session.dart`); the pull then reseeds it from the pulled text and shows the change in the open editor (`_textOwedByThisDevice`, `remote_sync_service.dart`). (2) While the body is focused, a snapshot change with no remote text seen yet was buffered against itself and dropped; the buffer now diffs from the stored row's text, only for a newer revision (`bufferWhileEditing`, `pending_text_merge.dart`; also dreams and to-do notes). In the app: "FX211 entry 1" open, a `fx220-devB` snapshot "…amet REMOTEF" written by eval → row and editor "…amet REMOTEF" (`fx220-03`) → typed " AFTER" (`fx220-04`) → the resolved cloud document and the row "…amet REMOTEF AFTER". A real second device's character-op edit is still untested (one PC). Tests: `sync_saving_regressions_test.dart` "BUG-220 …" (3).
 - Notes (2026-10-10, code-review follow-up, uncommitted; FV-39 follow-up): (1) an untouched seed-only session meeting another device's character operations is replaced by them where the pull folds them in (`_absorbForEditor`), instead of absorbing them beside the seed, which doubled every character on screen and on upload; the snapshot-only reset stays in `_textOwedByThisDevice`. (2) That reset now needs a strictly newer revision, so a seed holding offline typing isn't replaced at the same revision. Not covered: a seed holding offline typing when another device's character operations arrive is still replaced by them. In the app: "FX211 entry 2" (snapshot only) open, remote "…REMOTEF" → shown → typed " AFTER2" → cloud "…REMOTEF AFTER2". Tests: `sync_saving_regressions_test.dart` "… does not double it", "… same revision …".
+- Notes (2026-11-26, Mobile M5 re-check on the OnePlus 12R, qa-130): the fix holds for an entry opened fresh (`m5-seed-32`: the open editor showed the remote body) and for one opened, closed and reopened (`m5-seed-30`). It fails for entries with a delete → Undo or delete → Trash restore in their history: the row keeps the old body under the new version and the next keystroke overwrites the change in the cloud. Logged as **BUG-421**.
 
 ### BUG-221 [Phase 26] During a cold sign-in's pull, Ctrl+Alt+T opens an empty To-Do ("Create your first list") with no input: the task typed into the hotkey is silently lost
 - Severity: Minor
@@ -4336,6 +4342,7 @@ Entry format:
 - Actual: Gboard comes back up: the popover route hands focus back to the amount field, which raises the keyboard. With Back, a second Back goes to hiding it before a third closes the sheet.
 - Expected: closing a popover leaves the keyboard as it was before the popover opened.
 - Notes: same family as BUG-411 (a route restoring focus raises the keyboard). Not fixed (audit rule).
+- Notes (2026-11-26, Mobile M5, OnePlus 12R): more places where closing a route raises the keyboard: the journal's date-and-time picker "Done" (the Title had focus before; BUG-422), Back from Browse quotes (back in Edit quote with Gboard up), and opening an entry from the On This Day card (the Title takes focus with the keyboard up, while a tap on a list row opens the editor with the keyboard down).
 
 ### BUG-414 [fix pass] With the keyboard up, a journal body with images scrolls its text out of view
 - Severity: Minor
@@ -4352,3 +4359,257 @@ Entry format:
 - Actual: "A RenderFlex overflowed by 11 pixels on the right" from `_CompactStatusStrip`'s Row (`app_shell.dart:280`; constraints w ≤ 189.7), logged once in the run log and `voyager_errors.log`.
 - Expected: the strip fits at 360 dp.
 - Notes: seen once, during the size switch; not checked whether it persists at that size. Not fixed (audit rule).
+
+### BUG-416 [M4] On Android a reminder that falls due while the app process is alive never posts a system notification, even with the app in the background
+- Severity: Major
+- Found: 2026-11-26, Mobile M4 (OnePlus 12R, Android 16, 361×794 dp, Gboard; debug build of `4b983182` + uncommitted Gaia work (`lib/features/gaia/companion/*`), qa-130)
+- Steps: allow notifications; make a once-rule a few minutes ahead (Inbox → +). Either keep Voyager open, or press Home and leave it cached (`curProcState` 15, frozen). Watch `dumpsys notification --noredact` and `dumpsys alarm` from a minute before the due time.
+- Actual: the alarm is listed until the due minute, then disappears from `dumpsys alarm` without firing; no notification is ever posted (polled every 0.7 s for 2.5 min after each due time). Foreground: "M4 once A" 4:03, "M4 fg inexact" 4:07, "M4 exact fg" 4:19 (exact allowed). Background (Home, app cached): "M4 bg" 4:10, "M4 exact bg" 4:21. Each time `reminder_delivery_logs_table` got `stickyShown` at hh:mm:00.0x and nothing else. In the background case the user sees nothing at all until they reopen the app and find the sticky. The same rules fire as system notifications once the process is gone (`am kill`): "M4 killed", "M4 exact doze", "M4 update", the to-do and event bells, the 22-rule burst.
+- Expected: MOBILE_TEST_PLAN M4 / SCHEDULED_REMINDERS_HLD: on Android the OS alarm posts the notification in every app state (`raisesDueAlertsInApp` is false there, so the alarm is the only system alert).
+- Notes: likely cause, from the code: when a rule falls due, `ReminderEngine._syncScheduledAlerts` (`reminder_engine.dart` ~L432) rebuilds the plan without it (its `nextFireAt` is no longer after now), the signature changes, and `LocalNotificationsReminderOsNotifier.schedule` calls `cancelAllPendingNotifications()` first. On this phone every alarm has a delivery window (`window=+1m…+8m` in `dumpsys alarm`, even with `exactAllowReason=permission`), so the OS hasn't delivered it yet at the due second and the cancel removes it. Any live engine (foreground, or a cached process that the alarm or a timer wakes) would do the same. Not fixed (audit rule).
+
+### BUG-417 [M4] A timezone change while the app is closed doesn't move a pending reminder alarm: it still fires at the old instant
+- Severity: Minor
+- Found: 2026-11-26, Mobile M4 (OnePlus 12R, Android 16, 361×794 dp, Gboard; debug build of `4b983182` + uncommitted Gaia work (`lib/features/gaia/companion/*`), qa-130)
+- Steps: once-rule "M4 tz" at 4:45 PM (Toronto); Home → `am kill`; `settings put global auto_time_zone 0; cmd alarm set-timezone America/Chicago`; read `dumpsys alarm` and `run-as … cat shared_prefs/scheduled_notifications.xml`.
+- Actual: `VoyagerTimeZoneChangedReceiver` ran (TIMEZONE_CHANGED delivered to the manifest receiver; the stored notification's `timeZoneName` became `America/Chicago`, `scheduledDateTime` still `2026-11-26T16:45:00`), but the alarm kept its instant: `origWhen` 1795729500000 before and after, which `dumpsys` now prints as 15:45 CST. So it would ring at 3:45 PM local, an hour before the wall-clock time the app shows. Opening the app then re-planned every unacknowledged once-rule that had already fired today at the same wall-clock time in the new zone (alarms at 4:10, 4:13, 4:19, 4:21, 4:24, 4:32 and 4:45 CST, Inbox rows "Next in 35 minutes"), so reminders already delivered today would ring a second time.
+- Expected: the wall-clock time is kept with the app closed (`42b6efda`, the receiver's own comment), and an occurrence already delivered isn't delivered again after the zone change.
+- Notes: from the plugin code (`flutter_local_notifications` 22.3.1), `rescheduleNotifications` → `zonedScheduleNotification` → `setupAlarm` should replace the PendingIntent with the new epoch; why the alarm wasn't replaced wasn't found. Zone restored at once (`auto_time_zone 1`). Not fixed (audit rule).
+
+### BUG-418 [M4] On Android 14+ reminders are inexact by default (2–3 min late), and nothing asks for or mentions the "Alarms & reminders" permission
+- Severity: Minor
+- Found: 2026-11-26, Mobile M4 (OnePlus 12R, Android 16, 361×794 dp, Gboard; debug build of `4b983182` + uncommitted Gaia work (`lib/features/gaia/companion/*`), qa-130)
+- Steps: fresh install, notifications allowed. `appops get com.example.voyager SCHEDULE_EXACT_ALARM` → default (denied for a targetSdk 36 app); make a rule; kill the app; time the notification.
+- Actual: `canScheduleExactNotifications()` is false, so every alarm is `inexactAllowWhileIdle`: "M4 killed" due 4:13:00 posted 4:15:16.8 (+2:17). Neither the rule editor nor Settings → Devices says reminders may be late, and the app never sends the user to the "Alarms & reminders" setting (it only asks for POST_NOTIFICATIONS). With `appops set … SCHEDULE_EXACT_ALARM allow` (`canScheduleExactNotifications` true, alarms `exactAllowReason=permission`) OxygenOS still delayed some: snooze +11.9 s, after an update +9.7 s, to-do bell +2.7 s, event bell +27 s, Doze (force-idle) +2:16, 22 rules at one minute +2:42 to +2:45.
+- Expected: MOBILE_TEST_PLAN M4 "does the UI tell the user?": a reminder app that schedules OS alarms should ask for exact alarms (or say they may be late), e.g. on the Devices permission row next to the notification permission.
+- Notes: the OxygenOS delays with exact allowed are partly platform behaviour (it puts a window on every alarm; see BUG-416). Not fixed (audit rule).
+
+### BUG-419 [M4] A copied secure note reaches the Windows PC's clipboard through Phone Link and stays there after the phone's 30 s clear
+- Severity: Minor
+- Found: 2026-11-26, Mobile M4 (OnePlus 12R, Android 16, 361×794 dp, Gboard; debug build of `4b983182` + uncommitted Gaia work (`lib/features/gaia/companion/*`), qa-130); the phone is linked to Juno's laptop with Phone Link, as recorded in PROGRESS §1b
+- Steps: unlock Secure Notes in the Inbox, add a note, tap its Copy; read the phone's clipboard (VM eval of `Clipboard.getData`) and the PC's (`Get-Clipboard`) right away and after 35 s.
+- Actual: right away both hold the note. At 35 s the phone's clipboard is empty (the 30 s clear works), but the PC's clipboard still holds the note's plaintext, for good.
+- Expected: SECURE_NOTES_HLD §4.7 keeps a copied secret out of clipboard history and sync on Windows; on Android the copy isn't flagged sensitive (the HLD's "possible follow-up"), so the system clipboard sync and keyboard previews (Gboard's clipboard chip, Phone Link) carry it off the phone and nothing clears it there.
+- Notes: Android 13+ honours `ClipDescription.EXTRA_IS_SENSITIVE`, which hides the preview and keeps the clip out of cross-device sync. The test note was a dummy; Juno's PC clipboard was cleared afterwards. Not fixed (audit rule).
+
+### BUG-420 [M4] The time spinner in the date-and-time picker overflows by 6.3 px at phone width
+- Severity: Cosmetic
+- Found: 2026-11-26, Mobile M4 (OnePlus 12R, Android 16, 361×794 dp, Gboard; debug build of `4b983182` + uncommitted Gaia work (`lib/features/gaia/companion/*`), qa-130)
+- Steps: Inbox → + (new reminder) → tap the date-time chip; or a to-do's "Set date & time".
+- Actual: "A RenderFlex overflowed by 6.3 pixels on the right" from `voyager_time_picker_spinner.dart:327` (constraints w ≤ 137.7); in debug the striped bar covers the AM/PM column, whose letters are cut ("A", "P") (`qa/shots/m4-task-picker.png`, `m4-what.png`). Logged once per run.
+- Expected: the hour, minute and AM/PM columns fit the picker's right pane at 361 dp.
+- Notes: Not fixed (audit rule).
+
+### BUG-421 [M5] A journal entry that was deleted and then restored (Undo or Trash) drops a remote body change while it's open, and the next keystroke overwrites that change in the cloud
+- Severity: Major
+- Found: 2026-11-26, Mobile M5 (OnePlus 12R, Android 16, 361×794 dp, Gboard; debug build of `4b983182` + uncommitted Gaia work (`lib/` as listed in M5's Status), qa-130)
+- Steps: Journal → Alpha → open "Seed 36 alpha" → trash icon → Delete → Undo on the toast (or delete it and restore it from Manage journals → Recently deleted → ⋯ → Restore, as for "Seed 38 alpha"). Open the entry again (no typing). From "another device", write a whole-document snapshot with a new body (`qa/steps/m5-remote220.dart.txt` through `evalc.ps1 -Profile phone -Lib features/journal/journal_page.dart`: an op at sequence 40 plus the document, version = max + 1). Wait 10 s. Then tap the body and type one letter.
+- Actual: the row takes the new version and keeps the old text: `m5-seed-38` v4 "Seeded body number 38. Second sentence here for preview." (remote body "…REMOTEM5 written by device B"), and the editor shows the old text (`qa/shots/m5-71-after-remote.png`). Same for `m5-seed-36` (v4, old body, `m5-73-s36-after.png`). After typing "Z" the cloud document is v4 "…for preview.Z": device B's change is gone everywhere. Controls in the same run: `m5-seed-34` never opened → the remote body was applied; `m5-seed-32` opened for the first time → the open editor showed the remote text (`m5-72-s32-after.png`); `m5-seed-30` opened, closed and reopened (no delete) → applied. So the trigger is the delete/restore history, not the opening.
+- Expected: as BUG-220's fix: an open entry with no local edits takes the remote text and shows it in the editor.
+- Notes: this is BUG-220's symptom on entries with a delete → restore in their op log; the `onlySeedPending` check from BUG-220's fix (`character_op_session.dart:92`, `remote_sync_service.dart:4723` `_textOwedByThisDevice`) seems not to cover them. Seen on Android; not checked on desktop. Juno's uncommitted work touches `remote_sync_service.dart` (+51 lines, Gaia routines), which this build includes. Not fixed (audit rule).
+
+### BUG-422 [M5] The date-and-time picker raises the keyboard when it opens and on every spinner turn, hiding most of the calendar
+- Severity: Minor
+- Found: 2026-11-26, Mobile M5 (OnePlus 12R, Android 16, 361×794 dp, Gboard; debug build of `4b983182` + uncommitted Gaia work (`lib/` as listed in M5's Status), qa-130)
+- Steps: Journal → open an entry → tap the date chip ("Nov 26, 2024 at…"). Then hide the keyboard and drag the hour spinner.
+- Actual: the picker focuses its time field as it opens (`time_selector_popovers.dart:489-491`), so Gboard comes up over the lower half of the popover: the calendar shows 3½ weeks and "Done" sits just above the keyboard (`qa/shots/m5-21-datepicker.png`). `_onSpinnerChanged` asks for the same focus. At 360×640 dp the popover overflows by 71 and 97 px at the bottom (`voyager_errors.log` 22:17:49). The time field is too narrow for its text and shows ":00 AM" with the hour scrolled out (`m5-22-picker-nokbd.png`). Done hands focus back to the Title, which raises the keyboard again (BUG-413's family).
+- Expected: on a touch device the picker opens without the keyboard (the spinner and calendar are the touch controls; the field can take focus when tapped), and fits 360×640.
+- Notes: the shared picker, so to-dos, events and reminders get the same behaviour. BUG-420 is the 6.3 px spinner overflow beside it. Not fixed (audit rule).
+- Notes (2026-11-27, Mobile M6, OnePlus 12R, qa-130): the dream editor's date pill opens the same picker with the same result: Gboard comes up with it and covers most of it, and the tap that dismisses the keyboard shifts the picker, so the next tap landed on the month arrow instead of Done (`qa/shots/m6-96-datepicker2.png`, `m6-97-date-set.png`). The time spinner overflowed by 6.3 px again (BUG-420). The chosen date (Nov 8) saved; `created_at` kept.
+
+### BUG-423 [M5] At font scale 2.0 the journal body shrinks to about one and a half lines while the quote below takes six
+- Severity: Minor
+- Found: 2026-11-26, Mobile M5 (OnePlus 12R, Android 16, 361×794 dp, Gboard; debug build of `4b983182` + uncommitted Gaia work (`lib/` as listed in M5's Status), qa-130)
+- Steps: `settings put system font_scale 2.0`. Journal → open "M5 New entry" (a two-line body with a quote).
+- Actual: the body box is about 75 dp tall and cuts its second line in half; the quote under it wraps to six lines and fills the rest of the screen (`qa/shots/m5-55-font2-editor.png`). The Title label sits on the field's outline. On the list the count "29" touches the chevron and the tucked On This Day strip shows "1" for "1mo" (`m5-54-font2-list.png`).
+- Expected: the body keeps most of the height (the quote is decoration), and the labels fit.
+- Notes: with the keyboard up the body already collapses (BUG-385). Not fixed (audit rule).
+
+### BUG-424 [M5] Light theme: the editor's Mood label, mood slider, weather and Add images icons use the raw journal colour (1.2:1 with a pale journal)
+- Severity: Cosmetic
+- Found: 2026-11-26, Mobile M5 (OnePlus 12R, Android 16, 361×794 dp, Gboard; debug build of `4b983182` + uncommitted Gaia work (`lib/` as listed in M5's Status), qa-130)
+- Steps: journal Alpha coloured #f2d5cf (the palette's first swatch). Settings → Appearance → Light. Journal → open an entry.
+- Actual: "Mood", the slider, the weather icon and the Add images icon are #f1d5cf on #f4f0e8, 1.22:1 (`qa/shots/m5-66-light-list.png`); the bookmark flag is 4.05:1. The delete icon (#b00020) reads fine.
+- Expected: readable controls (3:1 for icons, 4.5:1 for the label), as BUG-057's fix does for the switcher with `readableInkOn`.
+- Notes: BUG-057 fixed only the scope switcher. Not fixed (audit rule).
+- Notes (2026-11-27, Mobile M6, OnePlus 12R, qa-130): the dream editor in Light has the same pale Add images icon (pale accent on cream, `qa/shots/m6-36-light-editor.png`); the Delete icon is red and fine.
+
+### BUG-425 [M5] At phone width the colour grid shows two columns of large swatches, and the journal's current colour starts out of view
+- Severity: Cosmetic
+- Found: 2026-11-26, Mobile M5 (OnePlus 12R, Android 16, 361×794 dp, Gboard; debug build of `4b983182` + uncommitted Gaia work (`lib/` as listed in M5's Status), qa-130)
+- Steps: Journal → gear → New journal (or a journal's ⋯ → Change color), at 361 dp and at 360×640.
+- Actual: two left-aligned columns of 64 dp swatches with the right third of the dialog empty, in a box that scrolls. The preselected colour (the 7th, green) is below the fold, so the dialog opens with no visible selection; with the keyboard up about 1½ rows show (`qa/shots/m5-05-empty-enter.png`, `m5-07-alpha-nokbd.png`, `m5-51-small-color.png`).
+- Expected: the grid uses the dialog's width, and the selected swatch is scrolled into view.
+- Notes: `create_name_color_dialog.dart` (`swatchRadius: 32`, `paletteViewportHeight(32, visibleRows: 3)`). Not fixed (audit rule).
+
+### BUG-426 [M5] The Trash dialog's title breaks mid-word ("Tras / h") at phone width
+- Severity: Cosmetic
+- Found: 2026-11-26, Mobile M5 (OnePlus 12R, Android 16, 361×794 dp, Gboard; debug build of `4b983182` + uncommitted Gaia work (`lib/` as listed in M5's Status), qa-130)
+- Steps: Journal → gear → Recently deleted, with one deleted entry.
+- Actual: "Trash" wraps to "Tras" / "h" beside the "Empty Journal trash" button, and the row's title is cut to "\"Seed 38 al…" while its subtitle wraps over three lines (`qa/shots/m5-41-trash.png`). With nothing in the trash the button goes and the title fits.
+- Expected: the title stays whole (the button wraps or shrinks), and the row title gets the width.
+- Notes: Not fixed (audit rule).
+- Notes (2026-11-27, Mobile M6, OnePlus 12R, qa-130): seen again from Journal → manage → Recently deleted → Dreams tab ("Tras / h" beside "Empty Dreams trash", `qa/shots/m6-51-trash-dreams.png`); on the Journal tab the title fits.
+
+### BUG-427 [M5] Journal settings: the On this day option "Monthly + yearly" is cut to "Monthly" at phone width
+- Severity: Cosmetic
+- Found: 2026-11-26, Mobile M5 (OnePlus 12R, Android 16, 361×794 dp, Gboard; debug build of `4b983182` + uncommitted Gaia work (`lib/` as listed in M5's Status), qa-130)
+- Steps: Journal → gear → a journal's ⋯ → Settings.
+- Actual: the segmented control reads Off / Yearly / Monthly; "+ yearly" is clipped (`vm.ps1 find` lists the full "Monthly + yearly" label, 221 px wide in a narrower segment) (`qa/shots/m5-11-settings.png`, `m5-12-otd-monthly.png`). Picking it stores `monthlyAndYearly`, so "Monthly" on screen means both.
+- Expected: the label fits (two lines, or a shorter label).
+- Notes: Not fixed (audit rule).
+
+### BUG-428 [M5] Journal touch targets below 48 dp: the Move to journal flag (22 dp) and On This Day's ✕ ‹ › (28 dp)
+- Severity: Minor
+- Found: 2026-11-26, Mobile M5 (OnePlus 12R, Android 16, 361×794 dp, Gboard; debug build of `4b983182` + uncommitted Gaia work (`lib/` as listed in M5's Status), qa-130)
+- Steps: Journal → open an entry → tap the bookmark flag at the Title's top-right corner. Open the On This Day card and use ✕ / ‹ / ›.
+- Actual: the flag is a 22×22 dp target (77×77 px at 560 dpi, `journal_color_flag.dart`). Two of five taps on its centre focused the Title (keyboard up) instead of opening the journal menu; three slightly off-centre taps opened it. A tap 18 dp below it focuses the Title. The card's buttons are 28 dp (ON_THIS_DAY_HLD §5: "shrink-wrapped to 28 px targets"); they worked when hit, but sit close together at the card's foot.
+- Expected: `kMinTouchTarget` (48 dp, `touch_target.dart`) on Android.
+- Notes: the list's long-press menu has "Change Journal", so moving an entry still has a touch route. Not fixed (audit rule).
+
+### BUG-429 [R1] `os_pick` on a native `<select>` sets the option, then stops with "Another window is covering"
+- Severity: Major
+- Found: 2026-11-26, GAIA_ROUTINES_HLD.md R1 fixture run (`gaiaqa` from the `vwt-run` copy with a bundle of the working tree (`4b983182` + uncommitted Gaia routines work), a scratch Chrome profile, `qa/fixtures/routines` on localhost:8765, Claude Code on Sonnet (run 1) and Quick (run 3))
+- Steps: a routine item on `2-two-step.html` or `4-upload.html`; the agent calls `os_pick` on the ComboBox "Are you legally authorized to work in Canada? *" (option "Yes") or "Will you now or in the future require sponsorship? *" (option "No").
+- Actual: `Stopped after 0 of 1 step: Another window is covering 510,1099.` The point is the option's centre inside Chrome's drop-down list, which is a top-level window of its own. The list was left open with the option chosen; the agent recovered with Tab or an `os_click` on the ListItem.
+- Expected: GAIA_ROUTINES_HLD.md §15.3: the option is picked and the field read back.
+- Cause: `_option` (`gaia_os_control.dart`) treated any window of the app's over the option as a stray popup (Chrome's address list): it sent Esc once, and the second time clicked through `_pointOf`, which refuses a covered point.
+- Notes (fixed 2026-11-27, uncommitted): an option under another window of the app's is selected through UI Automation (`_callDirect`, as `os_click` does); Esc stays the fallback when that can't be done. Test: "an option in the app's own list window … is selected directly, with no Esc". Live (run 3): both selects picked with "selected … directly", items submitted / filled.
+
+### BUG-430 [R1] `os_upload` stops on "2 controls are named Open" in the Windows 11 file dialog
+- Severity: Major
+- Found: 2026-11-26, GAIA_ROUTINES_HLD.md R1 fixture run (`gaiaqa` from the `vwt-run` copy with a bundle of the working tree (`4b983182` + uncommitted Gaia routines work), a scratch Chrome profile, `qa/fixtures/routines` on localhost:8765, Claude Code on Sonnet (run 1) and Quick (run 3))
+- Steps: `4-upload.html`, click "Resume *: No file chosen", then `os_upload` with the resume's path.
+- Actual: the path was typed, then `2 controls are named "Open": Button at 993,831; Button at 1393,831.` The agent recovered with `os_click` on SplitButton "Open".
+- Expected: §15.6: the path set and Open pressed in one call.
+- Cause: `_upload` looked for `('Open', 'Button')`. In the Windows 11 dialog both such Buttons are the drop-down arrows of the File name and file-type boxes; the real Open is a SplitButton (id 1) with no name of its own, so it takes the dialog's ("Open").
+- Notes (fixed 2026-11-27, uncommitted): Open is looked for as a SplitButton first, then as a Button. Test: "presses the split button Open, not the boxes' drop-down buttons of that name". Live (run 3): "typed into "File name:" directly; pressed "Open" directly", the dialog closed and the page showed the file.
+
+### BUG-431 [R1] The routine gate refuses Enter in a browser's file dialog as "Enter on a web page"
+- Severity: Minor
+- Found: 2026-11-26, GAIA_ROUTINES_HLD.md R1 fixture run (`gaiaqa` from the `vwt-run` copy with a bundle of the working tree (`4b983182` + uncommitted Gaia routines work), a scratch Chrome profile, `qa/fixtures/routines` on localhost:8765, Claude Code on Sonnet (run 1) and Quick (run 3))
+- Steps: in a routine item, open a file input's dialog from Chrome; the agent sends `os_key` Enter.
+- Actual: `Enter on a web page can submit the form, so it is refused…`. `os_focused_window` on the dialog read `Address: .agents`: the dialog belongs to chrome.exe, so it was read as a browser window and its folder breadcrumb taken for the page address. That also put a fake URL through the allowed-sites check.
+- Expected: §3.5 / the gate's own comment: a native window such as the Open dialog has no address, and takes Enter.
+- Notes (fixed 2026-11-27, uncommitted): `gaiaIsDialog` (`gaia_window_context.dart`, window class `#32770`); `_addressBar` gives no address for a dialog, and the "couldn't read this browser's address" refusal (`_checkAddress` in `gaia_os_reads.dart` and `gaia_os_control.dart`) doesn't apply to one. Live: with the fixture's dialog in front, `os_focused_window` on the main instance has no `Address:` line (the page behind it still gives `localhost:8765/4-upload.html?r=3`). The gate's Enter rule is covered by "Enter is refused on a page, allowed in a native dialog". The agent didn't press Enter in run 3, so a real Enter through the gate wasn't seen.
+
+### BUG-432 [R1] `os_upload` with a forward-slash path leaves the dialog on "The file name is not valid"
+- Severity: Minor
+- Found: 2026-11-27, GAIA_ROUTINES_HLD.md R1 fixture run 3 (`gaiaqa` from the `vwt-run` copy with a bundle of the working tree (`4b983182` + uncommitted Gaia routines work), a scratch Chrome profile, `qa/fixtures/routines` on localhost:8765, Claude Code on Sonnet (run 1) and Quick (run 3))
+- Steps: `4-upload.html`, open the dialog, `os_upload` with `C:/Users/Juno/Code/vwt-run-routine/resume.pdf`.
+- Actual: `The file dialog is still open after 10 seconds. It shows: … "The file name is not valid."` The agent pressed OK and retried with backslashes, which worked.
+- Expected: the path the routine's materials give works whatever its slashes, or the tool says to use backslashes.
+- Notes (fixed 2026-11-27, uncommitted): `_upload` turns `/` into `\` in the path before typing it. Test: "types a path with forward slashes with backslashes". Live (run 4, 2026-11-27): `os_upload` with `C:/Users/Juno/Code/vwt-run-routine/resume.pdf` "typed into "File name:" directly; pressed "Open" directly" on the first try, and the page showed `Resume *: resume.pdf`.
+
+### BUG-433 [R1] A routine run whose token cap is crossed in its last item ends paused on "token cap" instead of done
+- Severity: Minor
+- Found: 2026-11-27, GAIA_ROUTINES_HLD.md R1 fixture run 3 (`gaiaqa` from the `vwt-run` copy with a bundle of the working tree (`4b983182` + uncommitted Gaia routines work), a scratch Chrome profile, `qa/fixtures/routines` on localhost:8765, Claude Code on Sonnet (run 1) and Quick (run 3))
+- Steps: a routine with token cap 1000, run with two items; at the pause press "Raise cap and resume".
+- Actual: item 2 ran and was submitted, then the run paused again: "paused: token cap", "1 ready, 1 submitted", nothing waiting. One more "Raise cap and resume" made it done.
+- Expected: with no item waiting, the run ends as done.
+- Cause: `_loop` (`gaia_routine_runner.dart`) acts on `_pauseAfter` right after an item, before it looks for a waiting one.
+- Notes (fixed 2026-11-27, uncommitted): after an item, `_loop` pauses only when an item is still waiting; otherwise it goes on to end the run as done. Test: "the cap reached in the last item ends the run done". The first pause, before item 2, is right (R1's cap check passed: "79.1K of 1K tokens"). Live (run 4, 2026-11-27): a one-item run with cap 1000 used 77.0K tokens and ended `done` (item `ready`), with no extra Resume.
+
+### BUG-434 [M6] On the phone, "New dream" can show the previously selected dream's images, and Remove in that lightbox deletes the other dream's image
+- Severity: Major
+- Found: 2026-11-27, Mobile M6 (OnePlus 12R, Android 16, 361×794 dp, Gboard; debug build of `4b983182` + uncommitted work in `lib/` (Gaia routines, sync, database), qa-130)
+- Steps: Dreams has a dream with an image as its newest row ("M6 typed dream", one picked PNG), so it is auto-selected. Force-stop and relaunch, open Dreams (the list shows; the editor hasn't been built), tap **New dream**.
+- Actual: the blank new dream shows the other dream's image fan at the body's bottom-right (`qa/shots/m6-84-new.png`; first seen at `m6-74-clipchip.png`). Tapping it opens the lightbox on that image (`m6-85-stale-lightbox.png`); trash → "Remove image … removed from this item" → Remove soft-deleted the reference on **"M6 typed dream"** (`media_references_table` `099adaff…` → `deleted_at` 20:47:36Z, document `14bed1b1…`), while the dream on screen had none. After leaving and reopening the new dream, the fan is gone. It didn't happen when that dream's editor had been opened first (twice).
+- Expected: a new dream shows no images, and the lightbox can only remove references of the dream on screen.
+- Cause (from the code): `_MediaFanStackState._reload` (`lib/core/media/widgets/media_fan_stack.dart`) is async and sets `_images` without checking that `widget.documentId` is still the one it loaded for. In compact, New dream calls `_revealCompactEditor()` before `_createEntry()`, so the editor is built for one frame with the old selection, the fan starts loading the old dream's references, the switch to the new id starts a second load, and the slower first load lands last. `_open`'s `onRemove` then removes the stale `reference.id`. Desktop builds the editor all the time, so the race needs a quick switch there.
+- Notes: nothing on screen says which dream the image belongs to; the removed image is only in the 30-day media trash. Not fixed (audit rule).
+
+### BUG-435 [M6] At phone width, opening the sticky note while the body has focus hides the body, and what you type next goes into the hidden body
+- Severity: Minor
+- Found: 2026-11-27, Mobile M6 (OnePlus 12R, Android 16, 361×794 dp, Gboard; debug build of `4b983182` + uncommitted work in `lib/` (Gaia routines, sync, database), qa-130)
+- Steps: Dreams → New dream → type a title, Enter, type a body (keyboard up). Tap the sticky-note button and type "M6 NOTE typed".
+- Actual: the note opens over most of the body (280×220 dp on a 361 dp screen), but the caret stays in the body, which can't be seen. "M6 NOTE typed" was appended to the body (`body` = "M6 TYPED BODY text #lucidM6 NOTE typed", `notes` NULL, `qa/shots/m6-11-note-typed.png`). The user has to tap inside the note to write in it.
+- Expected: at phone width the note takes the caret when it opens (it covers the body anyway), or the body stays visible.
+- Notes: BUG-062's fix keeps the caret where it was by design (Juno, 2026-10-06), which works on desktop where the body stays visible beside the note. Opening the note with nothing focused does focus the note (landscape, 360×640). Not fixed (audit rule).
+
+### BUG-436 [M6] With the keyboard up, the open sticky note is pushed under the top bar (360×640) or off the top of the screen (landscape)
+- Severity: Minor
+- Found: 2026-11-27, Mobile M6 (OnePlus 12R, Android 16, 361×794 dp, Gboard; debug build of `4b983182` + uncommitted work in `lib/` (Gaia routines, sync, database), qa-130)
+- Steps: open a dream, open the sticky note, tap into it so Gboard comes up. (a) `wm size 720x1280` + `wm density 320` (360×640 dp). (b) Landscape (794×361 dp, expanded shell).
+- Actual: (a) the note slides up so its header ("Dream notes" and the ✕) sits under the app's top bar; only the field shows (`qa/shots/m6-26-small-note-kb.png`). (b) the whole card moves above the top edge; only the bottom ~50 dp of the field shows, so the text being typed is out of view (`m6-20-land-note.png`). At 361×794 portrait it fits (`m6-12-note-real.png`).
+- Expected: the note stays inside the area above the keyboard, with its text and close button visible.
+- Notes: Back still hides the keyboard and the card comes back into view. Not fixed (audit rule).
+
+### BUG-437 [M6] Back with the sticky note open leaves the editor instead of closing the note first
+- Severity: Minor
+- Found: 2026-11-27, Mobile M6 (OnePlus 12R, Android 16, 361×794 dp, Gboard; debug build of `4b983182` + uncommitted work in `lib/` (Gaia routines, sync, database), qa-130)
+- Steps: open a dream, open the sticky note, type in it, press Back (`input keyevent 4`) twice.
+- Actual: Back 1 hides the keyboard; Back 2 goes straight to the Dreams list, with the note still open (`qa/shots/m6-13-noteback1.png` → `m6-13-noteback2.png`). The note text was saved.
+- Expected: MOBILE_TEST_PLAN.md D4: Back closes the top sheet, dialog, menu or sub-view first; here, the note.
+- Notes: the note's ✕ and tapping the note button both close it. Not fixed (audit rule).
+
+### BUG-438 [M6] Landscape with the keyboard up: the Dreams list column overflows (RenderFlex 19–24 px on the bottom)
+- Severity: Cosmetic
+- Found: 2026-11-27, Mobile M6 (OnePlus 12R, Android 16, 361×794 dp, Gboard; debug build of `4b983182` + uncommitted work in `lib/` (Gaia routines, sync, database), qa-130)
+- Steps: landscape (expanded shell, list + editor side by side), focus the body or the sticky note so Gboard comes up.
+- Actual: the list column (`_buildEntryList`: 64 dp header + list + "New dream") gets about 120 dp of height and overflows by 19, 20 and 23–24 px on three runs; the debug stripe covers the clipped "New dream" button (`qa/shots/m6-65-rot-land.png`, `m6-100-land-kb.png`; `voyager_errors.log` "A RenderFlex overflowed by 19/20 pixels on the bottom").
+- Expected: no overflow; the list could hide or scroll its header and button when there's no room.
+- Notes: Not fixed (audit rule).
+
+### BUG-439 [M6] Dream editor touch targets below 48 dp: Add images and Delete dream are 40 dp
+- Severity: Minor
+- Found: 2026-11-27, Mobile M6 (OnePlus 12R, Android 16, 361×794 dp, Gboard; debug build of `4b983182` + uncommitted work in `lib/` (Gaia routines, sync, database), qa-130)
+- Steps: open a dream; `vm.ps1 -Profile phone find`.
+- Actual: "Add images" and "Delete dream" are 140×140 px = 40×40 dp at 560 dpi, side by side at the end of the date row. They worked when tapped in this session.
+- Expected: `kMinTouchTarget` (48 dp, `touch_target.dart`) on Android.
+- Notes: same family as BUG-428 (Journal). Not fixed (audit rule).
+
+### BUG-440 [R0] A step by an inferred label matches the browser's tab strip when the label text has scrolled up behind the toolbar, and misses the field it labels
+- Severity: Major
+- Found: 2026-11-27, GAIA_ROUTINES_HLD.md R0 fixture pass (`gaiaqa` from the `vwt-run` copy with a bundle of the working tree (`4b983182` + uncommitted Gaia routines work), a scratch Chrome profile, `qa/fixtures/routines/7-controls.html` on localhost:8765, a plain Auto chat on Standard (Claude Code, Sonnet))
+- Steps: fill 9b on `7-controls.html`, which scrolls the page so the text "9a) Countries of citizenship *" sits just above the page's top edge (Text at 416,-17, its Edit at 416,32 under the toolbar). Then `os_click` with name "9a) Countries of citizenship *" and no type.
+- Actual: `3 controls are named "9a) Countries of citizenship *": TabItem at 90,20; Button at 518,32; Button at 590,20.` These are the tab, the tab's Close and New Tab. The Edit it labels wasn't among them: it was off screen, and the on-screen matches came first. `os_read_screen` showed it too: `Button "Close", labelled by: "9a) Countries of citizenship *"` in the tab strip.
+- Expected: §15.4: a label comes from the nearest text above or left "in the same group". Browser chrome is never labelled by page text, and the Edit is matched, scrolled into view (§15.1) and clicked.
+- Risk: here three controls matched, so the step stopped. With one tab-strip control in reach it would have been clicked, and the tab's Close closes the half-filled application.
+- Cause: `gaiaScanWindow` (`gaia_window_context.dart`) collects `texts` over the whole window, page text first (the Document comes before the tab strip in the tree), off-screen text included. `matchIf` infers a label for every named non-Text control whose own name differs, not only the unnamed or shared ones, so any control within `_labelReach` (200 px) below or right of that text matches it. The read's shared-name pass labels the window's and the tab's "Close" the same way. Neither is kept to the control's own Document.
+- Notes (fixed 2026-11-27, uncommitted): `gaiaScanWindow` keeps a page's text and the browser's own text apart (`pageTexts`, `otherTexts`). A control inside the Document is labelled only by page text, and one outside it, such as the tab strip, only by text outside it, both in reads and in matching. Live (a new chat on `7-controls.html?r=2`): after `os_type` on "Why Formwise? *" left the 9a text just above the page, as before, the tab strip's "Close" had no label, and `os_click` on "9a) Countries of citizenship *" with no type "scrolled … into view" and clicked it, with no tab-strip match. No unit test: the scan needs UI Automation. The live check is the test.
+
+### BUG-441 [R0] "3 controls are named Yes" points the agent at x and y, not at the "labelled by" names, so it falls back to clicking by position
+- Severity: Minor
+- Found: 2026-11-27, GAIA_ROUTINES_HLD.md R0 fixture pass (`gaiaqa` from the `vwt-run` copy with a bundle of the working tree (`4b983182` + uncommitted Gaia routines work), a scratch Chrome profile, `qa/fixtures/routines/7-controls.html` on localhost:8765, a plain Auto chat on Standard (Claude Code, Sonnet))
+- Steps: on `7-controls.html`, whose three "Yes" checkboxes `os_read_screen` shows as `CheckBox "Yes", labelled by: "<question>"`, the agent sends an `os_steps` click with name "Yes" and type CheckBox.
+- Actual: `Stopped after 6 of 7 steps: 3 controls are named "Yes": CheckBox at 424,454; CheckBox at 424,639; CheckBox at 424,824. Pass x and y inside the one you mean, or its type.` The agent then used `os_click` at 437,467 and an `os_screenshot` to check it.
+- Expected: §15.4 "a step can use it": the message gives each match's label and says to pass it as the name. A click by the label works: in the next turn, name "Will you need sponsorship to work in Canada? *" with type CheckBox was "toggled … directly".
+- Cause: `_matchOf` (`gaia_os_control.dart`) lists only each match's type and position. `GaiaControlMatch` doesn't carry the label.
+- Notes (fixed 2026-11-27, uncommitted): `GaiaControlMatch` carries the text by the control (`label`, null for a sensitive one). `_matchOf` lists each match with "labelled by" and, when any has a label, ends "Pass the label of the one you mean as its name, or x and y inside it." Test: "controls sharing a name are told apart by their labels (§15.4, BUG-441)". Live: `os_steps` click name "Yes" type CheckBox gave `2 controls are named "Yes": CheckBox labelled by "Are you a Canadian citizen? *" at 424,1433; CheckBox labelled by "Will you need sponsorship to work in Canada? *" at 424,1618. Pass the label of the one you mean as its name, or x and y inside it.` (the third was off screen). In a natural fill turn on the fixed build the agent never sent "Yes": it clicked the checkbox and the radio by position from the start, so the message only helps once a by-name click has failed.
+- Notes: in the same turn the agent also clicked the enrollment radio by position (439,1022), not by its cut-off name. That wasn't prompted by an error. A click by the cut name works (the next turn, GAIA_ROUTINES_HLD.md §3.8).
+
+### BUG-442 [R1] Esc while an item's `os_*` call is in flight fails the item as "ended without reporting" and the run goes on to the next item
+- Severity: Major
+- Found: 2026-11-27, GAIA_ROUTINES_HLD.md R1 live fixture pass (`gaiaqa` from the `vwt-run` copy with a bundle of the working tree (`4b983182` + uncommitted Gaia routines work), a scratch Chrome profile, `qa/fixtures/routines` on localhost:8765, Claude Code on Standard (Sonnet))
+- Steps: start an unattended run of two fixture items (e.g. `4-upload.html?r=9`, `3-typeahead.html?r=9`). While item 1's `os_steps` is running (its `tool_use` is in the session jsonl with no result yet, about 2 s after `report_posting`), press Esc.
+- Actual: the turn stops (the item chat's reply is `cancelled`, shown as "Stopped"), but the item becomes `failed` "ended without reporting" and the run starts item 2 at once, so Gaia goes on opening tabs and typing after the user pressed Esc. Seen twice (`1-one-page.html?r=7` during `os_steps`, `4-upload.html?r=9` during `os_steps`).
+- Expected: §8.7: the item becomes `needs_you` "stopped by you" and the run pauses, with Resume run or End run. That's what happens when Esc lands between calls, while the model is thinking (`2-two-step.html?r=8`: "paused: stopped by you", item `needs_you`).
+- Cause: `_sendItem` (`gaia_controller.dart`) read the turn's end back from `_messages[chatId]`, but a chats refresh (`_refresh`) drops the messages of any chat that is neither running nor shown, and `send()` takes the item chat out of `_running` in its `finally`, before its last `_persist` and before `_sendItem`'s `renameChat`. A temporary print showed `list=null` at the read, so `_turn` (`gaia_routine_runner.dart`) got null, not `cancelled`, and fell through to `gate.result`. Esc between calls only worked when no refresh came in that window. The same read could miss `aborted` and `interrupted` (Abort, Gaia closing) too.
+- Notes (fixed 2026-11-27, uncommitted): `send()` records a routine turn's final status in `_itemEnded` by chat, and `_sendItem` takes it from there. Test: "a stopped item's turn pauses the run, though its chat's messages were let go before the turn ended (BUG-442)" (`gaia_controller_test.dart`, holds the final `putMessage` and sends `changed` meanwhile; fails on the old read with the run still running). Live (`?r=11`, `?r=12`, Esc during `os_steps` both times): "paused: stopped by you", item `needs_you` "stopped by you", item 2 waiting. A normal item (`?r=13`) still ended submitted and the run done.
+
+### BUG-443 [R1] With links pasted, the routine launch card grows over the empty chat's hint row ("/ commands  Ctrl+V paste an image  Ctrl+Enter send")
+- Severity: Cosmetic
+- Found: 2026-11-27, GAIA_ROUTINES_HLD.md R1 live fixture pass (`gaiaqa` from the `vwt-run` copy with a bundle of the working tree (`4b983182` + uncommitted Gaia routines work), a scratch Chrome profile, `qa/fixtures/routines` on localhost:8765, Claude Code on Standard (Sonnet))
+- Steps: in a new, empty chat, `/routine rt fixtures`, then paste five links into the card.
+- Actual: the card grows upward and its header "Routine: rt fixtures" is drawn on the same line as the hint row, the two texts interleaved (`qa/shots/r1-03-pasted.png`). Empty, the card sits just below the row (`r1-02-card.png`).
+- Expected: the hint row moves up or hides while the card is open.
+- Notes (fixed 2026-11-27, uncommitted): the empty chat's line and keys give way while the card is open over that chat (`_MessagesState._routineCardShown`, `gaia_app.dart`), and come back when it closes. They sit in a `ListenableBuilder` on the controller, since opening the card doesn't rebuild the message list. Test: "the line and its keys give way to the routine card" (`gaia_empty_chat_greeting_test.dart`). Live: 8 links pasted, the card alone over the sky (`qa/shots/r1-31-card-8.png`); closed, the line and keys back (`r1-32-card-closed.png`).
+
+### BUG-444 [R2] The routine Resume hotkey (Ctrl+Alt+Shift+R) is never released: it stays registered system-wide after the run ends
+- Severity: Major
+- Found: 2026-11-27, GAIA_ROUTINES_HLD.md R2 live fixture pass (`gaiaqa` from the `vwt-run` copy with a bundle of the working tree (`4b983182` + uncommitted Gaia routines work), a scratch Chrome profile, `qa/fixtures/routines` on localhost:8765 and 127.0.0.1:8765, Claude Code on Standard (Sonnet), `~/.claude-1`)
+- Steps: an attended run of `6-account.html`; at the handoff the main instance holds Ctrl+Alt+Shift+R (`_resumeHeld`). Press it: the run resumes and the item is submitted, the run ends done, and `_resumeHeld` goes back to null. Then try `RegisterHotKey` for Ctrl+Alt+Shift+R from another process.
+- Actual: refused with error 1409 (hotkey already registered) after the run ended, and still 3 s later. Once `gaiaqa` was stopped, the same call succeeded, so Gaia was still holding it. Nothing is logged.
+- Expected: §11.2: "registered only while a run is paused or waiting on a handoff, and released otherwise, so it never takes Ctrl+Alt+R from another app the rest of the time."
+- Notes: cause: `GaiaCombo.hotKey` (`gaia_keybinds.dart:139`) builds a new `HotKey` on each call, and each gets a fresh random `identifier` (hotkey_manager's default `_uuid.v4()`). `_holdResumeHotkey(false)` (`gaia_host.dart`) unregisters `parseGaiaCombo(held).hotKey`, an identifier the plugin never saw. So `UnregisterHotKey` never runs, and the native `hotkey_id_map_.at()` lookup can't find it. The press still works only because the first registration's handler is never removed. `_applyHotkeys` unregisters a rebound combo the same way, so rebinding any Gaia hotkey probably leaves the old combo held too (not checked live). Dev profiles don't own hotkeys (`_ownsHotkeys` false), so for this check it was set to true by eval and the hold re-sent. Your own Voyager wasn't running.
+- Fixed 2026-11-27 (uncommitted): `GaiaCombo.hotKey` takes the combo as its identifier (`'gaia:$this'`), so unregistering a combo releases what registering it took. This covers `_holdResumeHotkey` and `_applyHotkeys`. Test: "a combo as a system hotkey" (`gaia_keybinds_test.dart`). Live (`?r=r2c`, attended, same `_ownsHotkeys` eval): 1409 while the handoff waited; after the hotkey resumed it and the run ended done, `RegisterHotKey` succeeded with `gaiaqa` still running.
+
+### BUG-445 [R2] On an account page, the item hands off without filling the email
+- Severity: Minor
+- Found: 2026-11-27, GAIA_ROUTINES_HLD.md R2 live fixture pass (`gaiaqa` from the `vwt-run` copy with a bundle of the working tree (`4b983182` + uncommitted Gaia routines work), a scratch Chrome profile, `qa/fixtures/routines` on localhost:8765 and 127.0.0.1:8765, Claude Code on Standard (Sonnet), `~/.claude-1`)
+- Steps: a run of `6-account.html` (signed out), unattended (`?r=r2a`) and attended (`?r=r2b`).
+- Actual: both times the agent clicked Apply, saw "Create your candidate account" (Email, Password), and called `report_outcome needs_you` straight away. Email was left empty. The handoff itself was right, and no password was typed.
+- Expected: §9.1: "For an account page: Gaia fills every field except the password and code, then hands off." The fixture README: "Gaia fills the email, never the password, and hands off."
+- Notes: the item prompt probably doesn't say this, since the agent says "I don't create password accounts or type passwords. I didn't type or submit anything." Ground truth: `~/.claude-1/projects/…-gaiaqa-gaia-ws/11de3954-….jsonl` and `c20a6d55-….jsonl`.
+- Fixed 2026-11-27 (uncommitted): the item prompt's account rule now says "On such a page, fill every other field from the materials (the email, a name), then report needs_you." (`gaiaItemPrompt`, `gaia_routines.dart`). Test: the item prompt test checks for it (`gaia_routines_test.dart`). Live (`?r=r2c`): `os_type` Email, then needs_you "Email is filled; set the password and click Create account yourself". No password was typed, and the field held the email when the account was made.

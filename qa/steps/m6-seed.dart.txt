@@ -1,0 +1,7 @@
+final now = DateTime.now().toUtc();
+final r = c.read(remoteSyncServiceProvider);
+final dr = c.read(dreamRepositoryProvider);
+for (var i = 0; i < 40; i++) { final d = now.subtract(Duration(days: i + 1, hours: i % 7)); final en = DreamEntry(id: 'm6-seed-$i', createdAt: now, updatedAt: now, version: 1, title: 'M6 dream ${i.toString().padLeft(2, '0')}', body: 'Seeded dream body number $i about #m6seed${i % 4} and a long corridor', notes: i % 3 == 0 ? 'm6 note $i' : null, entryDate: d); await dr.upsertEntry(en); r.pushDreamEntryNow(en); }
+final longBody = List.generate(700, (k) => 'word$k').join(' ');
+final big = DreamEntry(id: 'm6-long', createdAt: now, updatedAt: now, version: 1, title: 'M6 long title ' + 'L' * 286, body: longBody, notes: 'm6 long note', entryDate: now.subtract(const Duration(hours: 2))); await dr.upsertEntry(big); r.pushDreamEntryNow(big);
+debugPrint('M6 seeded ${(await dr.listEntries()).length}');

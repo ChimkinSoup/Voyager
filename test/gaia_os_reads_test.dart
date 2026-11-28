@@ -394,7 +394,7 @@ void main() {
         isGaiaOsControl('os_clipboard', const {'action': 'write'}),
         isTrue,
       );
-      for (final tool in ['os_window', 'os_drag']) {
+      for (final tool in ['os_window', 'os_drag', 'os_pick', 'os_upload']) {
         expect(isGaiaOsControl(tool), isTrue);
       }
     });

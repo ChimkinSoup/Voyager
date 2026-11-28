@@ -88,6 +88,16 @@ void main() {
       expect(mid.value.text, 'explain this please');
     });
 
+    test('/standard is /std', () {
+      final command = findGaiaTierCommand(_typed('/standard hi'))!;
+      expect(command.tier, GaiaTier.standard);
+      expect(command.value.text, 'hi');
+      expect(
+        findGaiaTierCommand(_typed('hi /standard'), atEnd: true)?.tier,
+        GaiaTier.standard,
+      );
+    });
+
     test('on send, one ending the text fires too', () {
       expect(findGaiaTierCommand(_typed('hi /quick')), isNull);
       final command = findGaiaTierCommand(_typed('hi /quick'), atEnd: true)!;

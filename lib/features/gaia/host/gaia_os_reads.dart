@@ -192,7 +192,10 @@ class GaiaOsReads {
     String? url, {
     required bool browser,
   }) {
-    if (browser && url == null && exclusions().any((e) => e.contains('.'))) {
+    if (browser &&
+        url == null &&
+        !gaiaIsDialog(window.hwnd) &&
+        exclusions().any((e) => e.contains('.'))) {
       throw GaiaReadException(
         "Gaia couldn't read this browser's address, so can't tell whether the "
         "user has excluded the site. A new tab has none. Try again once it's "

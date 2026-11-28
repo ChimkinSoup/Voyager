@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Fixture Labs — Software Intern</title>
+<style>body{font-family:sans-serif;max-width:640px;margin:40px auto}label{display:block;margin:14px 0 4px}input,select,textarea{width:100%;padding:6px}button{margin-top:18px;padding:8px 16px}.opts{border:1px solid #999}.opts div{padding:4px;cursor:pointer}</style>
+</head><body>
+<h1>Software Intern, Fixture Labs</h1>
+<p>Location: Toronto, ON (hybrid). Summer 2027, 16 weeks. Open to students.</p>
+<form onsubmit="event.preventDefault();done('SUBMITTED one-page')">
+<label for="first">First name *</label><input id="first" required>
+<label for="last">Last name *</label><input id="last" required>
+<label for="email">Email *</label><input id="email" type="email" required>
+<label for="phone">Phone *</label><input id="phone" required>
+<label for="why">Why Fixture Labs? (optional)</label><textarea id="why"></textarea>
+<button type="submit">Submit application</button>
+</form>
+<p id="result" role="status"></p>
+<script>
+function done(what){document.getElementById('result').textContent=what;}
+
+</script>
+</body></html>

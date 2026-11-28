@@ -96,7 +96,11 @@ class ClaudeUtilityRunner {
     List<GaiaImageInput> images = const [],
     String? usage,
   }) async {
-    final tokensFor = (account: _account, source: '$kGaiaTokensUtility$source');
+    final tokensFor = (
+      account: _account,
+      source: '$kGaiaTokensUtility$source',
+      chatId: null,
+    );
     final elapsed = Stopwatch()..start();
     final content = await claudeUserContent(
       '$job\n\n<input>\n$input\n</input>',

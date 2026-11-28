@@ -2332,6 +2332,13 @@ class RemoteSyncService {
           documentIds: documentIds,
           documentData: documentData,
         );
+      case FirestoreCollections.gaiaRoutines:
+        return pullGaiaRoutines(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
+      case FirestoreCollections.gaiaRuns:
+        return pullGaiaRuns(documentIds: documentIds, documentData: documentData);
       case FirestoreCollections.studyFolders:
         return pullStudyFolders(
           documentIds: documentIds,
@@ -3280,6 +3287,42 @@ class RemoteSyncService {
         );
         if (identical(merged, local)) return;
         await _gaiaRepository.upsertProject(merged, recordLocalActivity: false);
+      },
+    );
+  }
+
+  Future<bool> pullGaiaRoutines({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) {
+    return _pullCollection(
+      FirestoreCollections.gaiaRoutines,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) async {
+        final local = await _gaiaRepository.getRoutine(id);
+        final merged = mergeGaiaRoutineFromRemote(data, id, local: local);
+        if (identical(merged, local)) return;
+        await _gaiaRepository.upsertRoutine(merged, recordLocalActivity: false);
+      },
+    );
+  }
+
+  Future<bool> pullGaiaRuns({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) {
+    return _pullCollection(
+      FirestoreCollections.gaiaRuns,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) async {
+        final local = await _gaiaRepository.getRun(id);
+        final merged = mergeGaiaRunFromRemote(data, id, local: local);
+        if (identical(merged, local)) return;
+        await _gaiaRepository.upsertRun(merged, recordLocalActivity: false);
       },
     );
   }
@@ -7255,6 +7298,12 @@ class RemoteSyncService {
       case FirestoreCollections.gaiaMemoryTopics:
         if (record is! GaiaMemoryTopic) return null;
         return (id: record.id, payload: gaiaMemoryTopicToFirestore(record));
+      case FirestoreCollections.gaiaRoutines:
+        if (record is! GaiaRoutine) return null;
+        return (id: record.id, payload: gaiaRoutineToFirestore(record));
+      case FirestoreCollections.gaiaRuns:
+        if (record is! GaiaRoutineRun) return null;
+        return (id: record.id, payload: gaiaRunToFirestore(record));
       case FirestoreCollections.customQuotes:
         if (record is! CustomQuote) return null;
         return (id: record.id, payload: customQuoteToFirestore(record));
@@ -8640,6 +8689,8 @@ class LiveSyncController {
     FirestoreCollections.gaiaBtw,
     FirestoreCollections.gaiaProjects,
     FirestoreCollections.gaiaMemoryTopics,
+    FirestoreCollections.gaiaRoutines,
+    FirestoreCollections.gaiaRuns,
     FirestoreCollections.settings,
   ];
 

@@ -66,6 +66,33 @@ bool isKnownWord(String word, Set<String> known) {
   return base != null && known.contains(base);
 }
 
+/// The fix for a word typed with Shift held one letter too long — `THe` →
+/// `The` — or null when [word] is not one (AUTOCORRECT.md §4.7).
+///
+/// Exactly two leading capitals, then lowercase only, and the lowercased word
+/// must be known. A lone `s` tail is a plural acronym (`IDs`, `PCs`) and a
+/// `Hz` ending is a unit (`MHz`), and their lowercase forms are in the
+/// bundled list too, so both are left alone. Three or more capitals (`URLs`)
+/// never match. Expects the word as typed, not normalized.
+String? stuckShiftFix(String word, Set<String> known) {
+  if (word.length < 3) return null;
+  if (!_isUpperAscii(word.codeUnitAt(0)) ||
+      !_isUpperAscii(word.codeUnitAt(1)) ||
+      !_isLowerAscii(word.codeUnitAt(2))) {
+    return null;
+  }
+  final tail = word.substring(2);
+  if (tail != tail.toLowerCase() || tail == 's' || word.endsWith('Hz')) {
+    return null;
+  }
+  if (!isKnownWord(normalizeCustomWord(word), known)) return null;
+  return word[0] + word.substring(1).toLowerCase();
+}
+
+bool _isUpperAscii(int unit) => unit >= 0x41 && unit <= 0x5A;
+
+bool _isLowerAscii(int unit) => unit >= 0x61 && unit <= 0x7A;
+
 /// [word] without a trailing `'s`, or null when it has none. One letter is a
 /// long enough base — `mind your p's and q's` — but a bare `'s` has nothing to
 /// check.

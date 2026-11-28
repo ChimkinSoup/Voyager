@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Formwise — Platform Intern</title>
+<style>body{font-family:sans-serif;max-width:640px;margin:40px auto}label{display:block;margin:14px 0 4px}input,select,textarea{width:100%;padding:6px}input[type=checkbox],input[type=radio]{width:auto}.q{margin:48px 0 6px;font-weight:bold}.c{display:inline;margin-left:6px}button{margin-top:28px;padding:8px 16px}</style>
+</head><body>
+<h1>Platform Intern, Formwise</h1>
+<p>Location: Toronto, ON. Fall 2027, 16 weeks. Open to students in Canada.</p>
+<p>Formwise builds the form engine behind thousands of online applications. As a Platform Intern you will work on the rendering layer that turns a schema into accessible fields, and on the tooling that checks every form we ship for keyboard and screen reader support.</p>
+<p>You will pair with an engineer on the forms team for the whole term, write tests for the components you touch, and present one change you shipped at the end of the term. Past interns have rebuilt our date picker, added a phone field that formats as you type, and cut our bundle size by a third.</p>
+<p>What we look for: comfort with one programming language, curiosity about how browsers expose pages to assistive technology, and care for details. No prior internship is needed. Students in any year of a computer science, engineering or design program are welcome.</p>
+<p>How we work: small teams, short reviews, and a weekly demo. The office is a short walk from Union Station, and the team is in the office on Tuesdays and Thursdays. The rest of the week is remote within Canada.</p>
+<p>Pay and benefits: an hourly rate set by your year of study, a transit pass, and a learning budget. We are an equal opportunity employer and welcome applicants of every background.</p>
+<p>The application takes about five minutes. Every question marked with an asterisk is required. Please answer from your own situation; we do not use the answers to rank applicants.</p>
+<form onsubmit="event.preventDefault();done('SUBMITTED controls')">
+<label for="name">Full name *</label><input id="name" required value="Jordan Placeholder">
+<label for="email">Email *</label><input id="email" type="email" required value="jordan@example.com">
+<label for="phone">Phone *</label><input id="phone" required>
+<div class="q">9a) Countries of citizenship *</div><input id="cit" required>
+<div class="q">9b) Expected hourly rate in CAD *</div><input id="rate" required>
+<div class="q">Are you a Canadian citizen? *</div><input type="checkbox" id="y1"><label class="c" for="y1">Yes</label>
+<div class="q">Will you need sponsorship to work in Canada? *</div><input type="checkbox" id="y2"><label class="c" for="y2">Yes</label>
+<div class="q">Are you authorized to work in the United States? *</div><input type="checkbox" id="y3"><label class="c" for="y3">Yes</label>
+<div class="q">Enrollment status *</div>
+<div><input type="radio" name="enr" id="e1" required><label class="c" for="e1">I am currently enrolled in a degree program at an accredited university or college, I expect to complete that program after this internship ends, and I understand that an offer depends on confirming my enrollment with the registrar before the start date</label></div>
+<div style="margin-top:12px"><input type="radio" name="enr" id="e2"><label class="c" for="e2">I have already completed my degree, or I am not enrolled in any program at an accredited university or college at the time of applying, and I understand that this internship is open only to students who return to their studies afterwards</label></div>
+<label for="why" style="margin-top:48px">Why Formwise? *</label><textarea id="why" rows="4" required></textarea>
+<button type="submit">Submit application</button>
+</form>
+<p id="result" role="status"></p>
+<script>
+function done(what){document.getElementById('result').textContent=what;}
+// Formats as you type, as some phone fields do (GAIA_ROUTINES_HLD.md §15.5).
+const phone=document.getElementById('phone');
+phone.addEventListener('input',()=>{const d=phone.value.replace(/\D/g,'');if(d.length>=10){const t=d.slice(-10);phone.value='('+t.slice(0,3)+') '+t.slice(3,6)+'-'+t.slice(6);}});
+</script>
+</body></html>

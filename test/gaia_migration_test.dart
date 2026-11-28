@@ -1218,6 +1218,33 @@ void main() {
     expect((await repo.getSettings()).tidyMemoriesDevice, 'pc-1');
   });
 
+  test('207→208 adds routines and their runs, none at first', () async {
+    final seed = AppDatabase(NativeDatabase(file));
+    await DriftGaiaRepository(seed).upsertSettings(GaiaSettings.initial());
+    await seed.customStatement('DROP TABLE gaia_routines_table');
+    await seed.customStatement('DROP TABLE gaia_runs_table');
+    await seed.customStatement('PRAGMA user_version = 207');
+    await seed.close();
+
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+    final repo = DriftGaiaRepository(upgraded);
+    expect(await repo.listRoutines(), isEmpty);
+    expect(await repo.listRuns(), isEmpty);
+    final now = DateTime.utc(2026, 11, 26);
+    await repo.upsertRoutine(
+      GaiaRoutine(
+        id: 'r1',
+        name: 'Job applier',
+        instructions: 'Apply.',
+        projectId: 'p1',
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+    expect((await repo.getRoutine('r1'))?.name, 'Job applier');
+  });
+
   test('173→174 adds slash commands, none at first', () async {
     final seed = AppDatabase(NativeDatabase(file));
     await DriftGaiaRepository(

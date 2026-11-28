@@ -10315,6 +10315,90 @@ class DriftGaiaRepository implements GaiaRepository {
   Stream<List<GaiaProject>> watchProjects() =>
       _projects().watch().map((rows) => rows.map(_mapGaiaProject).toList());
 
+  @override
+  Future<List<GaiaRoutine>> listRoutines({bool includeDeleted = false}) async =>
+      [
+        for (final row in await (_db.select(_db.gaiaRoutinesTable)
+              ..where(
+                (t) => includeDeleted ? const Constant(true) : t.deletedAt.isNull(),
+              )
+              ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+            .get())
+          GaiaRoutine.fromJson(jsonDecode(row.bodyJson) as Map<String, Object?>),
+      ];
+
+  @override
+  Future<GaiaRoutine?> getRoutine(String id) async {
+    final row = await (_db.select(
+      _db.gaiaRoutinesTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null
+        ? null
+        : GaiaRoutine.fromJson(jsonDecode(row.bodyJson) as Map<String, Object?>);
+  }
+
+  @override
+  Future<void> upsertRoutine(
+    GaiaRoutine routine, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.gaiaRoutinesTable)
+        .insertOnConflictUpdate(
+          GaiaRoutinesTableCompanion(
+            id: Value(routine.id),
+            bodyJson: Value(jsonEncode(routine.toJson())),
+            createdAt: Value(routine.createdAt),
+            updatedAt: Value(routine.updatedAt),
+            version: Value(routine.version),
+            deletedAt: Value(routine.deletedAt),
+          ),
+        );
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(FirestoreCollections.gaiaRoutines, routine);
+    }
+  }
+
+  @override
+  Future<List<GaiaRoutineRun>> listRuns({bool includeDeleted = false}) async => [
+    for (final row in await (_db.select(_db.gaiaRunsTable)
+          ..where(
+            (t) => includeDeleted ? const Constant(true) : t.deletedAt.isNull(),
+          )
+          ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+        .get())
+      GaiaRoutineRun.fromJson(jsonDecode(row.bodyJson) as Map<String, Object?>),
+  ];
+
+  @override
+  Future<GaiaRoutineRun?> getRun(String id) async {
+    final row = await (_db.select(
+      _db.gaiaRunsTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null
+        ? null
+        : GaiaRoutineRun.fromJson(jsonDecode(row.bodyJson) as Map<String, Object?>);
+  }
+
+  @override
+  Future<void> upsertRun(GaiaRoutineRun run, {bool recordLocalActivity = true}) async {
+    await _db
+        .into(_db.gaiaRunsTable)
+        .insertOnConflictUpdate(
+          GaiaRunsTableCompanion(
+            id: Value(run.id),
+            bodyJson: Value(jsonEncode(run.toJson())),
+            createdAt: Value(run.createdAt),
+            updatedAt: Value(run.updatedAt),
+            version: Value(run.version),
+            deletedAt: Value(run.deletedAt),
+          ),
+        );
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(FirestoreCollections.gaiaRuns, run);
+    }
+  }
+
   SimpleSelectStatement<$GaiaMemoriesTableTable, GaiaMemoriesTableData>
   _memories({bool includeDeleted = false}) => _db.select(_db.gaiaMemoriesTable)
     ..where((t) => includeDeleted ? const Constant(true) : t.deletedAt.isNull())

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Accountly — Platform Intern</title>
+<style>body{font-family:sans-serif;max-width:640px;margin:40px auto}label{display:block;margin:14px 0 4px}input,select,textarea{width:100%;padding:6px}button{margin-top:18px;padding:8px 16px}</style>
+</head><body>
+<h1>Platform Intern, Accountly</h1>
+<p>Location: Toronto, Ontario, Canada. Summer 2027. Apply with an Accountly candidate account.</p>
+<button type="button" id="apply" onclick="openForm()">Apply</button>
+<section id="signup" hidden><h2>Create your candidate account</h2>
+<label for="acct-email">Email *</label><input id="acct-email" type="email" required>
+<label for="acct-password">Password *</label><input id="acct-password" type="password" required>
+<button type="button" onclick="makeAccount()">Create account</button>
+<p id="signup-error" role="alert"></p></section>
+<form id="f" hidden onsubmit="event.preventDefault();done('SUBMITTED account')">
+<h2>Application</h2>
+<label for="name">Full name *</label><input id="name" required>
+<label for="email">Email *</label><input id="email" type="email" required>
+<label for="phone">Phone *</label><input id="phone" required>
+<button type="submit">Submit application</button>
+</form>
+<p id="result" role="status"></p>
+<script>
+// Signed in once an account was made here, as a real site's cookie would be.
+function signedIn(){return localStorage.getItem('accountly')==='1';}
+function openForm(){
+  document.getElementById('apply').hidden=true;
+  document.getElementById(signedIn()?'f':'signup').hidden=false;
+}
+function makeAccount(){
+  const email=document.getElementById('acct-email').value;
+  const password=document.getElementById('acct-password').value;
+  if(!email||password.length<8){
+    document.getElementById('signup-error').textContent='Enter an email and a password of 8 or more characters.';
+    return;
+  }
+  localStorage.setItem('accountly','1');
+  document.getElementById('signup').hidden=true;
+  document.getElementById('f').hidden=false;
+}
+function done(what){document.getElementById('result').textContent=what;}
+</script>
+</body></html>

@@ -2273,6 +2273,34 @@ class GaiaProjectsTable extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// A Gaia routine (GAIA_ROUTINES_HLD.md §5.1), its fields as `GaiaRoutine`'s
+/// JSON.
+class GaiaRoutinesTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get bodyJson => text()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// A run of a Gaia routine (GAIA_ROUTINES_HLD.md §5.2), its fields as
+/// `GaiaRoutineRun`'s JSON.
+class GaiaRunsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get bodyJson => text()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 /// A queued Gaia prompt (GAIA_HLD.md §13): a chat's, or the global queue's
 /// when [chatId] is null.
 class GaiaQueueTable extends Table {
@@ -2629,13 +2657,15 @@ class GaiaMemorySuggestionsTable extends Table {
     GaiaRecallHistoryTable,
     GaiaMemoryHintsTable,
     GaiaMemorySuggestionsTable,
+    GaiaRoutinesTable,
+    GaiaRunsTable,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 207;
+  int get schemaVersion => 208;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -4982,6 +5012,11 @@ class AppDatabase extends _$AppDatabase {
           gaiaSettingsTable,
           gaiaSettingsTable.tidyMemoriesDevice,
         );
+      }
+      if (from < 208) {
+        // Routines and their runs (GAIA_ROUTINES_HLD.md §5).
+        await migrator.createTable(gaiaRoutinesTable);
+        await migrator.createTable(gaiaRunsTable);
       }
     },
   );

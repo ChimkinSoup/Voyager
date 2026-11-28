@@ -638,7 +638,8 @@ class AutocorrectSession {
       return;
     }
     if (isSkipped(text, token.start, token.end)) return;
-    final correction = pair ?? autocorrectFor(lower, known);
+    final correction =
+        pair ?? stuckShiftFix(word, known) ?? autocorrectFor(lower, known);
     if (correction == null) return;
 
     _queueCorrection(

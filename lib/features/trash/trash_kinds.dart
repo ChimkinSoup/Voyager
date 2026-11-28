@@ -846,6 +846,21 @@ final _kinds = <TrashKind>[
     wipe: ['text', 'tags', 'suggestedTopic'],
     listed: false,
   ),
+  // A routine's delete leaves its runs and item chats (GAIA_ROUTINES_HLD.md
+  // §5).
+  const TrashKind(
+    collection: FirestoreCollections.gaiaRoutines,
+    feature: TrashFeature.gaia,
+    noun: 'routine',
+    wipe: ['name', 'instructions', 'skipRules', 'googleAccount'],
+  ),
+  const TrashKind(
+    collection: FirestoreCollections.gaiaRuns,
+    feature: TrashFeature.gaia,
+    noun: 'routine run',
+    wipe: ['items'],
+    listed: false,
+  ),
   const TrashKind(
     collection: FirestoreCollections.gaiaBtw,
     feature: TrashFeature.gaia,

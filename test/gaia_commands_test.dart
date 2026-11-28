@@ -195,8 +195,9 @@ void main() {
       'control-auto',
       'screen',
       'window',
+      'routine',
       'quick',
-      'std',
+      'standard',
       'deep',
       'explain',
       'swap',
@@ -208,7 +209,7 @@ void main() {
       'stash-pop',
       'stats',
       'screen',
-      'std',
+      'standard',
       'swap',
       'this',
       'usage',
@@ -222,6 +223,7 @@ void main() {
       'queue-pop',
       'queue-pop!',
     ]);
+    expect(filterGaiaPalette(items, 'std').first.name, 'standard');
     expect(filterGaiaPalette(items, 'xpl').single.name, 'explain');
     expect(filterGaiaPalette(items, 'tdy').single.name, 'tidy');
     expect(filterGaiaPalette(items, 'zzz'), isEmpty);

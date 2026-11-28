@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Fileup Ltd — Design Intern</title>
+<style>body{font-family:sans-serif;max-width:640px;margin:40px auto}label{display:block;margin:14px 0 4px}input,select,textarea{width:100%;padding:6px}button{margin-top:18px;padding:8px 16px}.opts{border:1px solid #999}.opts div{padding:4px;cursor:pointer}</style>
+</head><body>
+<h1>Design Intern, Fileup Ltd</h1>
+<p>Location: Montreal, QC. Summer 2027.</p>
+<form onsubmit="event.preventDefault();done('SUBMITTED upload: '+(document.getElementById('resume').files[0]||{}).name)">
+<label for="name">Name *</label><input id="name" required>
+<label for="email">Email *</label><input id="email" type="email" required>
+<label for="resume">Resume *</label><input id="resume" type="file" accept=".pdf" required>
+<label for="sponsor">Will you now or in the future require sponsorship? *</label>
+<select id="sponsor" required><option value="">Select One</option><option>Yes</option><option>No</option></select>
+<button type="submit">Submit application</button>
+</form>
+<p id="result" role="status"></p>
+<script>
+function done(what){document.getElementById('result').textContent=what;}
+
+</script>
+</body></html>

@@ -1,0 +1,1 @@
+final t0 = DateTime.now(); debugPrint('M5PW start'); await FirebaseFirestore.instanceFor(app: voyagerFirebaseApp).waitForPendingWrites(); debugPrint('M5PW done after ${DateTime.now().difference(t0).inMilliseconds} ms');
